@@ -1,0 +1,78 @@
+.container {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--message-list-max-width);
+  margin: auto;
+  padding: 0 32px 64px;
+}
+
+.greeting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 21px;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--dsw-alias-label-primary);
+}
+
+@media (max-width: 439px) {
+  .greeting {
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 500;
+  }
+}
+
+@media not all and (min-width: 768px) {
+  .container {
+    flex-direction: column;
+  }
+
+  .welcome {
+    flex: 1;
+    min-height: 0;
+    justify-content: flex-end;
+    max-width: none;
+    margin: 0;
+    padding: 0 12px env(safe-area-inset-bottom);
+  }
+
+  .greeting {
+    flex-shrink: 0;
+    flex-direction: column;
+    gap: 21px;
+    margin: auto 0;
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 500;
+  }
+
+  .caveat {
+    flex-shrink: 0;
+    width: 100%;
+    padding: 2px 0;
+    font-size: 10px;
+    line-height: 14px;
+    text-align: center;
+    /* 官方 caveat 实测：浅色 (222,222,222)、深色 (69,70,71) */
+    color: #dedede;
+    user-select: none;
+
+    [data-ds-dark-theme] & {
+      color: #454647;
+    }
+  }
+}

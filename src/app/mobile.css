@@ -1,0 +1,39 @@
+.connection-body { display: flex; flex-direction: column; gap: 14px; max-width: 520px; }
+.connection-body h2 { margin: 6px 0 0; font-size: 23px; line-height: 1.45; }
+.connection-body p { margin: 0; line-height: 1.65; }
+.connection-body input { min-height: 44px; box-sizing: border-box; width: 100%; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; background: var(--dsw-specific-input-major); padding: 12px; color: inherit; font: inherit; }
+.connection-identity, .connection-note { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.connection-error { color: var(--dsw-alias-state-error-primary); }
+.connection-balance { display: grid; gap: 10px; padding: 16px; border-radius: 16px; background: var(--dsw-specific-bubble); }
+.connection-balance > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.connection-balance strong { font-size: 24px; }
+.connection-setting { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 20px 0; }
+.connection-setting p { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.import-preview { max-height: 42vh; overflow: auto; display: grid; gap: 12px; margin-top: 16px; }
+.import-preview label { display: flex; gap: 10px; align-items: center; }
+.import-preview input { width: 20px; height: 20px; flex-shrink: 0; }
+.welcome-mark { width: 44px; height: auto; }
+@media (max-width: 767px) {
+  /* 官方抽屉搜索字段底色：浅色 #EDF3FE、深色 #283142 */
+  body {
+    --dsw-drawer-search-bg: #edf3fe;
+    /* 官方浅色输入盒边框实测 (240,240,240) */
+    --dsw-alias-border-l2-darkmode-thin: #f0f0f0;
+  }
+
+  body[data-ds-dark-theme] {
+    /* 对齐真机实测：聊天底 #0f0f0f、输入框 #242424、设置/来源弹层 #292929 */
+    --dsw-alias-bg-base: #0f0f0f;
+    --dsw-alias-bg-layer-2: #292929;
+    --dsw-specific-input-major: #242424;
+    --dsw-specific-sidebar-fill: #191919;
+    /* 官方用户消息气泡 #333333，与输入盒 #242424 区分 */
+    --dsw-specific-bubble: #333333;
+    --dsw-alias-label-primary: #f3f3f3;
+    /* 官方深色输入盒边框实测 #333333 */
+    --dsw-alias-border-l2-darkmode-thin: #333333;
+    --dsw-drawer-search-bg: #283142;
+  }
+  button { touch-action: manipulation; }
+  .connection-dialog { width: 100%; }
+}

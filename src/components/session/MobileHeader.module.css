@@ -1,0 +1,42 @@
+.header {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  /* 官方顶栏高 50dp（按钮 50×50），整体下移 2px */
+  height: 52px;
+  padding: 2px 0 0;
+}
+
+/* 顶栏内图标按钮统一 50×50、图标 24px */
+.header button {
+  width: 50px;
+  height: 50px;
+}
+
+.header button svg {
+  width: 24px;
+  height: 24px;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  margin: 0 10px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+/* 欢迎页无标题时占据中间弹性空间，把右侧按钮推到边 */
+.spacer {
+  flex: 1;
+}
+
+.autoReadOn {
+  color: var(--dsw-alias-brand-primary);
+}

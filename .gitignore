@@ -1,0 +1,14 @@
+# 本地工具链（Android SDK、Gradle 缓存、下载包），不进代码仓
+.toolchain/
+node_modules/
+.playwright-cli/
+# 本地开发脚本与官方参考采集素材，不进代码仓
+tools/
+reference/
+dist/
+android/.gradle/
+android/**/build/
+android/local.properties
+*.keystore
+*.jks
+
