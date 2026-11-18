@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   IconGlobeLanguageOutline14,
   IconPaperclipOutline16,
@@ -23,6 +23,8 @@ import {
 import { stopReadAloud } from '../../services/speech/readAloud.js'
 import { IconButton } from '../base/IconButton.js'
 import { Tooltip } from '../base/Tooltip.js'
+import { Modal } from '../base/Modal.js'
+import { Button } from '../base/Button.js'
 import { ensureApiKey } from '../settings/settingsDialogState.js'
 import { DragMask, useFileDrop } from './DragMask.js'
 import { showToast } from '../base/toastState.js'
@@ -53,13 +55,16 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const importingHistory = useChatStore((state) => state.importingHistory)
   const isMobile = useIsMobile()
   const search = useSettings((state) => state.search)
+  const [attachmentPicker, setAttachmentPicker] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const togglesRef = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
     const toggles = togglesRef.current
-    if (!toggles) {
+    if (isMobile || !toggles) {
       return
     }
 
@@ -72,7 +77,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
     const observer = new ResizeObserver(updateLabels)
     observer.observe(toggles)
     return () => observer.disconnect()
-  }, [t])
+  }, [isMobile, t])
 
   const acceptFiles = (files: File[]) => {
     if (files.length === 0 || useChatStore.getState().importingHistory || !ensureApiKey()) {
@@ -181,7 +186,12 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
             }
           }}
           onKeyDown={(event) => {
-            if (!isMobile && event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+            if (
+              !isMobile &&
+              event.key === 'Enter' &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing
+            ) {
               event.preventDefault()
               send()
             }
@@ -199,7 +209,19 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
           {`${text}\n`}
         </div>
       </div>
-      <div className={styles.functionRow}>
+      <div
+        className={styles.functionRow}
+        onMouseDown={(event) => {
+          if (
+            isMobile &&
+            document.activeElement === textareaRef.current &&
+            event.target instanceof Element &&
+            event.target.closest('button')
+          ) {
+            event.preventDefault()
+          }
+        }}
+      >
         {/* 深度思考 / 智能搜索开关，tooltip 在按钮上方 */}
         <div ref={togglesRef} className={styles.toggles}>
           <Tooltip content={t('deactivatedThinkTooltip')}>
@@ -228,28 +250,58 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
           </Tooltip>
         </div>
         <div className={styles.right}>
-          {(!isMobile || (!text.trim() && attachments.length === 0 && !streaming) || voice.status !== 'idle') ? <VoiceButton
-            className={isMobile ? styles.voiceButton : undefined}
-            status={voice.status}
-            disabled={!voice.available}
-            seconds={voice.seconds}
-            onClick={() => {
-              if (
-                voice.status !== 'idle' ||
-                (!useChatStore.getState().importingHistory && ensureApiKey())
-              ) {
-                void voice.toggle()
-              }
-            }}
-          /> : null}
+          {!isMobile ||
+          (!text.trim() && attachments.length === 0 && !streaming) ||
+          voice.status !== 'idle' ? (
+            <VoiceButton
+              className={isMobile ? styles.voiceButton : undefined}
+              status={voice.status}
+              disabled={!voice.available}
+              seconds={voice.seconds}
+              onClick={() => {
+                if (
+                  voice.status !== 'idle' ||
+                  (!useChatStore.getState().importingHistory && ensureApiKey())
+                ) {
+                  void voice.toggle()
+                }
+              }}
+            />
+          ) : null}
           <IconButton
             size="m"
             tone="primary"
             className={clsx(isMobile && styles.addButton)}
-            icon={isMobile ? <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg> : <IconPaperclipOutline16 />}
+            icon={
+              isMobile ? (
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v10M7 12h10" />
+                </svg>
+              ) : (
+                <IconPaperclipOutline16 />
+              )
+            }
             tooltip={t('uploadFile')}
             disabled={importingHistory}
-            onClick={() => ensureApiKey() && fileInputRef.current?.click()}
+            onClick={() => {
+              if (!ensureApiKey()) {
+                return
+              }
+              if (isMobile) {
+                textareaRef.current?.blur()
+                setAttachmentPicker(true)
+              } else {
+                fileInputRef.current?.click()
+              }
+            }}
           />
           <input
             ref={fileInputRef}
@@ -274,7 +326,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
             >
               <IconStopFill16 />
             </button>
-          ) : (!isMobile || !!text.trim() || attachments.length > 0) ? (
+          ) : !isMobile || !!text.trim() || attachments.length > 0 ? (
             <button
               type="button"
               className={clsx(styles.sendButton, !canSend && styles.disabled)}
@@ -287,6 +339,56 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
           ) : null}
         </div>
       </div>
+      {isMobile ? (
+        <>
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={(event) => {
+              acceptFiles(Array.from(event.currentTarget.files ?? []))
+              event.currentTarget.value = ''
+            }}
+          />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            onChange={(event) => {
+              acceptFiles(Array.from(event.currentTarget.files ?? []))
+              event.currentTarget.value = ''
+            }}
+          />
+        </>
+      ) : null}
+      {attachmentPicker ? (
+        <Modal title={t('uploadFile')} closable onClose={() => setAttachmentPicker(false)}>
+          <div className={styles.attachmentChoices}>
+            {(
+              [
+                ['attachCamera', cameraInputRef],
+                ['attachPhotos', photoInputRef],
+                ['attachFiles', fileInputRef],
+              ] as const
+            ).map(([label, input]) => (
+              <Button
+                key={label}
+                variant="outlined"
+                onClick={() => {
+                  input.current?.click()
+                  setAttachmentPicker(false)
+                }}
+              >
+                {t(label)}
+              </Button>
+            ))}
+          </div>
+        </Modal>
+      ) : null}
       {dragging ? <DragMask /> : null}
     </div>
   )

@@ -6,10 +6,7 @@ import type { Session } from '../../services/chat/types.js'
 import { getVisibleMessages } from '../../services/chat/branches.js'
 import { buildReplyView } from '../../services/chat/view.js'
 import { useSettings } from '../../services/settings.js'
-import {
-  describeReadAloudError,
-  toggleReadAloud,
-} from '../../services/speech/readAloud.js'
+import { describeReadAloudError, toggleReadAloud } from '../../services/speech/readAloud.js'
 import { showToast } from '../base/toastState.js'
 import { ChatInput } from '../chatInput/ChatInput.js'
 import { MessageList } from '../messages/MessageList.js'
@@ -35,7 +32,11 @@ export const SessionView = ({
   useEffect(() => {
     if (wasStreaming.current && !streaming) {
       const last = getVisibleMessages(session).at(-1)
-      if (last?.role === 'assistant' && useSettings.getState().autoReadAloud) {
+      if (
+        last?.role === 'assistant' &&
+        last.status === 'done' &&
+        useSettings.getState().autoReadAloud
+      ) {
         const view = buildReplyView(last, false)
         if (view.answer?.text) {
           toggleReadAloud(last.id, view.answer.text, (error) =>

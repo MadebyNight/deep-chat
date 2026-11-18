@@ -19,7 +19,9 @@ export const SearchPanel = () => {
   return (
     <>
       {isMobile ? <div className={styles.panelMask} onClick={closeSearchPanel} /> : null}
-      <aside className={clsx(styles.panel, isMobile && sources.length === 1 && styles.single)}>
+      <aside
+        className={clsx(styles.panel, isMobile && entry.startsWith('citation:') && styles.single)}
+      >
         <div className={styles.header}>
           <div role="heading" className={styles.title}>
             {t('searchResult')}

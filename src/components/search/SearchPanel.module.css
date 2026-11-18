@@ -76,6 +76,7 @@
     max-height: 82vh;
     border-left: none;
     border-radius: 16px 16px 0 0;
+    background: var(--dsw-alias-bg-layer-2);
     animation: sheet-in 0.22s ease-out;
   }
 

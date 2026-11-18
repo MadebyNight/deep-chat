@@ -101,8 +101,11 @@ export const saveSession = async (session: Session, files: StoredFile[] = []): P
   ])
 }
 
-/** 未打开的会话也可重命名，只读取该会话，原子更新详情和列表。 */
-export const renameSession = async (id: string, title: string): Promise<void> => {
+/** 原子更新未加载会话的详情与摘要。 */
+export const updateSessionMetadata = async (
+  id: string,
+  patch: Partial<Pick<Session, 'title' | 'pinned'>>
+): Promise<void> => {
   const tx = (await getDB()).transaction(['sessions', 'sessionSummaries'], 'readwrite')
   await Promise.all([
     (async () => {
@@ -110,7 +113,7 @@ export const renameSession = async (id: string, title: string): Promise<void> =>
         const sessions = tx.objectStore('sessions')
         const session = await sessions.get(id)
         if (session) {
-          session.title = title
+          Object.assign(session, patch)
           await sessions.put(session)
           await tx.objectStore('sessionSummaries').put(storedSummary(session))
         }
@@ -246,18 +249,27 @@ export const commitStaging = async (): Promise<SessionSummary[]> => {
 
 export const mergeStaging = async (): Promise<SessionSummary[]> => {
   const tx = (await getDB()).transaction(
-    ['sessions', 'sessionSummaries', 'files', 'sessionsStaging', 'filesStaging'], 'readwrite'
+    ['sessions', 'sessionSummaries', 'files', 'sessionsStaging', 'filesStaging'],
+    'readwrite'
   )
   const merge = async () => {
     try {
-      for (let cursor = await tx.objectStore('sessionsStaging').openCursor(); cursor; cursor = await cursor.continue()) {
+      for (
+        let cursor = await tx.objectStore('sessionsStaging').openCursor();
+        cursor;
+        cursor = await cursor.continue()
+      ) {
         if (await tx.objectStore('sessions').getKey(cursor.key)) {
           continue
         }
         await tx.objectStore('sessions').add(cursor.value)
         await tx.objectStore('sessionSummaries').add(storedSummary(cursor.value))
       }
-      for (let cursor = await tx.objectStore('filesStaging').openCursor(); cursor; cursor = await cursor.continue()) {
+      for (
+        let cursor = await tx.objectStore('filesStaging').openCursor();
+        cursor;
+        cursor = await cursor.continue()
+      ) {
         if (!(await tx.objectStore('files').getKey(cursor.key))) {
           await tx.objectStore('files').add(cursor.value)
         }
@@ -265,7 +277,10 @@ export const mergeStaging = async (): Promise<SessionSummary[]> => {
       await tx.objectStore('sessionsStaging').clear()
       await tx.objectStore('filesStaging').clear()
       return (await tx.objectStore('sessionSummaries').getAll()).map(toSessionSummary)
-    } catch (error) { abortTransaction(tx); throw error }
+    } catch (error) {
+      abortTransaction(tx)
+      throw error
+    }
   }
   const [summaries] = await Promise.all([merge(), tx.done])
   return summaries

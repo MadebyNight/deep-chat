@@ -1,4 +1,10 @@
 declare const styles: {
+  readonly "mobilePage": string;
+  readonly "mobilePageMain": string;
+  readonly "settingsGroup": string;
+  readonly "settingsLink": string;
+  readonly "fontPreview": string;
+  readonly "fontSlider": string;
   readonly "dialog": string;
   readonly "dialogMain": string;
   readonly "navigation": string;
@@ -10,11 +16,6 @@ declare const styles: {
   readonly "text": string;
   readonly "label": string;
   readonly "uploadButton": string;
-  readonly "locationCell": string;
-  readonly "locationSelectors": string;
-  readonly "provinceSelect": string;
-  readonly "citySelect": string;
-  readonly "regionSelect": string;
   readonly "theme": string;
   readonly "themeOptions": string;
   readonly "themeOption": string;

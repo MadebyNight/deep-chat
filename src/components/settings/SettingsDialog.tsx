@@ -1,6 +1,8 @@
 import clsx from 'clsx'
 import { useRef, useState, type ReactNode } from 'react'
+import { useIsMobile } from '../../app/viewport.js'
 import {
+  IconChevronRightOutline14,
   IconDarkOutline16,
   IconDataOutline16,
   IconDownloadOutline16,
@@ -17,12 +19,11 @@ import {
   previewHistory,
 } from '../../services/chat/backup.js'
 import { useChatStore } from '../../services/chat/store.js'
-import { regionCodes, getRegionName, provinces } from '../../services/location.js'
 import {
-  isChineseBrowser,
   setAutoCollapseThinking,
+  setAutoReadAloud,
+  setChatFontSize,
   setLocale,
-  setLocation,
   setThemePreference,
   setTtsVoice,
   useSettings,
@@ -35,14 +36,12 @@ import { Select } from '../base/Select.js'
 import { Switch } from '../base/Switch.js'
 import { showToast } from '../base/toastState.js'
 import { ConnectionSetting } from './ConnectionDialog.js'
+import { VersionSetting } from './UpdateDialog.js'
 import { saveArchive } from '../../services/native.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import styles from './Settings.module.css'
 
-/**
- * 设置弹窗：分「通用设置」（主题、语言、朗读音色、位置）与「数据管理」（API Key、导入、导出、删除）。
- * 桌面端为居中弹窗、左侧导航；移动端为底部弹层、导航横排在内容上方
- */
+/** 桌面端使用导航弹窗，移动端使用全屏分组设置。 */
 export const SettingsDialog = () => {
   const open = useSettingsDialog((state) => state.open)
   return open ? <SettingsContent /> : null
@@ -57,6 +56,15 @@ const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode
   { value: 'data', label: 'settingDialogAsideDataOptionLabel', icon: <IconDataOutline16 /> },
 ]
 
+const mobilePageTitles = {
+  home: 'settings',
+  font: 'chatFontSize',
+  personalization: 'settingsPersonalization',
+  voice: 'settingsVoice',
+  data: 'settingDialogAsideDataOptionLabel',
+  about: 'settingsAbout',
+} as const satisfies Record<string, TranslationKey>
+
 const SettingsContent = () => {
   const t = useTranslate()
   // 打开时按调用方指定的分组选中，之后在弹窗内切换
@@ -66,6 +74,110 @@ const SettingsContent = () => {
   const historyDelete = useHistoryDelete()
   const replacingHistory = useChatStore((state) => state.importingHistory)
   const historyBusy = historyImport.busy || historyDelete.busy || replacingHistory
+  const isMobile = useIsMobile()
+  const [page, setPage] = useState<keyof typeof mobilePageTitles>(() =>
+    section === 'data' ? 'data' : 'home'
+  )
+  const dataActions = (
+    <>
+      <ImportHistory historyImport={historyImport} disabled={historyBusy} />
+      <ExportHistory disabled={historyBusy} />
+      <SettingCell
+        label={t('deleteAllSessions')}
+        status={null}
+        action={
+          <Button
+            variant="dangerOutlined"
+            size="m"
+            className={styles.cellButton}
+            disabled={historyBusy}
+            onClick={historyDelete.open}
+          >
+            {t('delete')}
+          </Button>
+        }
+      />
+    </>
+  )
+  const confirmations = (
+    <>
+      {historyImport.file ? <ImportConfirm historyImport={historyImport} /> : null}
+      {historyDelete.opened ? <DeleteAllConfirm historyDelete={historyDelete} /> : null}
+    </>
+  )
+  if (isMobile) {
+    const back = () => {
+      if (historyBusy) {
+        return
+      }
+      if (page === 'home') {
+        closeSettings()
+      } else {
+        setPage('home')
+      }
+    }
+    const pages = {
+      home: (
+        <>
+          <section className={styles.settingsGroup} aria-label={t('connectionTitle')}>
+            <ConnectionSetting />
+          </section>
+          <section
+            className={styles.settingsGroup}
+            aria-label={t('settingDialogAsideGeneralOptionLabel')}
+          >
+            <MobilePreferences onFont={() => setPage('font')} />
+            <SettingsPageLink
+              label={t('settingsPersonalization')}
+              onClick={() => setPage('personalization')}
+            />
+          </section>
+          <section className={styles.settingsGroup}>
+            <SettingsPageLink label={t('settingsVoice')} onClick={() => setPage('voice')} />
+            <SettingsPageLink
+              label={t('settingDialogAsideDataOptionLabel')}
+              onClick={() => setPage('data')}
+            />
+            <SettingsPageLink label={t('settingsAbout')} onClick={() => setPage('about')} />
+            <VersionSetting />
+          </section>
+        </>
+      ),
+      font: <FontSizeSetting />,
+      personalization: (
+        <section className={styles.settingsGroup}>
+          <ThinkingCollapseSetting />
+        </section>
+      ),
+      voice: (
+        <section className={styles.settingsGroup}>
+          <TtsVoiceSetting />
+          <AutoReadSetting />
+        </section>
+      ),
+      data: <section className={styles.settingsGroup}>{dataActions}</section>,
+      about: (
+        <section className={styles.settingsGroup}>
+          <p>{t('settingsAboutDeepChat')}</p>
+          <VersionSetting />
+        </section>
+      ),
+    }
+    return (
+      <>
+        <Modal
+          title={t(mobilePageTitles[page])}
+          backLabel={t('goBack')}
+          className={styles.mobilePage}
+          mainClassName={styles.mobilePageMain}
+          onClose={back}
+        >
+          {pages[page]}
+        </Modal>
+        {confirmations}
+      </>
+    )
+  }
   return (
     <>
       <Modal
@@ -101,36 +213,165 @@ const SettingsContent = () => {
               <LocaleSetting />
               <TtsVoiceSetting />
               <ThinkingCollapseSetting />
-              <LocationSetting />
+              <AutoReadSetting />
+              <VersionSetting />
             </>
           ) : (
             <>
               <ConnectionSetting />
-              <ImportHistory historyImport={historyImport} disabled={historyBusy} />
-              <ExportHistory disabled={historyBusy} />
-              <SettingCell
-                label={t('deleteAllSessions')}
-                status={null}
-                action={
-                  <Button
-                    variant="dangerOutlined"
-                    size="m"
-                    className={styles.cellButton}
-                    disabled={historyBusy}
-                    onClick={historyDelete.open}
-                  >
-                    {t('delete')}
-                  </Button>
-                }
-              />
-              <p>Deep Chat 为独立第三方客户端，基于 DeepSeek chat-demo（MIT）。</p>
+              {dataActions}
+              <p>{t('settingsAboutDeepChat')}</p>
             </>
           )}
         </div>
       </Modal>
-      {historyImport.file ? <ImportConfirm historyImport={historyImport} /> : null}
-      {historyDelete.opened ? <DeleteAllConfirm historyDelete={historyDelete} /> : null}
+      {confirmations}
     </>
+  )
+}
+
+const SettingsPageLink = ({ label, onClick }: { label: string; onClick: () => void }) => (
+  <button type="button" className={styles.settingsLink} onClick={onClick}>
+    {label}
+    <IconChevronRightOutline14 />
+  </button>
+)
+
+const MobilePreferences = ({ onFont }: { onFont: () => void }) => {
+  const t = useTranslate()
+  const theme = useSettings((state) => state.themePreference)
+  const locale = useSettings((state) => state.locale)
+  const [choice, setChoice] = useState<'theme' | 'locale' | null>(null)
+  const [draftTheme, setDraftTheme] = useState(theme)
+  const [draftLocale, setDraftLocale] = useState(locale)
+  const themeLabel = t('avatarMenuSettingsDialogThemeItemLabel')
+  const localeLabel = t('settingsLocalePreference')
+  const localeOptions = [
+    { value: 'zh-CN', label: 'settingsLocaleZhCN' },
+    { value: 'en-US', label: 'settingsLocaleEnUS' },
+  ] as const
+  const options =
+    choice === 'theme'
+      ? themeOptions.map(({ value, label }) => ({
+          value,
+          label,
+          checked: draftTheme === value,
+          select: () => setDraftTheme(value),
+        }))
+      : localeOptions.map(({ value, label }) => ({
+          value,
+          label,
+          checked: draftLocale === value,
+          select: () => setDraftLocale(value),
+        }))
+  return (
+    <>
+      <button
+        type="button"
+        className={styles.settingsLink}
+        onClick={() => {
+          setDraftTheme(theme)
+          setChoice('theme')
+        }}
+      >
+        {themeLabel}
+        <span>
+          {t(
+            themeOptions.find((item) => item.value === theme)?.label ??
+              'avatarMenuSettingsDialogThemeSelectSystemOption'
+          )}
+        </span>
+        <IconChevronRightOutline14 />
+      </button>
+      <button
+        type="button"
+        className={styles.settingsLink}
+        onClick={() => {
+          setDraftLocale(locale)
+          setChoice('locale')
+        }}
+      >
+        {localeLabel}
+        <span>{t(locale === 'zh-CN' ? 'settingsLocaleZhCN' : 'settingsLocaleEnUS')}</span>
+        <IconChevronRightOutline14 />
+      </button>
+      <button type="button" className={styles.settingsLink} onClick={onFont}>
+        {t('chatFontSize')}
+        <IconChevronRightOutline14 />
+      </button>
+      {choice ? (
+        <Modal
+          title={choice === 'theme' ? themeLabel : localeLabel}
+          onClose={() => setChoice(null)}
+          footer={
+            <>
+              <Button variant="outlined" onClick={() => setChoice(null)}>
+                {t('cancel')}
+              </Button>
+              <Button
+                onClick={() => {
+                  if (choice === 'theme') {
+                    setThemePreference(draftTheme)
+                  } else {
+                    setLocale(draftLocale)
+                  }
+                  setChoice(null)
+                }}
+              >
+                {t('confirm')}
+              </Button>
+            </>
+          }
+        >
+          {options.map((option) => (
+            <label key={option.value} className={styles.settingsLink}>
+              <input
+                type="radio"
+                name="settings-preference"
+                checked={option.checked}
+                onChange={option.select}
+              />
+              {t(option.label)}
+            </label>
+          ))}
+        </Modal>
+      ) : null}
+    </>
+  )
+}
+
+const FontSizeSetting = () => {
+  const t = useTranslate()
+  const size = useSettings((state) => state.chatFontSize)
+  const defaultSize = 15
+  return (
+    <section className={styles.settingsGroup}>
+      <p style={{ fontSize: `${(size ?? defaultSize) / 16}rem` }} className={styles.fontPreview}>
+        {t('chatFontPreview')}
+      </p>
+      <SettingCell
+        label={t('chatFontFollowSystem')}
+        status={null}
+        action={
+          <Switch
+            aria-label={t('chatFontFollowSystem')}
+            checked={size === null}
+            onClick={() => setChatFontSize(size === null ? defaultSize : null)}
+          />
+        }
+      />
+      <label className={styles.fontSlider}>
+        {t('chatFontSize')} <output>{size ?? defaultSize}</output>
+        <input
+          type="range"
+          min={14}
+          max={22}
+          value={size ?? defaultSize}
+          disabled={size === null}
+          onChange={(event) => setChatFontSize(event.currentTarget.valueAsNumber)}
+        />
+      </label>
+    </section>
   )
 }
 
@@ -207,70 +448,6 @@ const useHistoryDelete = () => {
   }
 }
 
-const LocationSetting = () => {
-  const t = useTranslate()
-  const locale = useSettings((state) => state.locale)
-  const location = useSettings((state) => state.location)
-  const province =
-    location?.region === 'CN'
-      ? provinces.find((item) => item.code === location.province)
-      : undefined
-
-  return (
-    <SettingCell
-      label={t('settingsLocation')}
-      status={null}
-      className={styles.locationCell}
-      action={
-        <div className={styles.locationSelectors}>
-          {isChineseBrowser() ? (
-            <>
-              <Select
-                ariaLabel={t('settingsLocationProvince')}
-                className={styles.provinceSelect}
-                value={province?.code ?? ''}
-                placeholder={t('settingsLocationProvince')}
-                options={provinces.map((item) => ({ value: item.code, label: item.name }))}
-                onChange={(value) => {
-                  if (value !== province?.code) {
-                    setLocation({ region: 'CN', province: value })
-                  }
-                }}
-              />
-              <Select
-                ariaLabel={t('settingsLocationCity')}
-                className={styles.citySelect}
-                value={province ? (location?.city ?? '') : ''}
-                disabled={!province?.cities.length}
-                placeholder={t('settingsLocationCity')}
-                options={
-                  province?.cities.map((item) => ({ value: item.code, label: item.name })) ?? []
-                }
-                onChange={(value) => {
-                  if (province) {
-                    setLocation({ region: 'CN', province: province.code, city: value })
-                  }
-                }}
-              />
-            </>
-          ) : (
-            <Select
-              ariaLabel={t('settingsLocationRegion')}
-              className={styles.regionSelect}
-              value={location?.region ?? ''}
-              placeholder={t('settingsLocationRegion')}
-              options={regionCodes
-                .map((code) => ({ value: code, label: getRegionName(code, locale) }))
-                .sort((a, b) => a.label.localeCompare(b.label, locale))}
-              onChange={(value) => setLocation({ region: value })}
-            />
-          )}
-        </div>
-      }
-    />
-  )
-}
-
 const LocaleSetting = () => {
   const t = useTranslate()
   const locale = useSettings((state) => state.locale)
@@ -316,6 +493,24 @@ const TtsVoiceSetting = () => {
   )
 }
 
+const AutoReadSetting = () => {
+  const t = useTranslate()
+  const enabled = useSettings((state) => state.autoReadAloud)
+  return (
+    <SettingCell
+      label={t('autoReadAloud')}
+      status={null}
+      action={
+        <Switch
+          aria-label={t('autoReadAloud')}
+          checked={enabled}
+          onClick={() => setAutoReadAloud(!enabled)}
+        />
+      }
+    />
+  )
+}
+
 /** 思考内容自动折叠：生成结束后收起思考过程，与官方「个性化」中的同名开关一致 */
 const ThinkingCollapseSetting = () => {
   const t = useTranslate()
@@ -353,19 +548,34 @@ const ImportConfirm = ({
           <Button variant="outlined" size="m" autoFocus onClick={historyImport.cancel}>
             {t('cancel')}
           </Button>
-          <Button variant="outlined" size="m" disabled={historyImport.busy || historyImport.selected.length === 0} onClick={() => void historyImport.confirm()}>
-            导入选中的 {historyImport.selected.length} 个会话
+          <Button
+            variant="outlined"
+            size="m"
+            disabled={historyImport.busy || historyImport.selected.length === 0}
+            onClick={() => void historyImport.confirm()}
+          >
+            {t('historyImportSelected', { count: historyImport.selected.length })}
           </Button>
         </>
       }
     >
-      <div className={styles.importConfirmText}>保留全部现有会话，重复会话会跳过。缺失的附件无法恢复；请只导入你信任的记录。</div>
+      <div className={styles.importConfirmText}>{t('historyImportConfirmDescription')}</div>
       <div className="import-preview">
-        {historyImport.preview.map(item => <label key={item.id}>
-          <input type="checkbox" disabled={item.duplicate} checked={historyImport.selected.includes(item.id)}
-            onChange={event => historyImport.toggle(item.id, event.target.checked)} />
-          <span>{item.title || '新对话'} · {item.messages} 条消息{item.duplicate ? ' · 已存在，将跳过' : ''}</span>
-        </label>)}
+        {historyImport.preview.map((item) => (
+          <label key={item.id}>
+            <input
+              type="checkbox"
+              disabled={item.duplicate}
+              checked={historyImport.selected.includes(item.id)}
+              onChange={(event) => historyImport.toggle(item.id, event.target.checked)}
+            />
+            <span>
+              {item.title || t('untitledChat')} ·{' '}
+              {t('historyImportMessageCount', { count: item.messages })}
+              {item.duplicate ? ` · ${t('historyImportDuplicate')}` : ''}
+            </span>
+          </label>
+        ))}
       </div>
     </Modal>
   )
@@ -470,7 +680,9 @@ const useHistoryImport = () => {
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<Status>(null)
-  const [preview, setPreview] = useState<{ id: string; title: string; messages: number; duplicate: boolean }[]>([])
+  const [preview, setPreview] = useState<
+    { id: string; title: string; messages: number; duplicate: boolean }[]
+  >([])
   const [selected, setSelected] = useState<string[]>([])
   const importing = useRef(false)
   const select = async (candidate: File) => {
@@ -482,12 +694,16 @@ const useHistoryImport = () => {
     setStatus(null)
     try {
       const items = await previewHistory(candidate)
-      const existing = new Set(useChatStore.getState().sessions.map(item => item.id))
-      setPreview(items.map(item => ({ ...item, duplicate: existing.has(item.id) })))
-      setSelected(items.filter(item => !existing.has(item.id)).map(item => item.id))
+      const existing = new Set(useChatStore.getState().sessions.map((item) => item.id))
+      setPreview(items.map((item) => ({ ...item, duplicate: existing.has(item.id) })))
+      setSelected(items.filter((item) => !existing.has(item.id)).map((item) => item.id))
       setFile(candidate)
-    } catch { setStatus({ key: 'historyImportFailed', error: true }) }
-    finally { importing.current = false; setBusy(false) }
+    } catch {
+      setStatus({ key: 'historyImportFailed', error: true })
+    } finally {
+      importing.current = false
+      setBusy(false)
+    }
   }
   const confirm = async () => {
     if (!file || importing.current || selected.length === 0) {
@@ -500,12 +716,29 @@ const useHistoryImport = () => {
       const count = await importHistory(file, selected)
       setFile(null)
       setStatus({ key: count === 1 ? 'historyImportedOne' : 'historyImported', params: { count } })
-    } catch { setStatus({ key: 'historyImportFailed', error: true }) }
-    finally { importing.current = false; setBusy(false) }
+    } catch {
+      setStatus({ key: 'historyImportFailed', error: true })
+    } finally {
+      importing.current = false
+      setBusy(false)
+    }
   }
-  return { file, busy, status, preview, selected, select,
-    toggle: (id: string, checked: boolean) => setSelected(ids => checked ? [...ids, id] : ids.filter(value => value !== id)),
-    cancel: () => { if (!importing.current) { setFile(null) } }, confirm }
+  return {
+    file,
+    busy,
+    status,
+    preview,
+    selected,
+    select,
+    toggle: (id: string, checked: boolean) =>
+      setSelected((ids) => (checked ? [...ids, id] : ids.filter((value) => value !== id))),
+    cancel: () => {
+      if (!importing.current) {
+        setFile(null)
+      }
+    },
+    confirm,
+  }
 }
 
 /** 导入 = 覆盖：用选中文件替换本地全部会话与附件。 */

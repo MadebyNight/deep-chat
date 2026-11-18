@@ -1,31 +1,47 @@
 import { create } from 'zustand'
 import { request, API_ORIGIN, ApiError } from './api/client.js'
 import { setApiKey, useSettings } from './settings.js'
-import { openOfficialPage, readPastedText } from './native.js'
+import { openOfficialPage } from './native.js'
 import { translate } from '../i18n/index.js'
 
 export const OFFICIAL = {
   keys: 'https://platform.deepseek.com/api_keys',
-  platform: 'https://platform.deepseek.com/',
   topup: 'https://platform.deepseek.com/top_up',
 } as const
 export type Balance = {
   is_available: boolean
-  balance_infos: { currency: string; total_balance: string; granted_balance: string; topped_up_balance: string }[]
+  balance_infos: {
+    currency: string
+    total_balance: string
+    granted_balance: string
+    topped_up_balance: string
+  }[]
 }
 export const parseBalance = (data: unknown): Balance => {
-  if (!data || typeof data !== 'object' || !('is_available' in data) ||
-      typeof data.is_available !== 'boolean' || !('balance_infos' in data) || !Array.isArray(data.balance_infos) ||
-      !data.balance_infos.every((item: unknown) => !!item && typeof item === 'object' &&
-        ['currency', 'total_balance', 'granted_balance', 'topped_up_balance'].every(key =>
-          typeof (item as Record<string, unknown>)[key] === 'string'))) {
+  if (
+    !data ||
+    typeof data !== 'object' ||
+    !('is_available' in data) ||
+    typeof data.is_available !== 'boolean' ||
+    !('balance_infos' in data) ||
+    !Array.isArray(data.balance_infos) ||
+    !data.balance_infos.every(
+      (item: unknown) =>
+        !!item &&
+        typeof item === 'object' &&
+        ['currency', 'total_balance', 'granted_balance', 'topped_up_balance'].every(
+          (key) => typeof (item as Record<string, unknown>)[key] === 'string'
+        )
+    )
+  ) {
     throw new Error('暂时无法读取余额，请稍后重试。')
   }
   return data as Balance
 }
 export const queryBalance = async (apiKey: string, signal?: AbortSignal): Promise<Balance> => {
   const response = await request(`${API_ORIGIN}/user/balance`, {
-    headers: { Authorization: `Bearer ${apiKey}` }, signal: signal ?? AbortSignal.timeout(20000),
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal: signal ?? AbortSignal.timeout(20000),
   })
   return parseBalance(await response.json())
 }
@@ -37,21 +53,41 @@ const readProgress = (): { step: Step; away: Away; open: boolean } => {
   try {
     const saved = JSON.parse(localStorage.getItem(PROGRESS) ?? 'null')
     if (saved && ['start', 'paste', 'balance'].includes(saved.step)) {
-      return { step: saved.step, away: ['keys', 'topup'].includes(saved.away) ? saved.away : null, open: !!saved.open }
+      return {
+        step: saved.step,
+        away: ['keys', 'topup'].includes(saved.away) ? saved.away : null,
+        open: !!saved.open,
+      }
     }
-  } catch { /* 没有可恢复的向导 */ }
+  } catch {
+    /* 没有可恢复的向导 */
+  }
   return { step: 'start', away: null, open: false }
 }
 export const useConnection = create(() => ({
-  ...readProgress(), balance: null as Balance | null, busy: false, error: '',
+  ...readProgress(),
+  balance: null as Balance | null,
+  busy: false,
+  error: '',
 }))
 useConnection.subscribe(({ step, away, open }) => {
   localStorage.setItem(PROGRESS, JSON.stringify({ step, away, open }))
 })
 let pending: AbortController | null = null
-export const openConnection = () => useConnection.setState({
-  open: true, error: '', step: useSettings.getState().apiKey ? 'balance' : useConnection.getState().step,
-})
+export const openConnection = () =>
+  useConnection.setState({
+    open: true,
+    error: '',
+    balance: null,
+    step: useSettings.getState().apiKey
+      ? 'balance'
+      : useConnection.getState().step === 'paste'
+        ? 'paste'
+        : 'start',
+  })
+export const changeConnectionKey = () =>
+  useConnection.setState({ open: true, step: 'paste', error: '' })
+
 export const closeConnection = () => {
   if (useConnection.getState().busy) {
     return
@@ -99,10 +135,6 @@ export const connect = async (input: string) => {
     useConnection.setState({ busy: false })
   }
 }
-export const pasteAndConnect = async () => {
-  try { await connect(await readPastedText()) }
-  catch { useConnection.setState({ error: translate('connectionErrorClipboard'), step: 'paste' }) }
-}
 export const refreshBalance = async (finish = false) => {
   const key = useSettings.getState().apiKey
   if (!key || useConnection.getState().busy) {
@@ -118,22 +150,40 @@ export const refreshBalance = async (finish = false) => {
     useConnection.setState({ busy: false })
   }
 }
-export const visitOfficial = async (destination: 'keys' | 'topup') => {
-  useConnection.setState({ step: destination === 'keys' ? 'paste' : 'balance', away: destination, open: true, error: '' })
-  try { await openOfficialPage(OFFICIAL[destination]) }
-  catch { useConnection.setState({ away: null, error: translate('connectionErrorBrowser') }) }
+export const visitOfficial = async (destination: 'keys' | 'topup', showDialog = true) => {
+  useConnection.setState({
+    step: destination === 'keys' ? 'paste' : 'balance',
+    away: destination,
+    open: showDialog,
+    error: '',
+  })
+  try {
+    await openOfficialPage(OFFICIAL[destination])
+  } catch {
+    useConnection.setState({ away: null, error: translate('connectionErrorBrowser') })
+  }
 }
 export const resumeConnection = () => {
   const { away } = useConnection.getState()
   if (!away) {
     return
   }
-  useConnection.setState({ away: null, open: true, step: away === 'keys' ? 'paste' : 'balance' })
+  useConnection.setState({ away: null })
   if (away === 'topup') {
     void refreshBalance(true)
   }
 }
 export const removeConnection = async () => {
-  await setApiKey(null)
-  useConnection.setState({ balance: null, step: 'start', error: '' })
+  if (useConnection.getState().busy) {
+    return
+  }
+  useConnection.setState({ busy: true, error: '' })
+  try {
+    await setApiKey(null)
+    useConnection.setState({ balance: null, step: 'start', away: null, open: false })
+  } catch {
+    useConnection.setState({ error: translate('connectionErrorRemoveFailed') })
+  } finally {
+    useConnection.setState({ busy: false })
+  }
 }

@@ -41,6 +41,14 @@
   margin-bottom: var(--modal-header-gap, 12px);
 }
 
+.backHeader {
+  justify-content: flex-start;
+}
+
+.back svg {
+  transform: rotate(180deg);
+}
+
 .title {
   font-size: 16px;
   line-height: 24px;

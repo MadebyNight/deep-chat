@@ -21,12 +21,16 @@ export const groupSessions = (sessions: SessionSummary[], now: number, t = trans
             : diff < 30
               ? 'sessionHistoryTimelineLabel30days'
               : null
-    const groupKey = key ?? monthKey(session.updatedAt) ?? ''
+    const groupKey = session.pinned ? 'pinned' : (key ?? monthKey(session.updatedAt) ?? '')
     const last = groups.at(-1)
     if (last?.key === groupKey) {
       last.sessions.push(session)
     } else {
-      groups.push({ key: groupKey, label: key ? t(key) : groupKey, sessions: [session] })
+      groups.push({
+        key: groupKey,
+        label: session.pinned ? t('pinnedChats') : key ? t(key) : groupKey,
+        sessions: [session],
+      })
     }
   }
   return groups

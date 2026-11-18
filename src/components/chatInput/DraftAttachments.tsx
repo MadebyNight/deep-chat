@@ -1,5 +1,6 @@
 import clsx from 'clsx'
-import { memo } from 'react'
+import { memo, useState } from 'react'
+import { Modal } from '../base/Modal.js'
 import { useTranslate } from '../../i18n/index.js'
 import { useUploads, type UploadTask } from '../../services/attachments.js'
 import type { DraftAttachment } from '../../services/chat/drafts.js'
@@ -48,6 +49,7 @@ const AttachmentItem = ({
   onRemove: () => void
 }) => {
   const t = useTranslate()
+  const [preview, setPreview] = useState(false)
   const task = useUploads((state) => state.tasks[item.id] ?? UPLOADING)
   const status = task.status
   const error = task.status === 'error' ? t(task.error.key, task.error.params) : undefined
@@ -62,7 +64,14 @@ const AttachmentItem = ({
       className={clsx(styles.attachment, failed && styles.attachmentFailed)}
       title={error ?? item.file.name}
     >
-      <img src={item.previewUrl} alt={item.file.name} />
+      <button type="button" className={styles.photoButton} onClick={() => setPreview(true)}>
+        <img src={item.previewUrl} alt={item.file.name} />
+      </button>
+      {preview ? (
+        <Modal title={item.file.name} closable onClose={() => setPreview(false)}>
+          <img className={styles.photoPreview} src={item.previewUrl} alt={item.file.name} />
+        </Modal>
+      ) : null}
       {status === 'uploading' ? <div className={styles.uploading} /> : null}
       {failed && retry ? (
         <Tooltip content={retryLabel}>

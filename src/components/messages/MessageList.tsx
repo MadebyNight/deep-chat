@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useIsMobile } from '../../app/viewport.js'
+import { useTranslate } from '../../i18n/index.js'
+import { IconChevronDownOutline14 } from '../base/icons.js'
 import {
   buildMessageVersions,
   getVisibleMessages,
@@ -43,6 +45,8 @@ export const MessageList = ({
   footer: React.ReactNode
 }) => {
   const isMobile = useIsMobile()
+  const t = useTranslate()
+  const [aboveBottom, setAboveBottom] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const stickyRef = useRef(true)
@@ -127,6 +131,7 @@ export const MessageList = ({
     }
     const onScroll = () => {
       const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < STICKY_THRESHOLD
+      setAboveBottom(!nearBottom)
       // 仅在用户向上滚动时停止跟随底部，布局或内容增高时保持跟随状态。
       if (nearBottom) {
         stickyRef.current = true
@@ -174,6 +179,20 @@ export const MessageList = ({
             )}
           </div>
         </div>
+        {isMobile && aboveBottom ? (
+          <button
+            type="button"
+            className={styles.jumpToBottom}
+            aria-label={t('backToBottom')}
+            onClick={() => {
+              stickyRef.current = true
+              scrollToBottom()
+              setAboveBottom(false)
+            }}
+          >
+            <IconChevronDownOutline14 />
+          </button>
+        ) : null}
         {footer}
       </div>
     </ScrollToBottomContext.Provider>

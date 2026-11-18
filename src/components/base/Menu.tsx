@@ -7,7 +7,7 @@ import styles from './Menu.module.css'
 export type MenuOption = {
   key: string
   label: string
-  icon: ReactNode
+  icon?: ReactNode
   danger?: boolean
   onSelect: () => void
 }
@@ -22,12 +22,12 @@ export const Menu = ({
 }) => {
   const [open, setOpen] = useState(false)
   const close = () => setOpen(false)
-  // 左侧对齐并再左移 5px，让菜单文字与触发元素图标对齐
+  // Align to the action at the trailing edge of the chat row.
   const { anchorRef, floatingRef, position } = useAnchoredPosition<HTMLSpanElement, HTMLDivElement>(
     open,
-    { align: 'start', alignOffset: -5, offset: 4 }
+    { align: 'end', offset: 4 }
   )
-  useDismiss(open, [anchorRef, floatingRef], close)
+  useDismiss(open, [anchorRef, floatingRef], close, { captureEscape: true })
 
   return (
     <>
@@ -52,7 +52,7 @@ export const Menu = ({
                     option.onSelect()
                   }}
                 >
-                  <span className={styles.icon}>{option.icon}</span>
+                  {option.icon ? <span className={styles.icon}>{option.icon}</span> : null}
                   {option.label}
                 </div>
               ))}

@@ -7,7 +7,7 @@ import { openMobileSider } from '../sider/mobileSiderState.js'
 import styles from './MobileHeader.module.css'
 
 /**
- * 移动端顶栏，对齐官方：高 50dp、按钮 50×50。
+ * 移动端顶栏。
  * 左侧菜单；有标题时中间显示会话标题；自动朗读与开启新对话在右侧（欢迎页也显示自动朗读）。
  */
 export const MobileHeader = ({ title }: { title?: string }) => {

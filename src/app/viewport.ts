@@ -63,8 +63,11 @@ export const useMobileViewport = (enabled: boolean) => {
       if (viewport && viewport.scale !== 1) {
         return
       }
-      // 失焦后直接恢复 CSS 的全高布局，不等 Safari 收键盘后的 resize。
-      if (!document.activeElement?.matches(inputSelector)) {
+      // 点击输入区操作时焦点会先移动，保持视口直到键盘真正收起。
+      if (
+        !document.activeElement?.matches(inputSelector) &&
+        !document.body.classList.contains('keyboard-open')
+      ) {
         reset()
         return
       }

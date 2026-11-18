@@ -88,7 +88,13 @@ export const toggleReadAloud = (
     return
   }
   const controller = new AbortController()
-  const context = new AudioContext({ sampleRate: TTS_SAMPLE_RATE })
+  let context: AudioContext
+  try {
+    context = new AudioContext({ sampleRate: TTS_SAMPLE_RATE })
+  } catch (error) {
+    onError(error)
+    return
+  }
   current = { controller, context }
   useReadAloud.setState({ messageId, status: 'loading' })
   // 音色在开始朗读时读取，设置中切换后下一次朗读生效
@@ -97,6 +103,8 @@ export const toggleReadAloud = (
   void (async () => {
     let nextTime = 0
     let lastSource: AudioBufferSourceNode | null = null
+    let lastSourceEnded = true
+    let streamEnded = false
     let rest = new Uint8Array(0)
     try {
       const stream = await synthesize(apiKey ?? '', text, ttsVoice, controller.signal)
@@ -122,16 +130,24 @@ export const toggleReadAloud = (
         source.connect(context.destination)
         // 网络慢于播放时从当前时间续上，不补播过去的时间
         nextTime = Math.max(nextTime, context.currentTime + (lastSource ? 0 : START_DELAY))
+        lastSource = source
+        lastSourceEnded = false
+        source.onended = () => {
+          if (lastSource === source) {
+            lastSourceEnded = true
+            if (streamEnded) {
+              finish(controller)
+            }
+          }
+        }
         source.start(nextTime)
         nextTime += buffer.duration
-        lastSource = source
         if (useReadAloud.getState().status === 'loading') {
           useReadAloud.setState({ status: 'playing' })
         }
       }
-      if (lastSource) {
-        lastSource.onended = () => finish(controller)
-      } else {
+      streamEnded = true
+      if (lastSourceEnded) {
         finish(controller)
       }
     } catch (error) {

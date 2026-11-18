@@ -1,12 +1,12 @@
 .wrapper {
-  --line-height: 24px;
+  --line-height: 1.5em;
   --input-padding-top: 12px;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
   width: 100%;
   cursor: text;
-  font-size: 16px;
+  font-size: var(--chat-font-size, 1rem);
   line-height: var(--line-height);
   border-radius: 24px;
   border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
@@ -197,6 +197,7 @@
 
   &::placeholder {
     color: var(--dsw-alias-label-caption);
+    font-size: var(--composer-placeholder-size, inherit);
     user-select: none;
   }
 }
@@ -221,12 +222,11 @@
 
 @media not all and (min-width: 768px) {
   .wrapper {
-    border-radius: 30px;
-    /* 官方输入盒总高约 117px：首行区 53px + 功能行 62px + 边框 2px */
-    --input-padding-top: 23px;
-    min-height: 117px;
+    border-radius: 24px;
+    --input-padding-top: 16px;
+    --composer-placeholder-size: 0.75rem;
     flex-shrink: 0;
-    max-height: calc(var(--app-viewport-height, 100dvh) - 120px);
+    max-height: max(118px, calc(var(--app-viewport-height, 100dvh) - 100px));
   }
 
   .textareaWrapper {
@@ -309,52 +309,89 @@
   margin-left: auto;
 }
 
+.photoButton {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.photoPreview {
+  display: block;
+  max-width: 100%;
+  max-height: 65dvh;
+  margin: auto;
+  object-fit: contain;
+}
+
+.attachmentChoices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
 @media (max-width: 767px) {
-  /* 官方功能行贴输入框边缘（无左右内边距），高约 62px */
-  .functionRow { padding: 0; gap: 4px; margin-top: auto; min-height: 62px; }
-  .toggles { gap: 4px; flex: 0 1 auto; }
-  /* 官方胶囊：高 52px、全圆角、图标 18px、文字 13px；深色底 #283142。
-     320px 窄屏下两个带文字胶囊与右侧按钮共需约 290px，故文字取 13px 保证标签不折叠。 */
-  .toggle {
-    padding: 0 8px;
-    font-size: 13px;
-    height: 52px;
-    border-radius: 26px;
+  .wrapper {
+    container-type: inline-size;
+  }
+  .remove {
+    opacity: 1;
+  }
+  .uploading {
+    pointer-events: none;
+  }
+  .functionRow {
+    padding: 4px 8px 8px;
     gap: 4px;
+    margin-top: auto;
+  }
+  .toggles {
+    flex: 1 1 auto;
+    gap: 4px;
+  }
+  .collapsedToggles .toggleLabel {
+    display: inline;
+  }
+  .toggle {
+    flex: 0 1 auto;
+    min-width: 0;
+    min-height: 38px;
+    height: auto;
+    padding: 4px clamp(4px, 2cqi, 10px);
+    font-size: clamp(0.75rem, 3.8cqi, 0.8125rem);
+    line-height: 1.15;
+    text-align: start;
+    white-space: normal;
+    border-radius: 13px;
+    gap: 3px;
 
     svg {
-      width: 18px;
-      height: 18px;
+      flex-shrink: 0;
     }
+    background-color: var(--dsw-alias-bg-layer-2);
+    border-color: var(--dsw-alias-border-l2);
 
-    [data-ds-dark-theme] & {
-      background-color: #283142;
-      border-color: transparent;
+    &[aria-pressed='true'] {
+      border-color: color-mix(in srgb, var(--dsw-alias-brand-text) 40%, transparent);
+      background-color: var(--dsw-alias-button-ghost-active-fill);
+      font-weight: 600;
     }
   }
-  .right { gap: 4px; }
-  /* 官方上传按钮约 40×58 透明底；语音/发送按钮约 56×58 */
+  .right {
+    gap: 2px;
+  }
   .right .addButton {
-    width: 40px;
-    height: 58px;
-    border-radius: 20px;
-    background-color: transparent;
+    order: -1;
   }
-  .right .voiceButton {
-    width: 56px;
-    height: 58px;
-    background-color: transparent;
-  }
-  /* 提升优先级，确保覆盖文件末尾的基础 .sendButton 规则 */
+  .right .addButton,
+  .right .voiceButton,
   .right .sendButton {
-    width: 56px;
-    height: 58px;
+    width: 44px;
+    height: 44px;
     margin-left: 0;
-
-    svg {
-      width: 22px;
-      height: 22px;
-    }
   }
 }
 

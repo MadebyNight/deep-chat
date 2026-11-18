@@ -17,6 +17,8 @@ import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
 import { ConnectionDialog } from '../components/settings/ConnectionDialog.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
+import { UpdateDialog } from '../components/settings/UpdateDialog.js'
+import { initializeUpdates } from '../services/updates.js'
 import { Toast } from '../components/base/Toast.js'
 import { showToast } from '../components/base/toastState.js'
 import { onUploadNotice } from '../services/attachments.js'
@@ -31,6 +33,14 @@ export const App = () => {
   const t = useTranslate()
   const isMobile = useIsMobile()
   const locale = useSettings((state) => state.locale)
+  const chatFontSize = useSettings((state) => state.chatFontSize)
+  useEffect(() => {
+    if (chatFontSize === null) {
+      document.body.style.removeProperty('--chat-font-size')
+    } else {
+      document.body.style.setProperty('--chat-font-size', `${chatFontSize / 16}rem`)
+    }
+  }, [chatFontSize])
   // 移动端侧边栏以独立抽屉管理开合状态
   const siderCollapsed = useSettings((state) => state.siderCollapsed) && !isMobile
   const mobileSiderOpen = useMobileSider((state) => state.open)
@@ -66,11 +76,11 @@ export const App = () => {
   useEffect(closeSearchPanel, [activeId])
   // 切换会话时停止朗读
   useEffect(stopReadAloud, [activeId])
-  // 移动端选中会话、切换布局后收起抽屉
-  useEffect(closeMobileSider, [activeId, isMobile])
+  useEffect(closeMobileSider, [isMobile])
 
   useEffect(() => {
     void initChat()
+    initializeUpdates()
     // 首次发送时进入连接向导，首页始终可浏览。
   }, [])
 
@@ -135,6 +145,7 @@ export const App = () => {
       </div>
       <SettingsDialog />
       <ConnectionDialog />
+      <UpdateDialog allowAutomatic={ready && !streaming && !importingHistory && !mobileSiderOpen} />
       <Toast />
     </>
   )

@@ -1,4 +1,7 @@
 declare const styles: {
+  readonly "historyHeader": string;
+  readonly "historySearch": string;
+  readonly "historyEmpty": string;
   readonly "sider": string;
   readonly "top": string;
   readonly "appName": string;

@@ -17,7 +17,7 @@
 
 /* 移动端抽屉打开时主内容向右位移，与官方露边效果一致 */
 .mainShifted {
-  transform: translateX(80%);
+  transform: translateX(min(80vw, 100vw - 48px));
 }
 
 .content {

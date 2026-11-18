@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { credentials, isNative } from './native.js'
 import type { TtsVoice } from './api/speech.js'
-import { normalizeLocation, type UserLocation } from './location.js'
 
 export type Locale = 'zh-CN' | 'en-US'
 
@@ -13,7 +12,7 @@ type Settings = {
   apiKey: string | null
   locale: Locale
   themePreference: ThemePreference
-  location: UserLocation | null
+  chatFontSize: number | null
   ttsVoice: TtsVoice
   autoReadAloud: boolean
   /** 思考内容自动折叠：生成结束后收起思考过程，只留标题行 */
@@ -26,8 +25,8 @@ type Settings = {
 const KEYS = {
   apiKey: 'chat-demo:api-key',
   locale: 'chat-demo:locale',
-  location: 'chat-demo:location',
   themePreference: 'chat-demo:theme-preference',
+  chatFontSize: 'deepchat:chat-font-size',
   ttsVoice: 'chat-demo:tts-voice',
   autoReadAloud: 'chat-demo:auto-read-aloud',
   autoCollapseThinking: 'chat-demo:auto-collapse-thinking',
@@ -56,8 +55,7 @@ const write = (key: string, value: string | null) => {
   }
 }
 
-/** 位置选择模式跟随浏览器语言，与应用内选择的界面语言无关。 */
-export const isChineseBrowser = (): boolean =>
+const isChineseBrowser = (): boolean =>
   (typeof navigator === 'undefined' ? 'zh' : navigator.language).toLowerCase().startsWith('zh')
 
 const initialLocale = (): Locale => {
@@ -68,26 +66,15 @@ const initialLocale = (): Locale => {
   return isChineseBrowser() ? 'zh-CN' : 'en-US'
 }
 
-const initialLocation = (): UserLocation | null => {
-  try {
-    const location = normalizeLocation(JSON.parse(read(KEYS.location) ?? 'null'))
-    if (!location) {
-      return null
-    }
-    return isChineseBrowser()
-      ? location.region === 'CN' && location.province
-        ? location
-        : null
-      : { region: location.region }
-  } catch {
-    return null
-  }
-}
-
 /** 未保存过时跟随系统 */
 const initialThemePreference = (): ThemePreference => {
   const saved = read(KEYS.themePreference)
   return saved === 'light' || saved === 'dark' ? saved : 'system'
+}
+
+const initialChatFontSize = () => {
+  const value = Number(read(KEYS.chatFontSize))
+  return Number.isInteger(value) && value >= 14 && value <= 22 ? value : null
 }
 
 /** 未保存过时使用服务端默认音色 stella（海星） */
@@ -96,8 +83,8 @@ const initialTtsVoice = (): TtsVoice => (read(KEYS.ttsVoice) === 'tide' ? 'tide'
 export const useSettings = create<Settings>(() => ({
   apiKey: null,
   locale: initialLocale(),
-  location: initialLocation(),
   themePreference: initialThemePreference(),
+  chatFontSize: initialChatFontSize(),
   ttsVoice: initialTtsVoice(),
   autoReadAloud: read(KEYS.autoReadAloud) === 'true',
   // 未保存过时默认开启，与官方「思考内容自动折叠」初始状态一致
@@ -112,15 +99,14 @@ export const setLocale = (locale: Locale) => {
   useSettings.setState({ locale })
 }
 
-export const setLocation = (value: UserLocation | null) => {
-  const location = normalizeLocation(value)
-  write(KEYS.location, location ? JSON.stringify(location) : null)
-  useSettings.setState({ location })
-}
-
 export const setThemePreference = (themePreference: ThemePreference) => {
   write(KEYS.themePreference, themePreference)
   useSettings.setState({ themePreference })
+}
+
+export const setChatFontSize = (chatFontSize: number | null) => {
+  write(KEYS.chatFontSize, chatFontSize === null ? null : String(chatFontSize))
+  useSettings.setState({ chatFontSize })
 }
 
 export const setTtsVoice = (ttsVoice: TtsVoice) => {
@@ -140,6 +126,7 @@ export const setAutoCollapseThinking = (autoCollapseThinking: boolean) => {
 
 export const initializeCredentials = async () => {
   write(KEYS.apiKey, null)
+  write('chat-demo:location', null)
   if (isNative) {
     const { value } = await credentials.read()
     useSettings.setState({ apiKey: value })

@@ -29,6 +29,23 @@
   }
 }
 
+.jumpToBottom {
+  align-self: end;
+  margin: -48px 18px 6px 0;
+  z-index: 1;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: 0 2px 8px #0002;
+  cursor: pointer;
+}
+
 .column {
   width: calc(var(--message-list-max-width) - 2 * var(--message-list-padding-horizontal));
   max-width: calc(100% - 40px);

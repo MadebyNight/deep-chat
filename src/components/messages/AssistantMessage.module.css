@@ -113,7 +113,13 @@
   }
 
   .actions {
-    gap: 18px;
+    gap: 4px;
+    opacity: 1;
+
+    button {
+      min-width: 44px;
+      min-height: 44px;
+    }
 
     svg {
       width: 20px;

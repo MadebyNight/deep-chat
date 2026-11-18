@@ -1,5 +1,12 @@
+import { Clipboard } from '@capacitor/clipboard'
+import { isNative } from '../services/native.js'
+
 export const copyText = async (text: string): Promise<boolean> => {
   try {
+    if (isNative) {
+      await Clipboard.write({ string: text })
+      return true
+    }
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text)
       return true

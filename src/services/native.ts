@@ -1,6 +1,5 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import { Browser } from '@capacitor/browser'
-import { Clipboard } from '@capacitor/clipboard'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 
@@ -22,10 +21,6 @@ export const openOfficialPage = async (url: string) => {
   }
   window.open(url, '_blank', 'noopener,noreferrer')
 }
-
-export const readPastedText = async () => isNative
-  ? (await Clipboard.read()).value
-  : navigator.clipboard.readText()
 
 /** 分享文本：移动端走系统分享面板，桌面端不支持时抛错由调用方提示 */
 export const shareText = async (title: string, text: string) => {

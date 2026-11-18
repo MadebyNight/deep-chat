@@ -28,6 +28,13 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.brandMark {
+  display: block;
+  flex-shrink: 0;
+  width: 44px;
+  height: auto;
+}
+
 @media (max-width: 439px) {
   .greeting {
     font-size: 20px;
@@ -44,20 +51,24 @@
   .welcome {
     flex: 1;
     min-height: 0;
-    justify-content: flex-end;
+    justify-content: flex-start;
     max-width: none;
     margin: 0;
-    padding: 0 12px env(safe-area-inset-bottom);
+    overflow-y: auto;
+    padding: 0 12px max(4px, env(safe-area-inset-bottom));
   }
 
   .greeting {
     flex-shrink: 0;
     flex-direction: column;
-    gap: 21px;
+    gap: 12px;
+    max-inline-size: min(30rem, 100%);
+    padding: 20px 12px;
     margin: auto 0;
-    font-size: 20px;
-    line-height: 28px;
-    font-weight: 500;
+    font-size: clamp(0.9375rem, 4.5vw, 1.125rem);
+    line-height: 1.4;
+    font-weight: 600;
+    text-wrap: balance;
   }
 
   .caveat {
@@ -67,12 +78,7 @@
     font-size: 10px;
     line-height: 14px;
     text-align: center;
-    /* 官方 caveat 实测：浅色 (222,222,222)、深色 (69,70,71) */
-    color: #dedede;
+    color: var(--dsw-alias-label-secondary);
     user-select: none;
-
-    [data-ds-dark-theme] & {
-      color: #454647;
-    }
   }
 }

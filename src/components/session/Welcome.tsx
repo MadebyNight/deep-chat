@@ -29,7 +29,7 @@ export const Welcome = () => {
       {isMobile ? <MobileHeader /> : null}
       <div className={styles.welcome}>
         <div className={styles.greeting}>
-          <img className="welcome-mark" src={whaleLogo} alt="" width={44} height={34} />
+          <img className={styles.brandMark} src={whaleLogo} width={44} height={34} alt="" />
           <span>{t(greetingKey())}</span>
         </div>
         <ChatInput sessionId={null} />

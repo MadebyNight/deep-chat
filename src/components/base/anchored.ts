@@ -223,9 +223,10 @@ export const useDismiss = (
       }
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') {
+      if (event.defaultPrevented || event.key !== 'Escape') {
         return
       }
+      event.preventDefault()
       if (captureEscape) {
         event.stopPropagation()
       }

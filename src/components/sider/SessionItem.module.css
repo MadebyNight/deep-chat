@@ -37,6 +37,14 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   line-height: 18px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
 }
 
 .action {
@@ -71,13 +79,16 @@
     height: 50px;
     padding: 0 8px 0 12px;
     border-radius: 14px;
-    font-size: 16px;
+    font-size: 0.875rem;
   }
 
-  /* 官方抽屉当前会话无背景高亮，仅靠顶栏标题辨识 */
   .item.active {
-    background-color: transparent;
-    color: var(--dsw-alias-label-primary);
+    background-color: var(--dsw-alias-button-ghost-active-fill);
+    color: var(--dsw-alias-brand-text);
+  }
+
+  .action {
+    display: flex;
   }
 
   .title {
@@ -88,6 +99,6 @@
     height: 50px;
     padding: 0 12px;
     border-radius: 14px;
-    font-size: 16px;
+    font-size: 0.875rem;
   }
 }

@@ -11,7 +11,10 @@ export type VoiceInputStatus = 'idle' | 'recording' | 'transcribing'
  * 录音依赖 getUserMedia，只在安全上下文可用（HTTPS、localhost、file://）。
  * 普通 HTTP 页面上直接禁用入口，避免点击后必然失败。
  */
-const AVAILABLE = typeof window === 'undefined' || window.isSecureContext
+const AVAILABLE =
+  typeof window !== 'undefined' &&
+  window.isSecureContext &&
+  typeof navigator.mediaDevices?.getUserMedia === 'function'
 
 const describeRecordingError = (error: unknown): TranslationMessage => {
   if (error instanceof DOMException) {

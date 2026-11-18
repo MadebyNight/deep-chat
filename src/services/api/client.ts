@@ -1,4 +1,5 @@
 import { translate, type TranslationMessage } from '../../i18n/index.js'
+import { recordChatRequest } from '../chat/usage.js'
 import { readMessageEvent } from './parseEvent.js'
 import { readServerSentEvents } from './sse.js'
 import type {
@@ -7,6 +8,7 @@ import type {
   FileObject,
   FilePurpose,
   MessageStreamEvent,
+  MessageUsage,
 } from './types.js'
 
 /** 构建期 API 地址，默认 https://api.deepseek.com；本地开发支持开发服务器代理 */
@@ -146,7 +148,8 @@ export async function* streamMessage(
   body: CreateMessageRequest,
   signal: AbortSignal
 ): AsyncGenerator<MessageStreamEvent> {
-  const response = await request(`${ANTHROPIC_BASE_URL}/messages`, {
+  signal.throwIfAborted()
+  const init: RequestInit = {
     method: 'POST',
     headers: {
       ...anthropicHeaders(apiKey, hasFile(body)),
@@ -155,35 +158,61 @@ export async function* streamMessage(
     },
     body: JSON.stringify({ ...body, stream: true }),
     signal,
-  })
+  }
+  signal.throwIfAborted()
+  const startedAt = new Date()
+  const pending = request(`${ANTHROPIC_BASE_URL}/messages`, init)
+  const reportUsage = recordChatRequest(startedAt)
+  const response = await pending
   const contentType = response.headers.get('Content-Type') ?? ''
   if (!response.body || !contentType.includes('text/event-stream')) {
     throw await readErrorResponse(response, 'protocol', '')
   }
-  for await (const { event: eventName, data } of readServerSentEvents(response.body, signal)) {
-    let payload: unknown
-    try {
-      payload = JSON.parse(data)
-    } catch {
-      if (eventName !== 'error') {
+  let latestUsage: MessageUsage | undefined
+  try {
+    for await (const { event: eventName, data } of readServerSentEvents(response.body, signal)) {
+      let payload: unknown
+      try {
+        payload = JSON.parse(data)
+      } catch {
+        if (eventName !== 'error') {
+          continue
+        }
+      }
+      if (isErrorBody(payload)) {
+        throw new ApiError('stream', payload.error.message)
+      }
+      if (eventName === 'error') {
+        throw new ApiError('stream', data)
+      }
+      const event = readMessageEvent(payload)
+      if (!event) {
         continue
       }
+      if (event.type === 'message_delta' && event.usage) {
+        const counts = [
+          event.usage.input_tokens,
+          event.usage.cache_read_input_tokens,
+          event.usage.cache_creation_input_tokens,
+          event.usage.output_tokens,
+        ]
+        if (
+          counts.every((count) => Number.isSafeInteger(count) && count >= 0) &&
+          Number.isSafeInteger(counts.reduce((total, count) => total + count, 0))
+        ) {
+          latestUsage = event.usage
+        }
+      }
+      yield event
+      if (event.type === 'message_stop') {
+        return
+      }
     }
-    if (isErrorBody(payload)) {
-      throw new ApiError('stream', payload.error.message)
-    }
-    if (eventName === 'error') {
-      throw new ApiError('stream', data)
-    }
-    const event = readMessageEvent(payload)
-    if (!event) {
-      continue
-    }
-    yield event
-    if (event.type === 'message_stop') {
-      return
+    // 服务端没有提供错误内容时保持为空，不推测断流原因。
+    throw new ApiError('interrupted', '')
+  } finally {
+    if (latestUsage) {
+      reportUsage?.(latestUsage)
     }
   }
-  // 服务端没有提供错误内容时保持为空，不推测断流原因。
-  throw new ApiError('interrupted', '')
 }

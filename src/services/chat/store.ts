@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { showToast } from '../../components/base/toastState.js'
 import { createId } from '../../utils/id.js'
 import { ApiError, streamMessage } from '../api/client.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
@@ -90,7 +91,7 @@ export const useChatStore = create<ChatState>(() => ({
 const { getState: get, setState: set } = useChatStore
 
 const sortSessions = (sessions: SessionSummary[]) =>
-  [...sessions].sort((a, b) => b.updatedAt - a.updatedAt)
+  [...sessions].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updatedAt - a.updatedAt)
 
 const getSession = (id: string) => {
   const cache = get().sessionCache
@@ -103,7 +104,10 @@ const getStreamController = (id: string) => {
 }
 
 const sameSummary = (a: SessionSummary, b: SessionSummary) =>
-  a.title === b.title && a.createdAt === b.createdAt && a.updatedAt === b.updatedAt
+  a.title === b.title &&
+  a.createdAt === b.createdAt &&
+  a.updatedAt === b.updatedAt &&
+  !!a.pinned === !!b.pinned
 
 const sessionAccess = new Map<string, number>()
 const unsavedSessions = new Set<string>()
@@ -389,7 +393,10 @@ const waitForIdle = (sessionId?: string) =>
  * 替换历史对话：先写入暂存，成功后原子替换旧记录；写入为空即删除全部会话与附件。
  * 期间停止生成并禁止修改会话；失败时清除暂存，保留原有记录。
  */
-export const replaceHistory = async (write: () => Promise<void>, merge = false): Promise<number> => {
+export const replaceHistory = async (
+  write: () => Promise<void>,
+  merge = false
+): Promise<number> => {
   const previousCount = get().sessions.length
   const previousActive = get().activeId
   if (get().importingHistory) {
@@ -407,12 +414,14 @@ export const replaceHistory = async (write: () => Promise<void>, merge = false):
     sessionLoads.clear()
     await waitForIdle()
     if (merge) {
-      await Promise.all([...unsavedSessions].map(async id => {
-        const session = getSession(id)
-        if (session) {
-          await db.saveSession(session, pendingFiles.get(id))
-        }
-      }))
+      await Promise.all(
+        [...unsavedSessions].map(async (id) => {
+          const session = getSession(id)
+          if (session) {
+            await db.saveSession(session, pendingFiles.get(id))
+          }
+        })
+      )
     }
     await db.clearStaging()
     let summaries: SessionSummary[]
@@ -485,7 +494,46 @@ export const renameSession = (id: string, title: string) => {
         session.id === id ? { ...session, title } : session
       ),
     }))
-    void db.renameSession(id, title).catch(db.reportStorageError('rename session'))
+    void db.updateSessionMetadata(id, { title }).catch(db.reportStorageError('rename session'))
+  }
+}
+
+export const toggleSessionPinned = async (id: string) => {
+  const summary = get().sessions.find((session) => session.id === id)
+  if (!summary || get().importingHistory || deletingSessions.has(id)) {
+    return
+  }
+  const pinned = !summary.pinned
+  if (getSession(id)) {
+    updateSession(id, (session) => ({ ...session, pinned }))
+    persist(id)
+    return
+  }
+  // Publish the preference synchronously so a concurrent session load inherits it.
+  set((state) => ({
+    sessions: sortSessions(
+      state.sessions.map((item) => (item.id === id ? { ...item, pinned } : item))
+    ),
+  }))
+  try {
+    await db.updateSessionMetadata(id, { pinned })
+  } catch (error) {
+    db.reportStorageError('pin session')(error)
+    if (get().importingHistory || deletingSessions.has(id)) {
+      return
+    }
+    if (getSession(id)) {
+      persist(id)
+    } else {
+      set((state) => ({
+        sessions: sortSessions(
+          state.sessions.map((item) =>
+            item.id === id && item.pinned === pinned ? { ...item, pinned: summary.pinned } : item
+          )
+        ),
+      }))
+      showToast({ key: 'sessionSaveFailed', type: 'error' })
+    }
   }
 }
 

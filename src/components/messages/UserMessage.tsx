@@ -114,7 +114,7 @@ export const UserMessage = memo(function UserMessage({
         <>
           {message.content ? <div className={styles.bubble}>{message.content}</div> : null}
           <div className={styles.bottom}>
-            <div className={clsx(styles.actions, isLast && styles.alwaysShow)}>
+            <div className={clsx(styles.actions, (isMobile || isLast) && styles.alwaysShow)}>
               {message.content ? <CopyButton text={message.content} /> : null}
               <IconButton
                 icon={<IconEditOutline16 />}
