@@ -11,10 +11,10 @@ export type Iso8601Utc = string
 
 export const EXPORT_FORMAT_VERSION = 3
 
-/** manifest.json，ZIP 的第一个条目 */
+/** manifest.json */
 export type Manifest = { export_format_version: typeof EXPORT_FORMAT_VERSION }
 
-/** chat_session_index.json 的一项，只列出成功写出的会话；位于全部会话 JSON 之后、图片之前 */
+/** chat_session_index.json 的一项，只列出成功写出的会话 */
 export type SessionIndexEntry = {
   id: string
   title: string | null

@@ -15,6 +15,10 @@
 .connection-form > button {
   min-height: 44px;
 }
+.connection-key-hint {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 0.8125rem;
+}
 .connection-overview {
   container: connection / inline-size;
   display: grid;

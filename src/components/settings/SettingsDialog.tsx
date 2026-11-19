@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useIsMobile } from '../../app/viewport.js'
 import {
   IconChevronRightOutline14,
@@ -16,7 +16,8 @@ import {
   clearHistory,
   exportHistory,
   importHistory,
-  previewHistory,
+  openHistoryImport,
+  type HistoryImportSource,
 } from '../../services/chat/backup.js'
 import { useChatStore } from '../../services/chat/store.js'
 import {
@@ -101,12 +102,16 @@ const SettingsContent = () => {
   )
   const confirmations = (
     <>
-      {historyImport.file ? <ImportConfirm historyImport={historyImport} /> : null}
+      {historyImport.open ? <ImportConfirm historyImport={historyImport} /> : null}
       {historyDelete.opened ? <DeleteAllConfirm historyDelete={historyDelete} /> : null}
     </>
   )
   if (isMobile) {
     const back = () => {
+      if (historyImport.open) {
+        historyImport.cancel()
+        return
+      }
       if (historyBusy) {
         return
       }
@@ -531,52 +536,84 @@ const ThinkingCollapseSetting = () => {
   )
 }
 
-/** 覆盖导入的二次确认，叠在设置弹窗上 */
 const ImportConfirm = ({
   historyImport,
 }: {
   historyImport: ReturnType<typeof useHistoryImport>
 }) => {
   const t = useTranslate()
+  const { phase, selected, preview, progress, error, confirm, cancel, toggle } = historyImport
+  const phaseText = {
+    reading: 'backupImportReading',
+    importing: 'backupImportProgress',
+    committing: 'backupImportSaving',
+    cancelling: 'backupImportCancelling',
+  } as const
+  const busy = phase !== 'ready'
   return (
     <Modal
       title={t('historyImportConfirmTitle')}
       className={styles.importConfirm}
-      onClose={historyImport.cancel}
+      onClose={cancel}
       footer={
         <>
-          <Button variant="outlined" size="m" autoFocus onClick={historyImport.cancel}>
-            {t('cancel')}
-          </Button>
           <Button
             variant="outlined"
             size="m"
-            disabled={historyImport.busy || historyImport.selected.length === 0}
-            onClick={() => void historyImport.confirm()}
+            autoFocus
+            disabled={phase === 'committing' || phase === 'cancelling'}
+            onClick={cancel}
           >
-            {t('historyImportSelected', { count: historyImport.selected.length })}
+            {t('cancel')}
           </Button>
+          {preview.length > 0 ? (
+            <Button
+              variant="outlined"
+              size="m"
+              disabled={busy || selected.size === 0}
+              onClick={() => void confirm()}
+            >
+              {t('historyImportSelected', { count: selected.size })}
+            </Button>
+          ) : null}
         </>
       }
     >
-      <div className={styles.importConfirmText}>{t('historyImportConfirmDescription')}</div>
-      <div className="import-preview">
-        {historyImport.preview.map((item) => (
-          <label key={item.id}>
-            <input
-              type="checkbox"
-              disabled={item.duplicate}
-              checked={historyImport.selected.includes(item.id)}
-              onChange={(event) => historyImport.toggle(item.id, event.target.checked)}
-            />
-            <span>
-              {item.title || t('untitledChat')} ·{' '}
-              {t('historyImportMessageCount', { count: item.messages })}
-              {item.duplicate ? ` · ${t('historyImportDuplicate')}` : ''}
-            </span>
-          </label>
-        ))}
-      </div>
+      {busy ? (
+        <div role="status" className={styles.importConfirmText}>
+          {t(phaseText[phase], progress)}
+        </div>
+      ) : null}
+      {error ? (
+        <div role="alert" className={clsx(styles.importConfirmText, styles.error)}>
+          {t('historyImportFailed', { message: t(error) })}
+        </div>
+      ) : null}
+      {phase === 'ready' && preview.length === 0 && !error ? (
+        <div className={styles.importConfirmText}>{t('backupImportEmpty')}</div>
+      ) : null}
+      {preview.length > 0 ? (
+        <>
+          <div className={styles.importConfirmText}>{t('historyImportConfirmDescription')}</div>
+          <div className="import-preview">
+            {preview.map((item) => (
+              <label key={item.id}>
+                <input
+                  type="checkbox"
+                  disabled={busy || item.duplicate}
+                  checked={selected.has(item.id)}
+                  onChange={(event) => toggle(item.id, event.target.checked)}
+                />
+                <span>
+                  {item.title || t('untitledChat')} ·{' '}
+                  {t('historyImportMessageCount', { count: item.messages })}
+                  {item.duplicate ? ` · ${t('historyImportDuplicate')}` : ''}
+                </span>
+              </label>
+            ))}
+          </div>
+        </>
+      ) : null}
     </Modal>
   )
 }
@@ -675,73 +712,140 @@ const SettingCell = ({
   )
 }
 
-/** 选文件后先提示覆盖；确认后才检查文件并执行导入，任何错误都提示导入失败。 */
+const importError = (error: unknown): TranslationKey => {
+  if (error instanceof BackupError) {
+    return error.key
+  }
+  if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+    return 'backupImportNoSpace'
+  }
+  return 'backupImportReadError'
+}
+
 const useHistoryImport = () => {
-  const [file, setFile] = useState<File | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [phase, setPhase] = useState<'ready' | 'reading' | 'importing' | 'committing' | 'cancelling'>('ready')
   const [status, setStatus] = useState<Status>(null)
+  const [error, setError] = useState<TranslationKey | null>(null)
+  const [progress, setProgress] = useState({ completed: 0, total: 0 })
   const [preview, setPreview] = useState<
     { id: string; title: string; messages: number; duplicate: boolean }[]
   >([])
-  const [selected, setSelected] = useState<string[]>([])
-  const importing = useRef(false)
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const source = useRef<HistoryImportSource | null>(null)
+  const active = useRef<AbortController | null>(null)
+  const committing = useRef(false)
+  useEffect(() => () => {
+    if (active.current && !committing.current) {
+      active.current.abort()
+    } else {
+      source.current?.close()
+    }
+  }, [])
+
+  const close = () => {
+    source.current?.close()
+    source.current = null
+    setOpen(false)
+  }
   const select = async (candidate: File) => {
-    if (importing.current) {
+    if (active.current) {
       return
     }
-    importing.current = true
-    setBusy(true)
+    const operation = new AbortController()
+    active.current = operation
+    setOpen(true)
+    setPhase('reading')
     setStatus(null)
+    setError(null)
+    setPreview([])
+    setSelected(new Set())
     try {
-      const items = await previewHistory(candidate)
+      source.current = openHistoryImport(candidate)
+      const items = await source.current.preview(operation.signal)
       const existing = new Set(useChatStore.getState().sessions.map((item) => item.id))
       setPreview(items.map((item) => ({ ...item, duplicate: existing.has(item.id) })))
-      setSelected(items.filter((item) => !existing.has(item.id)).map((item) => item.id))
-      setFile(candidate)
-    } catch {
-      setStatus({ key: 'historyImportFailed', error: true })
+      setSelected(new Set(items.filter((item) => !existing.has(item.id)).map((item) => item.id)))
+    } catch (failure) {
+      if (!operation.signal.aborted) {
+        setError(importError(failure))
+      }
     } finally {
-      importing.current = false
-      setBusy(false)
+      if (operation.signal.aborted) {
+        close()
+      }
+      active.current = null
+      setPhase('ready')
     }
   }
   const confirm = async () => {
-    if (!file || importing.current || selected.length === 0) {
+    if (!source.current || active.current || selected.size === 0) {
       return
     }
-    importing.current = true
-    setBusy(true)
-    setStatus(null)
+    const operation = new AbortController()
+    active.current = operation
+    setProgress({ completed: 0, total: selected.size })
+    setPhase('importing')
+    setError(null)
     try {
-      const count = await importHistory(file, selected)
-      setFile(null)
+      const count = await importHistory(
+        source.current,
+        [...selected],
+        operation.signal,
+        (completed, total) => setProgress({ completed, total }),
+        () => {
+          committing.current = true
+          setPhase('committing')
+        }
+      )
+      close()
       setStatus({ key: count === 1 ? 'historyImportedOne' : 'historyImported', params: { count } })
-    } catch {
-      setStatus({ key: 'historyImportFailed', error: true })
+    } catch (failure) {
+      if (operation.signal.aborted) {
+        close()
+      } else {
+        setError(importError(failure))
+      }
     } finally {
-      importing.current = false
-      setBusy(false)
+      committing.current = false
+      active.current = null
+      setPhase('ready')
     }
   }
   return {
-    file,
-    busy,
+    open,
+    busy: phase !== 'ready',
+    phase,
     status,
+    error,
+    progress,
     preview,
     selected,
     select,
-    toggle: (id: string, checked: boolean) =>
-      setSelected((ids) => (checked ? [...ids, id] : ids.filter((value) => value !== id))),
+    toggle: (id: string, checked: boolean) => setSelected((ids) => {
+      const next = new Set(ids)
+      if (checked) {
+        next.add(id)
+      } else {
+        next.delete(id)
+      }
+      return next
+    }),
     cancel: () => {
-      if (!importing.current) {
-        setFile(null)
+      if (committing.current) {
+        return
+      }
+      if (active.current) {
+        setPhase('cancelling')
+        active.current.abort()
+      } else {
+        close()
       }
     },
     confirm,
   }
 }
 
-/** 导入 = 覆盖：用选中文件替换本地全部会话与附件。 */
 const ImportHistory = ({
   historyImport,
   disabled,

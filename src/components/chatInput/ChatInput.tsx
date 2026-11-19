@@ -25,7 +25,8 @@ import { IconButton } from '../base/IconButton.js'
 import { Tooltip } from '../base/Tooltip.js'
 import { Modal } from '../base/Modal.js'
 import { Button } from '../base/Button.js'
-import { ensureApiKey } from '../settings/settingsDialogState.js'
+import { ensureApiKey, ensureChatConnection } from '../settings/settingsDialogState.js'
+import { useOfficialAccount } from '../../services/officialAccount.js'
 import { DragMask, useFileDrop } from './DragMask.js'
 import { showToast } from '../base/toastState.js'
 import { ACCEPT, useUploads } from '../../services/attachments.js'
@@ -44,6 +45,7 @@ export const ChatInput = memo(function ChatInput({ sessionId }: { sessionId: str
 
 const Input = ({ sessionId }: { sessionId: string | null }) => {
   const t = useTranslate()
+  const official = useOfficialAccount((state) => state.active && state.signedIn)
   const draft = useDrafts((state) => state.drafts.get(sessionId) ?? EMPTY_DRAFT)
   const { text, attachments } = draft
   const setText = (value: string) => setDraftText(sessionId, value)
@@ -80,9 +82,12 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   }, [isMobile, t])
 
   const acceptFiles = (files: File[]) => {
-    if (files.length === 0 || useChatStore.getState().importingHistory || !ensureApiKey()) {
+    if (files.length === 0 || useChatStore.getState().importingHistory) {return}
+    if (official) {
+      showToast(t('connectionAccountAttachment'))
       return
     }
+    if (!ensureApiKey()) {return}
     const error = addDraftFiles(sessionId, files, useSettings.getState().apiKey ?? '')
     if (error) {
       showToast(error)
@@ -146,7 +151,11 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
       return
     }
     // 文本与上传完成态由提交动作读取最新快照，不使用上一次渲染的草稿。
-    if (!ensureApiKey() || !sendMessage(sessionId)) {
+    if (official && getDraft(sessionId).attachments.length > 0) {
+      showToast(t('connectionAccountAttachment'))
+      return
+    }
+    if (!ensureChatConnection() || !sendMessage(sessionId)) {
       return
     }
     stopReadAloud()
@@ -236,13 +245,19 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
               <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
             </button>
           </Tooltip>
-          <Tooltip content={t('deactivatedSearchTooltip')}>
+          <Tooltip content={t(official ? 'connectionAccountSearch' : 'deactivatedSearchTooltip')}>
             <button
               type="button"
-              className={clsx(styles.toggle, search && styles.selected)}
+              className={clsx(styles.toggle, !official && search && styles.selected)}
               aria-label={t('search')}
-              aria-pressed={search}
-              onClick={() => setSearch(!search)}
+              aria-pressed={!official && search}
+              onClick={() => {
+                if (official) {
+                  showToast(t('connectionAccountSearch'))
+                  return
+                }
+                setSearch(!search)
+              }}
             >
               <IconGlobeLanguageOutline14 />
               <span className={styles.toggleLabel}>{t('search')}</span>
@@ -292,6 +307,10 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
             tooltip={t('uploadFile')}
             disabled={importingHistory}
             onClick={() => {
+              if (official) {
+                showToast(t('connectionAccountAttachment'))
+                return
+              }
               if (!ensureApiKey()) {
                 return
               }

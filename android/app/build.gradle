@@ -2,14 +2,38 @@ apply plugin: 'com.android.application'
 
 def appVersion = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json')).version
 
+def accountRuntime = rootProject.file(providers.gradleProperty('deepSeekRuntimeDir')
+        .getOrElse('../.toolchain/harness-probe/deploy'))
+def accountNative = rootProject.file(providers.gradleProperty('deepSeekRuntimeJniDir')
+        .getOrElse('../.toolchain/harness-probe/android-probe/app/src/main/jniLibs'))
+def accountAssets = layout.buildDirectory.dir('generated/deepseekAccountAssets')
+def prepareAccountAssets = tasks.register('prepareAccountAssets', Sync) {
+    from(accountRuntime.toPath().resolve('harness.zip').toFile()) {
+        into 'deepseek-runtime'
+    }
+    into accountAssets
+    doFirst {
+        if (!new File(accountRuntime, 'harness.zip').isFile() ||
+                !['libnode.so', 'libdshengine.so', 'libc++_shared.so'].every {
+                    new File(accountNative, "arm64-v8a/$it").isFile()
+                }) {
+            throw new GradleException('Missing DeepSeek account runtime. Supply deepSeekRuntimeDir and deepSeekRuntimeJniDir.')
+        }
+    }
+}
+
 android {
+    sourceSets.main.assets.srcDir(prepareAccountAssets)
+    sourceSets.main.jniLibs.srcDir(accountNative)
+    packaging.jniLibs.useLegacyPackaging = true
+    androidResources.noCompress += 'zip'
     namespace = "app.deepchat.mobile"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "app.deepchat.mobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
+        versionCode 3
         versionName appVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

@@ -2,6 +2,7 @@ import { translate, type TranslationMessage } from '../../i18n/index.js'
 import { recordChatRequest } from '../chat/usage.js'
 import { readMessageEvent } from './parseEvent.js'
 import { readServerSentEvents } from './sse.js'
+import { applyAccountState, officialAccountChunks, officialAccountRequest, type AccountState } from '../officialAccount.js'
 import type {
   ApiErrorBody,
   CreateMessageRequest,
@@ -130,6 +131,66 @@ export const deleteFile = async (apiKey: string, fileId: string): Promise<void> 
     method: 'DELETE',
     headers: anthropicHeaders(apiKey, true),
   })
+}
+
+export async function* streamOfficialMessage(
+  body: CreateMessageRequest, signal: AbortSignal
+): AsyncGenerator<MessageStreamEvent> {
+  signal.throwIfAborted()
+  const reportUsage = recordChatRequest(new Date())
+  let usage: MessageUsage | undefined
+  let stopReason: 'end_turn' | 'max_tokens' | undefined
+  try {
+    for await (const chunk of officialAccountChunks(body, signal)) {
+      switch (chunk.type) {
+        case 'block-start':
+          if (chunk.blockType === 'text' || chunk.blockType === 'reasoning') {
+            yield { type: 'content_block_start', index: chunk.index,
+              content_block: chunk.blockType === 'text'
+                ? { type: 'text', text: '' }
+                : { type: 'thinking', thinking: '', signature: '' } }
+          }
+          break
+        case 'text-delta':
+          yield { type: 'content_block_delta', index: chunk.index, delta: { type: 'text_delta', text: chunk.text } }
+          break
+        case 'reasoning-delta':
+          yield { type: 'content_block_delta', index: chunk.index, delta: { type: 'thinking_delta', thinking: chunk.text } }
+          break
+        case 'block-end':
+          yield { type: 'content_block_stop', index: chunk.index }
+          break
+        case 'usage':
+          usage = {
+            input_tokens: chunk.usage.inputTokens,
+            output_tokens: chunk.usage.outputTokens,
+            cache_creation_input_tokens: chunk.usage.cacheWriteTokens ?? 0,
+            cache_read_input_tokens: chunk.usage.cacheReadTokens ?? 0,
+          }
+          break
+        case 'finish':
+          if (chunk.reason === 'stop' || chunk.reason === 'max-tokens') {
+            stopReason = chunk.reason === 'stop' ? 'end_turn' : 'max_tokens'
+          }
+          break
+      }
+    }
+    if (!stopReason) {throw new ApiError('interrupted', '')}
+    yield { type: 'message_delta', delta: { stop_reason: stopReason, stop_sequence: null }, usage }
+    yield { type: 'message_stop' }
+  } catch (error) {
+    if (signal.aborted || error instanceof ApiError) {throw error}
+    const failure = error as { code?: string; data?: { status?: number } }
+    const status = failure?.code === 'ACCOUNT_SIGN_IN_REQUIRED' ? 401
+      : failure?.code === 'QUOTA' ? 402 : failure?.data?.status
+    if (status === 401) {
+      void officialAccountRequest<AccountState>('state').then(applyAccountState).catch(() => undefined)
+    }
+    throw new ApiError('http', { key: failure?.code === 'ACCOUNT_ATTACHMENT'
+      ? 'connectionAccountAttachment' : 'connectionAccountError' }, status)
+  } finally {
+    if (usage) {reportUsage?.(usage)}
+  }
 }
 
 const hasFile = (body: CreateMessageRequest) =>

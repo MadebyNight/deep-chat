@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { showToast } from '../../components/base/toastState.js'
 import { createId } from '../../utils/id.js'
-import { ApiError, streamMessage } from '../api/client.js'
+import { ApiError, streamMessage, streamOfficialMessage } from '../api/client.js'
+import { useOfficialAccount } from '../officialAccount.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
@@ -1056,19 +1057,18 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           initial.thinking ?? false,
           latestReminder
         )
-        const events = streamMessage(
-          useSettings.getState().apiKey ?? '',
-          {
-            model: initial.model ?? MODEL,
-            system: SYSTEM_PROMPT,
-            messages,
-            thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
-            safety_check: SAFETY_CHECK,
-            tools: serverTools(initial.search ?? false),
-            ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
-          },
-          controller.signal
-        )
+        const messageBody: CreateMessageRequest = {
+          model: initial.model ?? MODEL,
+          system: SYSTEM_PROMPT,
+          messages,
+          thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
+          safety_check: SAFETY_CHECK,
+          tools: serverTools(initial.search ?? false),
+          ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
+        }
+        const events = useOfficialAccount.getState().active
+          ? streamOfficialMessage(messageBody, controller.signal)
+          : streamMessage(useSettings.getState().apiKey ?? '', messageBody, controller.signal)
         const blockIndexes = new Map<number, number>()
         for await (const event of events) {
           receivedContent ||= event.type === 'content_block_start'

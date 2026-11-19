@@ -9,17 +9,18 @@ export const credentials = registerPlugin<{
   write(options: { value: string | null }): Promise<void>
 }>('SecureCredentials')
 
+const officialBrowser = registerPlugin<{ open(options: { url: string }): Promise<void> }>(
+  'OfficialBrowser'
+)
+
 export const openOfficialPage = async (url: string) => {
-  if (isNative) {
-    try {
-      await Browser.open({ url, presentationStyle: 'fullscreen' })
-      return
-    } catch {
-      window.open(url, '_system')
-      return
-    }
+  if (Capacitor.getPlatform() === 'android') {
+    await officialBrowser.open({ url })
+  } else if (isNative) {
+    await Browser.open({ url, presentationStyle: 'fullscreen' })
+  } else {
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
-  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 /** 分享文本：移动端走系统分享面板，桌面端不支持时抛错由调用方提示 */

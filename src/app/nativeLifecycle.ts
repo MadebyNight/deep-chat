@@ -4,6 +4,7 @@ import { Keyboard } from '@capacitor/keyboard'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { isNative } from '../services/native.js'
 import { resumeConnection } from '../services/connection.js'
+import { initializeOfficialAccount } from '../services/officialAccount.js'
 import { newChat, useChatStore } from '../services/chat/store.js'
 import { backMobileSider, useMobileSider } from '../components/sider/mobileSiderState.js'
 import { closeSearchPanel, useSearchPanel } from '../components/search/searchPanelState.js'
@@ -15,19 +16,15 @@ export const initializeNative = async () => {
       resumeConnection()
     }
   }
-  document.addEventListener('visibilitychange', onReturn)
   onReturn()
   if (!isNative) {
+    document.addEventListener('visibilitychange', onReturn)
     return
   }
+  void initializeOfficialAccount()
   await Browser.addListener('browserFinished', resumeConnection)
-  await NativeApp.addListener('appStateChange', ({ isActive }) => {
-    if (isActive) {
-      resumeConnection()
-    } else {
-      void flushDrafts()
-    }
-  })
+  await NativeApp.addListener('resume', resumeConnection)
+  await NativeApp.addListener('pause', () => void flushDrafts())
   await NativeApp.addListener('backButton', () => {
     if (document.body.classList.contains('keyboard-open')) {
       void Keyboard.hide().catch(() => {})

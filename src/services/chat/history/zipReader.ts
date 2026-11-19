@@ -1,6 +1,7 @@
 import { Inflate } from 'fflate'
 
-const READ_CHUNK_BYTES = 256 * 1024
+const READ_CHUNK_BYTES = 2 * 1024 * 1024
+const MAX_DIRECTORY_BYTES = 32 * 1024 * 1024
 // 控制每轮同步解压的工作量；输出交给调用方保存后才继续读取。
 const INFLATE_CHUNK_BYTES = 8 * 1024
 
@@ -111,12 +112,16 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
     tailView.getUint16(end + 6, true) !== 0 ||
     tailView.getUint16(end + 8, true) !== count ||
     count === 0xffff ||
-    size === 0xffffffff ||
+    size > MAX_DIRECTORY_BYTES ||
     offset === 0xffffffff ||
     offset + size !== tailStart + end
   ) {
     invalid()
   }
+  const data = offset >= tailStart
+    ? tail.subarray(offset - tailStart, offset - tailStart + size)
+    : await readBytes(file, offset, size)
+  const directory = viewOf(data)
   const entries: Entry[] = []
   const paths = new Set<string>()
   let cursor = 0
@@ -124,7 +129,7 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
     if (cursor + 46 > size) {
       invalid()
     }
-    const view = viewOf(await readBytes(file, offset + cursor, 46))
+    const view = new DataView(directory.buffer, directory.byteOffset + cursor, 46)
     if (view.getUint32(0, true) !== 0x02014b50) {
       invalid()
     }
@@ -150,7 +155,9 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
     ) {
       invalid()
     }
-    const name = await readBytes(file, offset + cursor + 46, nameLength)
+    const nameStart = cursor + 46
+    const extraStart = nameStart + nameLength
+    const name = data.subarray(nameStart, extraStart)
     const path = decodePath(name, flags)
     // 目录和同名文件也不能互相覆盖。
     const identity = path.endsWith('/') ? path.slice(0, -1) : path
@@ -158,7 +165,7 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
       invalid()
     }
     paths.add(identity)
-    checkExtra(await readBytes(file, offset + cursor + 46 + nameLength, extraLength))
+    checkExtra(data.subarray(extraStart, extraStart + extraLength))
     entries.push({
       path,
       name,
@@ -234,83 +241,76 @@ export type ArchiveEntry = {
   stream: AsyncIterable<Uint8Array>
 }
 
-/**
- * 按条目在文件中的物理顺序逐条、逐块解压，跳过目录条目。
- * 调用方必须消费完当前条目的数据，再请求下一个条目。
- */
-export async function* readArchive(file: File): AsyncGenerator<ArchiveEntry> {
+/** 目录只读一次，每次按路径打开条目时校验本地头和数据。 */
+export const openArchive = async (file: File) => {
   const directory = await readDirectory(file)
+  const entries = new Map<string, ArchiveEntry>()
   for (const [index, entry] of directory.entries.entries()) {
     const boundary = directory.entries[index + 1]?.offset ?? directory.offset
-    const start = await readEntryOffset(file, entry, boundary)
-    if (entry.path.endsWith('/')) {
-      continue
-    }
-    let completed = false
-    const stream = async function* (): AsyncGenerator<Uint8Array> {
-      let written = 0
-      let crc = 0xffffffff
-      const pending: Uint8Array[] = []
-      const append = (chunk: Uint8Array) => {
-        written += chunk.length
-        if (written > entry.size) {
-          invalid()
-        }
-        for (const byte of chunk) {
-          crc = (crc >>> 8) ^ crcTable[(crc ^ byte) & 0xff]
-        }
-        if (chunk.length) {
-          pending.push(chunk)
-        }
-      }
-      const inflate = entry.method === 8 ? new Inflate(append) : null
-      for (let offset = 0; offset < entry.compressedSize; offset += READ_CHUNK_BYTES) {
-        const chunk = await readBytes(
-          file,
-          start + offset,
-          Math.min(READ_CHUNK_BYTES, entry.compressedSize - offset)
-        )
-        if (!inflate) {
-          append(chunk)
-          yield* pending.splice(0)
-          continue
-        }
-        for (let cursor = 0; cursor < chunk.length; cursor += INFLATE_CHUNK_BYTES) {
-          const end = Math.min(cursor + INFLATE_CHUNK_BYTES, chunk.length)
-          inflate.push(chunk.subarray(cursor, end), offset + end === entry.compressedSize)
-          // yield 暂停解压，等待调用方完成异步写入；不缓存整个条目。
-          yield* pending.splice(0)
-        }
-      }
-      if (inflate && entry.compressedSize === 0) {
-        inflate.push(new Uint8Array(), true)
-        yield* pending.splice(0)
-      }
-      if (written !== entry.size || (crc ^ 0xffffffff) >>> 0 !== entry.crc) {
-        invalid()
-      }
-      completed = true
-    }
-    yield { path: entry.path, size: entry.size, stream: stream() }
-    if (!completed) {
+    if (entry.offset + 30 > boundary) {
       invalid()
     }
+    if (!entry.path.endsWith('/')) {
+      entries.set(entry.path, {
+        path: entry.path,
+        size: entry.size,
+        stream: { [Symbol.asyncIterator]: () => streamEntry(file, entry, boundary) },
+      })
+    }
+  }
+  return entries
+}
+
+async function* streamEntry(file: File, entry: Entry, boundary: number): AsyncGenerator<Uint8Array> {
+  const start = await readEntryOffset(file, entry, boundary)
+  let written = 0
+  let crc = 0xffffffff
+  const pending: Uint8Array[] = []
+  const append = (chunk: Uint8Array) => {
+    written += chunk.length
+    if (written > entry.size) {
+      invalid()
+    }
+    for (const byte of chunk) {
+      crc = (crc >>> 8) ^ crcTable[(crc ^ byte) & 0xff]
+    }
+    if (chunk.length) {
+      pending.push(chunk)
+    }
+  }
+  const inflate = entry.method === 8 ? new Inflate(append) : null
+  for (let offset = 0; offset < entry.compressedSize; offset += READ_CHUNK_BYTES) {
+    const chunk = await readBytes(
+      file,
+      start + offset,
+      Math.min(READ_CHUNK_BYTES, entry.compressedSize - offset)
+    )
+    if (!inflate) {
+      append(chunk)
+      yield* pending.splice(0)
+      continue
+    }
+    for (let cursor = 0; cursor < chunk.length; cursor += INFLATE_CHUNK_BYTES) {
+      const end = Math.min(cursor + INFLATE_CHUNK_BYTES, chunk.length)
+      inflate.push(chunk.subarray(cursor, end), offset + end === entry.compressedSize)
+      yield* pending.splice(0)
+    }
+  }
+  if (inflate && entry.compressedSize === 0) {
+    inflate.push(new Uint8Array(), true)
+    yield* pending.splice(0)
+  }
+  if (written !== entry.size || (crc ^ 0xffffffff) >>> 0 !== entry.crc) {
+    invalid()
   }
 }
 
 /** 读出整个条目：会话 JSON 需要完整解析，图片需要识别类型后整张保存。 */
-export const readEntry = async (entry: ArchiveEntry): Promise<Blob> => {
+export const readEntry = async (entry: ArchiveEntry, signal?: AbortSignal): Promise<Blob> => {
   const parts: Blob[] = []
   for await (const chunk of entry.stream) {
+    signal?.throwIfAborted()
     parts.push(new Blob([chunk as Uint8Array<ArrayBuffer>]))
   }
   return new Blob(parts)
-}
-
-/** 不需要的条目也要读完，以校验大小与 CRC。 */
-export const skipEntry = async (entry: ArchiveEntry): Promise<void> => {
-  const reader = entry.stream[Symbol.asyncIterator]()
-  while (!(await reader.next()).done) {
-    // 丢弃数据。
-  }
 }

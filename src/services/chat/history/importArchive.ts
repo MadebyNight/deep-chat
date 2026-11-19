@@ -1,17 +1,9 @@
 import * as db from '../db.js'
 import { BackupError, fail } from './errors.js'
-import type { SessionIndexEntry } from './format.js'
-import { INDEX_PATH, MANIFEST_PATH, USER_PATH, parseSessionPath, sessionFilesDir } from './paths.js'
+import { INDEX_PATH, MANIFEST_PATH, USER_PATH, parseSessionPath, sessionFilesDir, sessionPath } from './paths.js'
 import { checkManifest, readSessionFile, readSessionIndex } from './schema.js'
 import { toLocalSession } from './toLocal.js'
-import {
-  ArchiveError,
-  isZipFile,
-  readArchive,
-  readEntry,
-  skipEntry,
-  type ArchiveEntry,
-} from './zipReader.js'
+import { ArchiveError, isZipFile, openArchive, readEntry, type ArchiveEntry } from './zipReader.js'
 
 /** 从原件字节补充图片 MIME；无法识别时为空字符串，图片身份仍由归档的 is_image 决定。 */
 const imageType = (bytes: Uint8Array): string => {
@@ -41,8 +33,9 @@ const imageType = (bytes: Uint8Array): string => {
   return ''
 }
 
-const readJson = async (entry: ArchiveEntry): Promise<unknown> => {
-  const text = await (await readEntry(entry)).text()
+const readJson = async (entry: ArchiveEntry, signal?: AbortSignal): Promise<unknown> => {
+  const text = await (await readEntry(entry, signal)).text()
+  signal?.throwIfAborted()
   try {
     return JSON.parse(text)
   } catch {
@@ -50,134 +43,102 @@ const readJson = async (entry: ArchiveEntry): Promise<unknown> => {
   }
 }
 
-/**
- * 检查 ZIP 格式、首个 manifest 条目及格式版本。
- * 校验失败时保留正在生成的回答和现有暂存数据。
- */
-export const checkArchiveFormat = async (file: File): Promise<void> => {
+export type ImportPreview = { id: string; title: string; messages: number }[]
+export type ImportProgress = (completed: number, total: number) => void
+
+export const prepareArchive = async (file: File, signal?: AbortSignal) => {
   if (!(await isZipFile(file))) {
     fail('backupUnrecognized')
   }
   try {
-    for await (const entry of readArchive(file)) {
-      if (entry.path !== MANIFEST_PATH) {
-        fail('backupUnrecognized')
+    const entries = await openArchive(file)
+    signal?.throwIfAborted()
+    const manifest = entries.get(MANIFEST_PATH) ?? fail('backupUnrecognized')
+    checkManifest(await readJson(manifest, signal))
+    const index = entries.get(INDEX_PATH) ?? fail('backupIncomplete')
+    const sessions = readSessionIndex(await readJson(index, signal))
+    const ids = new Set<string>()
+    const folders = new Set<string>()
+    for (const { id } of sessions) {
+      if (ids.has(id) || !entries.has(sessionPath(id))) {
+        fail('backupIncomplete')
       }
-      checkManifest(await readJson(entry))
-      return
+      ids.add(id)
+      folders.add(sessionFilesDir(id))
     }
-  } catch (error) {
-    throw error instanceof ArchiveError ? new BackupError('backupIncomplete') : error
-  }
-  fail('backupUnrecognized')
-}
-
-export const previewArchive = async (file: File) => {
-  await checkArchiveFormat(file)
-  const sessions: { id: string; title: string; messages: number }[] = []
-  for await (const entry of readArchive(file)) {
-    if (parseSessionPath(entry.path) !== null) {
-      const { session } = toLocalSession(readSessionFile(await readJson(entry)))
-      sessions.push({ id: session.id, title: session.title, messages: session.messages.length })
-    } else {
-      await skipEntry(entry)
-    }
-  }
-  return sessions
-}
-
-/**
- * 流式导入：manifest → user（不导入）→ 全部会话 JSON → index → 全部图片。
- * 也支持会话与图片交错排列、index 位于末尾的条目顺序。
- * 会话读完立即暂存，只保留图片路径映射；图片全部读完后逐会话回填 MIME，不改变图片身份。
- * 写入导入暂存存储；调用方负责先清空暂存，成功后替换正式数据，失败时清理暂存。
- */
-export const importArchive = async (file: File, selected?: ReadonlySet<string>): Promise<void> => {
-  const fileNamespace = selected ? `${crypto.randomUUID()}:` : ''
-  if (!(await isZipFile(file))) {
-    fail('backupUnrecognized')
-  }
-  const imported = new Set<string>()
-  const images = new Map<string, string>()
-  /** 已保存的原件：文件 ID → MIME。同一图片出现在多个会话目录时只保存一次。 */
-  const stored = new Map<string, string>()
-  let manifest = false
-  let index: SessionIndexEntry[] | undefined
-  let currentSessionId: string | undefined
-
-  const saveImage = async (entry: ArchiveEntry, id: string) => {
-    if (stored.has(id)) {
-      await skipEntry(entry)
-      return
-    }
-    const data = await readEntry(entry)
-    const type = imageType(new Uint8Array(await data.slice(0, 16).arrayBuffer()))
-    await db.saveStagingFiles([{ id, blob: new Blob([data], { type }) }])
-    stored.set(id, type)
-  }
-
-  try {
-    for await (const entry of readArchive(file)) {
-      const { path } = entry
+    for (const path of entries.keys()) {
+      if (path === MANIFEST_PATH || path === INDEX_PATH || path === USER_PATH) {
+        continue
+      }
       const sessionId = parseSessionPath(path)
-      if (!manifest) {
-        if (path !== MANIFEST_PATH) {
-          fail('backupUnrecognized')
-        }
-        checkManifest(await readJson(entry))
-        manifest = true
-      } else if (path === USER_PATH && !index && imported.size === 0) {
-        // 账号信息（已脱敏）不导入；文件可能缺失。
-        await skipEntry(entry)
-      } else if (sessionId !== null && !index) {
-        const local = toLocalSession(readSessionFile(await readJson(entry)))
-        if (local.session.id !== sessionId || imported.has(sessionId)) {
-          fail('backupIncomplete')
-        }
-        imported.add(sessionId)
-        currentSessionId = sessionId
-        if (!selected || selected.has(sessionId)) {
-          for (const message of local.session.messages) {
-            if (message.role === 'user') {
-              for (const file of message.files) {
-                file.id = fileNamespace + file.id
-              }
-            }
-          }
-          for (const [imagePath, id] of local.images) {
-            images.set(imagePath, fileNamespace + id)
-          }
-          await db.addStagingSession(local.session)
-        }
-      } else if (path === INDEX_PATH && !index) {
-        index = readSessionIndex(await readJson(entry))
-      } else if (
-        index
-          ? imported.has(/^chat_sessions\/([^/]+)_files\//.exec(path)?.[1] ?? '')
-          : currentSessionId && path.startsWith(sessionFilesDir(currentSessionId))
-      ) {
-        // 没有被引用的条目不保存，引用了但缺失的图片只展示文件名。
-        const id = images.get(path)
-        await (id === undefined ? skipEntry(entry) : saveImage(entry, id))
-      } else {
+      const folder = path.slice(0, path.indexOf('/', 'chat_sessions/'.length) + 1)
+      if (sessionId === null ? !folders.has(folder) : !ids.has(sessionId)) {
         fail('backupIncomplete')
       }
     }
+    const preview: ImportPreview = sessions.map(({ id, title, message_count }) => ({
+      id,
+      title: title ?? '',
+      messages: message_count,
+    }))
+    return { entries, preview }
   } catch (error) {
     throw error instanceof ArchiveError ? new BackupError('backupIncomplete') : error
   }
-  if (!manifest) {
-    fail('backupUnrecognized')
+}
+
+/** 校验选中的会话和引用的图片，逐项写入暂存，由调用方统一提交或回滚。 */
+export const importArchive = async (
+  archive: Awaited<ReturnType<typeof prepareArchive>>,
+  ids: string[],
+  onProgress: ImportProgress,
+  signal?: AbortSignal
+): Promise<void> => {
+  const { entries } = archive
+  const namespace = `${crypto.randomUUID()}:`
+  const stored = new Map<string, string>()
+  onProgress(0, ids.length)
+  try {
+    for (const [index, id] of ids.entries()) {
+      signal?.throwIfAborted()
+      const entry = entries.get(sessionPath(id)) ?? fail('backupIncomplete')
+      const local = toLocalSession(readSessionFile(await readJson(entry, signal)))
+      if (local.session.id !== id) {
+        fail('backupIncomplete')
+      }
+      for (const message of local.session.messages) {
+        if (message.role === 'user') {
+          for (const file of message.files) {
+            file.id = namespace + file.id
+          }
+        }
+      }
+      for (const [path, fileId] of local.images) {
+        signal?.throwIfAborted()
+        const image = entries.get(path)
+        const namespacedId = namespace + fileId
+        if (!image) {
+          continue
+        }
+        const data = await readEntry(image, signal)
+        if (!stored.has(namespacedId)) {
+          const type = imageType(new Uint8Array(await data.slice(0, 16).arrayBuffer()))
+          await db.saveStagingFiles([{ id: namespacedId, blob: new Blob([data], { type }) }])
+          stored.set(namespacedId, type)
+        }
+      }
+      signal?.throwIfAborted()
+      for (const message of local.session.messages) {
+        if (message.role === 'user') {
+          for (const file of message.files) {
+            file.mimeType = stored.get(file.id) ?? ''
+          }
+        }
+      }
+      await db.addStagingSession(local.session)
+      onProgress(index + 1, ids.length)
+    }
+  } catch (error) {
+    throw error instanceof ArchiveError ? new BackupError('backupIncomplete') : error
   }
-  // index 只列出成功写出的会话，与会话文件一一对应。
-  const listed = new Set(index?.map((entry) => entry.id))
-  if (
-    !index ||
-    listed.size !== index.length ||
-    listed.size !== imported.size ||
-    [...imported].some((id) => !listed.has(id))
-  ) {
-    fail('backupIncomplete')
-  }
-  await db.updateStagingFileTypes(stored)
 }

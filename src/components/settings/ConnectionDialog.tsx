@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react'
+import { Clipboard } from '@capacitor/clipboard'
+import { isNative } from '../../services/native.js'
 import { useSettings } from '../../services/settings.js'
+import { cancelOfficialSignIn, useOfficialAccount } from '../../services/officialAccount.js'
 import { useTranslate } from '../../i18n/index.js'
 import {
   changeConnectionKey,
   closeConnection,
   connect,
+  connectOfficial,
   type Balance,
   openConnection,
   refreshBalance,
@@ -18,14 +22,17 @@ import { UsageChart } from './UsageChart.js'
 
 export const ConnectionSetting = () => {
   const t = useTranslate()
-  const connected = useSettings((state) => !!state.apiKey)
+  const hasKey = useSettings((state) => !!state.apiKey)
+  const { available, active, signedIn } = useOfficialAccount()
+  const official = active && signedIn
+  const connected = official || hasKey
   const { balance, busy, error } = useConnection()
   const [removing, setRemoving] = useState(false)
   useEffect(() => {
     if (connected) {
       void refreshBalance()
     }
-  }, [connected])
+  }, [connected, official])
 
   if (!connected) {
     return (
@@ -69,16 +76,21 @@ export const ConnectionSetting = () => {
         <Button size="m" variant="outlined" disabled={busy} onClick={() => void refreshBalance()}>
           {t(busy ? 'connectionRefreshBusy' : 'connectionRefresh')}
         </Button>
+        {available && !official ? (
+          <Button size="m" variant="outlined" disabled={busy} onClick={() => void connectOfficial()}>
+            {t('connectionAccountLogin')}
+          </Button>
+        ) : null}
         <Button size="m" variant="outlined" disabled={busy} onClick={changeConnectionKey}>
-          {t('connectionChangeKey')}
+          {t(official ? 'connectionUseKey' : 'connectionChangeKey')}
         </Button>
         <Button size="m" variant="outlined" disabled={busy} onClick={() => setRemoving(true)}>
-          {t('connectionRemove')}
+          {t(official ? 'connectionAccountSignOut' : 'connectionRemove')}
         </Button>
       </div>
       {removing ? (
         <Modal
-          title={t('connectionRemoveConfirmTitle')}
+          title={t(official ? 'connectionAccountSignOutTitle' : 'connectionRemoveConfirmTitle')}
           onClose={() => {
             if (!busy) {
               setRemoving(false)
@@ -100,17 +112,17 @@ export const ConnectionSetting = () => {
                 disabled={busy}
                 onClick={async () => {
                   await removeConnection()
-                  if (!useSettings.getState().apiKey) {
+                  if (!useConnection.getState().error) {
                     setRemoving(false)
                   }
                 }}
               >
-                {t('connectionRemoveConfirm')}
+                {t(official ? 'connectionAccountSignOut' : 'connectionRemoveConfirm')}
               </Button>
             </>
           }
         >
-          {t('connectionRemoveConfirmDesc')}
+          {t(official ? 'connectionAccountSignOutDesc' : 'connectionRemoveConfirmDesc')}
           {error ? (
             <p role="alert" className="connection-error">
               {error}
@@ -152,8 +164,27 @@ export const ConnectionDialog = () => {
 const ConnectionContent = () => {
   const t = useTranslate()
   const { step, balance, busy, error } = useConnection()
-  const connected = useSettings((state) => !!state.apiKey)
+  const hasKey = useSettings((state) => !!state.apiKey)
+  const { available, active, signedIn, authorizing, browserOpened } = useOfficialAccount()
+  const official = active && signedIn
+  const connected = official || hasKey
   const [value, setValue] = useState('')
+  const [pasteError, setPasteError] = useState(false)
+  const pasteAndConnect = async () => {
+    setPasteError(false)
+    try {
+      const { value: text, type } = await Clipboard.read()
+      const key = text.trim()
+      if (type === 'text/plain' && /^sk-[\w-]+$/.test(key)) {
+        setValue(key)
+        await connect(key)
+        return
+      }
+    } catch {
+      // Manual input is still available if clipboard access is denied.
+    }
+    setPasteError(true)
+  }
   const insufficient = balance?.is_available === false
   useEffect(() => {
     const { balance, away } = useConnection.getState()
@@ -171,16 +202,30 @@ const ConnectionContent = () => {
     >
       <div className="connection-body" aria-busy={busy}>
         {step === 'start' ? (
-          <>
-            <Button onClick={() => void visitOfficial('keys')}>
-              {t('connectionOpenKeysPage')}
-            </Button>
-            <Button variant="outlined" onClick={changeConnectionKey}>
-              {t('connectionHaveKey')}
-            </Button>
-          </>
+          authorizing ? (
+            <>
+              <p role="status">{t(browserOpened ? 'connectionAccountWaiting' : 'connectionAccountStarting')}</p>
+              <Button variant="outlined" onClick={cancelOfficialSignIn}>{t('cancel')}</Button>
+            </>
+          ) : (
+            <>
+              {available ? (
+                <Button disabled={busy} onClick={() => void connectOfficial()}>
+                  {t('connectionAccountLogin')}
+                </Button>
+              ) : (
+                <Button disabled={busy} onClick={() => void visitOfficial('keys')}>
+                  {t('connectionOpenKeysPage')}
+                </Button>
+              )}
+              <Button variant="outlined" disabled={busy} onClick={changeConnectionKey}>
+                {t(available ? 'connectionUseKey' : 'connectionHaveKey')}
+              </Button>
+            </>
+          )
         ) : step === 'paste' ? (
           <>
+            {isNative ? <p className="connection-key-hint">{t('connectionKeyReturnHint')}</p> : null}
             <form
               className="connection-form"
               onSubmit={(event) => {
@@ -202,10 +247,19 @@ const ConnectionContent = () => {
                 placeholder={t('connectionManualPlaceholder')}
                 onChange={(event) => setValue(event.target.value)}
               />
-              <Button type="submit" block disabled={busy || !value.trim()}>
-                {t(busy ? 'connectionPasteBusy' : 'connectionConnect')}
-              </Button>
+              {isNative && !value.trim() && !busy ? (
+                <Button type="button" block onClick={() => void pasteAndConnect()}>
+                  {t('connectionPasteAndConnect')}
+                </Button>
+              ) : (
+                <Button type="submit" block disabled={busy || !value.trim()}>
+                  {t(busy ? 'connectionPasteBusy' : 'connectionConnect')}
+                </Button>
+              )}
             </form>
+            {pasteError && !value.trim() ? (
+              <p className="connection-error" role="alert">{t('connectionPasteUnavailable')}</p>
+            ) : null}
             <Button variant="outlined" disabled={busy} onClick={() => void visitOfficial('keys')}>
               {t('connectionOpenKeysPage')}
             </Button>
