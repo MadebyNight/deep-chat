@@ -13,6 +13,8 @@ export type AccountBalance =
   | { status: 'ready'; value: Wallet[]; bonusWallets: Wallet[] }
   | { status: 'error' }
 export type AccountChunk =
+  | { type: 'search-start'; query: string }
+  | { type: 'search-results'; sources: { url: string; title: string; snippet: string }[] }
   | { type: 'block-start'; index: number; blockType: string }
   | { type: 'text-delta' | 'reasoning-delta'; index: number; text: string }
   | { type: 'block-end'; index: number }

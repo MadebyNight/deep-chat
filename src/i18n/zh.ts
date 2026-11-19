@@ -231,7 +231,7 @@ export const zh = {
   connectionAccountStarting: '正在准备账号登录…',
   connectionAccountError: 'DeepSeek 账号服务暂时不可用，请稍后重试。',
   connectionAccountAttachment: '这段对话包含附件。请切换到 API Key 后继续。',
-  connectionAccountSearch: '联网搜索需要使用 API Key，可在设置中切换。',
+  connectionAccountSearchFailed: '联网搜索失败，请重试或关闭搜索后再发送。',
   connectionAccountSignOut: '退出账号',
   connectionAccountSignOutTitle: '退出 DeepSeek 账号？',
   connectionAccountSignOutDesc: '退出后可重新授权登录，聊天记录会保留。',

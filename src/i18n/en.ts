@@ -242,7 +242,7 @@ export const en = {
   connectionAccountStarting: 'Preparing account sign-in…',
   connectionAccountError: 'The DeepSeek account service is unavailable. Try again shortly.',
   connectionAccountAttachment: 'This conversation contains attachments. Switch to an API key to continue.',
-  connectionAccountSearch: 'Web search requires an API key. You can switch in Settings.',
+  connectionAccountSearchFailed: 'Web search failed. Try again or turn off search before sending.',
   connectionAccountSignOut: 'Sign out',
   connectionAccountSignOutTitle: 'Sign out of DeepSeek?',
   connectionAccountSignOutDesc: 'You can sign in again later. Your chat history will be kept.',

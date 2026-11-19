@@ -140,9 +140,31 @@ export async function* streamOfficialMessage(
   const reportUsage = recordChatRequest(new Date())
   let usage: MessageUsage | undefined
   let stopReason: 'end_turn' | 'max_tokens' | undefined
+  let searchId = ''
+  // The two local search blocks precede the provider's non-negative stream indexes.
+  const searchIndex = -2
+  const resultsIndex = -1
   try {
     for await (const chunk of officialAccountChunks(body, signal)) {
       switch (chunk.type) {
+        case 'search-start':
+          searchId = `srvtoolu_s_0_${crypto.randomUUID().replaceAll('-', '')}`
+          yield { type: 'content_block_start', index: searchIndex, content_block: {
+            type: 'server_tool_use', id: searchId, name: 'deepseek_web_search', kind: 'search',
+            caller: { type: 'direct' }, input: { action: 'search', queries: [chunk.query] },
+          } }
+          yield { type: 'content_block_stop', index: searchIndex }
+          break
+        case 'search-results':
+          yield { type: 'content_block_start', index: resultsIndex, content_block: {
+            type: 'web_search_tool_result', tool_use_id: searchId, kind: 'search',
+            content: chunk.sources.map(({ url, title, snippet }) => ({
+              type: 'web_search_result', url, title, snippet, site_icon: null, site_name: null,
+              encrypted_content: '', page_age: null,
+            })),
+          } }
+          yield { type: 'content_block_stop', index: resultsIndex }
+          break
         case 'block-start':
           if (chunk.blockType === 'text' || chunk.blockType === 'reasoning') {
             yield { type: 'content_block_start', index: chunk.index,
@@ -186,8 +208,9 @@ export async function* streamOfficialMessage(
     if (status === 401) {
       void officialAccountRequest<AccountState>('state').then(applyAccountState).catch(() => undefined)
     }
-    throw new ApiError('http', { key: failure?.code === 'ACCOUNT_ATTACHMENT'
-      ? 'connectionAccountAttachment' : 'connectionAccountError' }, status)
+    const key = failure?.code === 'ACCOUNT_SEARCH_FAILED' ? 'connectionAccountSearchFailed'
+      : failure?.code === 'ACCOUNT_ATTACHMENT' ? 'connectionAccountAttachment' : 'connectionAccountError'
+    throw new ApiError('http', { key }, status)
   } finally {
     if (usage) {reportUsage?.(usage)}
   }

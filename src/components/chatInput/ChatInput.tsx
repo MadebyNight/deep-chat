@@ -245,19 +245,13 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
               <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
             </button>
           </Tooltip>
-          <Tooltip content={t(official ? 'connectionAccountSearch' : 'deactivatedSearchTooltip')}>
+          <Tooltip content={t('deactivatedSearchTooltip')}>
             <button
               type="button"
-              className={clsx(styles.toggle, !official && search && styles.selected)}
+              className={clsx(styles.toggle, search && styles.selected)}
               aria-label={t('search')}
-              aria-pressed={!official && search}
-              onClick={() => {
-                if (official) {
-                  showToast(t('connectionAccountSearch'))
-                  return
-                }
-                setSearch(!search)
-              }}
+              aria-pressed={search}
+              onClick={() => setSearch(!search)}
             >
               <IconGlobeLanguageOutline14 />
               <span className={styles.toggleLabel}>{t('search')}</span>
