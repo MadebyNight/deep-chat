@@ -4,4 +4,7 @@
     <string name="title_activity_main">Deep Chat</string>
     <string name="package_name">app.deepchat.mobile</string>
     <string name="custom_url_scheme">app.deepchat.mobile</string>
+    <string name="startup_recovery_title">Deep Chat could not open</string>
+    <string name="startup_recovery_message">Try reopening Deep Chat. If the problem persists, update the system WebView and try again.</string>
+    <string name="startup_recovery_retry">Try again</string>
 </resources>

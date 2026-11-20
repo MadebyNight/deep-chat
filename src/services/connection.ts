@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { request, API_ORIGIN, ApiError } from './api/client.js'
-import { setApiKey, useSettings } from './settings.js'
+import { readPreference, setApiKey, useSettings, writePreference } from './settings.js'
 import { openOfficialPage } from './native.js'
 import { translate } from '../i18n/index.js'
 import {
@@ -55,7 +55,7 @@ type Away = 'keys' | 'topup' | null
 const PROGRESS = 'deepchat:connection-progress'
 const readProgress = (): { step: Step; away: Away; open: boolean } => {
   try {
-    const saved = JSON.parse(localStorage.getItem(PROGRESS) ?? 'null')
+    const saved = JSON.parse(readPreference(PROGRESS) ?? 'null')
     if (saved && ['start', 'paste', 'balance'].includes(saved.step)) {
       return {
         step: saved.step,
@@ -75,7 +75,7 @@ export const useConnection = create(() => ({
   error: '',
 }))
 useConnection.subscribe(({ step, away, open }) => {
-  localStorage.setItem(PROGRESS, JSON.stringify({ step, away, open }))
+  writePreference(PROGRESS, JSON.stringify({ step, away, open }))
 })
 let pending: AbortController | null = null
 export const openConnection = () =>

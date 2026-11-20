@@ -27,7 +27,8 @@ import java.util.TimeZone;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -39,6 +40,20 @@ import io.github.jackwener.dsh.engine.NodeRuntime;
 public final class DeepSeekAccountPlugin extends Plugin {
     private static final String ASSETS = "deepseek-runtime/";
     private static final RuntimeHost HOST = new RuntimeHost();
+    private volatile boolean destroyed;
+
+    @Override
+    protected void handleOnDestroy() {
+        destroyed = true;
+        HOST.detach(this);
+    }
+
+    private void deliver(Runnable callback) {
+        if (destroyed) return;
+        getActivity().runOnUiThread(() -> {
+            if (!destroyed) callback.run();
+        });
+    }
 
     @PluginMethod
     public void availability(PluginCall call) {
@@ -58,7 +73,7 @@ public final class DeepSeekAccountPlugin extends Plugin {
         String id = call.getString("id", "");
         String method = call.getString("method", "");
         if (!id.matches("[a-zA-Z0-9-]{1,64}") || !Arrays.asList("state", "signIn",
-                "cancelSignIn", "signOut", "balance", "chat", "cancelChat").contains(method)) {
+                "cancelSignIn", "signOut", "balance", "chat", "cancelChat", "transcribe").contains(method)) {
             call.reject("Invalid account operation");
             return;
         }
@@ -67,43 +82,85 @@ public final class DeepSeekAccountPlugin extends Plugin {
 
     private static final class RuntimeHost {
         private final ExecutorService commands = Executors.newSingleThreadExecutor();
-        private final ScheduledExecutorService timeouts = Executors.newSingleThreadScheduledExecutor();
+        private final ScheduledThreadPoolExecutor timeouts = new ScheduledThreadPoolExecutor(1);
         private final Map<String, Pending> pending = new ConcurrentHashMap<>();
         private volatile OutputStream input;
         private volatile boolean nodeStarted;
 
-        private record Pending(DeepSeekAccountPlugin plugin, PluginCall call, String method) {}
+        RuntimeHost() {
+            timeouts.setRemoveOnCancelPolicy(true);
+        }
+
+        private static final class Pending {
+            final DeepSeekAccountPlugin plugin;
+            final PluginCall call;
+            final String method;
+            volatile ScheduledFuture<?> deadline;
+
+            Pending(DeepSeekAccountPlugin plugin, PluginCall call, String method) {
+                this.plugin = plugin;
+                this.call = call;
+                this.method = method;
+            }
+        }
+
+        private boolean remove(String id, Pending request) {
+            if (!pending.remove(id, request)) return false;
+            ScheduledFuture<?> deadline = request.deadline;
+            if (deadline != null) deadline.cancel(false);
+            return true;
+        }
+
+        void detach(DeepSeekAccountPlugin plugin) {
+            pending.forEach((id, request) -> {
+                if (request.plugin == plugin && remove(id, request) && isCancellable(request.method)) {
+                    commands.execute(() -> cancelRequest(id));
+                }
+            });
+        }
+
+        private static boolean isCancellable(String method) {
+            return method.equals("chat") || method.equals("transcribe");
+        }
+
+        private void cancelRequest(String id) {
+            try {
+                write(new JSONObject().put("method", "cancelChat")
+                        .put("params", new JSONObject().put("id", id)));
+            } catch (Exception ignored) {
+                // The runtime may already have stopped.
+            }
+        }
 
         void send(Context context, DeepSeekAccountPlugin plugin, PluginCall call, String id, String method) {
+            if (plugin.destroyed) return;
             Pending request = new Pending(plugin, call, method);
             if (pending.putIfAbsent(id, request) != null) {
-                call.reject("Duplicate account operation");
+                plugin.deliver(() -> call.reject("Duplicate account operation"));
                 return;
             }
-            var deadline = timeouts.schedule(() -> {
-                if (pending.remove(id, request)) {
-                    call.reject("Account operation timed out", "ACCOUNT_TIMEOUT");
-                    if (method.equals("chat")) {
-                        try {
-                            write(new JSONObject().put("method", "cancelChat")
-                                    .put("params", new JSONObject().put("id", id)));
-                        } catch (Exception ignored) {
-                            // The runtime may already have stopped.
-                        }
-                    }
+            request.deadline = timeouts.schedule(() -> {
+                if (remove(id, request)) {
+                    plugin.deliver(() -> call.reject("Account operation timed out", "ACCOUNT_TIMEOUT"));
+                    if (isCancellable(method)) cancelRequest(id);
                 }
             }, method.equals("chat") ? 10 : 2, TimeUnit.MINUTES);
+            if (plugin.destroyed) remove(id, request);
+            if (pending.get(id) != request) {
+                request.deadline.cancel(false);
+                return;
+            }
             commands.execute(() -> {
+                if (pending.get(id) != request) return;
                 try {
                     start(context);
-                    if (pending.containsKey(id)) {
+                    if (pending.get(id) == request) {
                         write(new JSONObject().put("id", id).put("method", method)
                                 .put("params", call.getObject("params", new JSObject())));
                     }
                 } catch (Exception | LinkageError failure) {
-                    if (pending.remove(id, request)) {
-                        deadline.cancel(false);
-                        call.reject("Cannot start the DeepSeek account runtime", "ACCOUNT_RUNTIME");
+                    if (remove(id, request)) {
+                        plugin.deliver(() -> call.reject("Cannot start the DeepSeek account runtime", "ACCOUNT_RUNTIME"));
                     }
                 }
             });
@@ -196,14 +253,17 @@ public final class DeepSeekAccountPlugin extends Plugin {
                     Pending request = pending.get(id);
                     if (request == null) continue;
                     if (frame.has("chunk")) {
-                        request.plugin.notifyListeners("chatChunk", new JSObject(line));
-                    } else if (pending.remove(id, request)) {
+                        JSObject chunk = new JSObject(line);
+                        request.plugin.deliver(() -> request.plugin.notifyListeners("chatChunk", chunk));
+                    } else if (remove(id, request)) {
                         JSONObject error = frame.optJSONObject("error");
                         if (error != null) {
-                            request.call.reject("DeepSeek account operation failed", error.optString("code"),
-                                    null, new JSObject(error.toString()));
+                            JSObject data = new JSObject(error.toString());
+                            request.plugin.deliver(() -> request.call.reject("DeepSeek account operation failed",
+                                    error.optString("code"), null, data));
                         } else {
-                            request.call.resolve(new JSObject(frame.getJSONObject("result").toString()));
+                            JSObject result = new JSObject(frame.getJSONObject("result").toString());
+                            request.plugin.deliver(() -> request.call.resolve(result));
                         }
                     }
                 }
@@ -219,8 +279,8 @@ public final class DeepSeekAccountPlugin extends Plugin {
                 try { stream.close(); } catch (IOException ignored) { }
             }
             pending.forEach((id, request) -> {
-                if (pending.remove(id, request)) {
-                    request.call.reject("DeepSeek account runtime stopped", "ACCOUNT_RUNTIME");
+                if (remove(id, request)) {
+                    request.plugin.deliver(() -> request.call.reject("DeepSeek account runtime stopped", "ACCOUNT_RUNTIME"));
                 }
             });
         }

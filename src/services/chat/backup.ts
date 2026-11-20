@@ -49,7 +49,7 @@ export type HistoryImportSource = {
   close(): void
 }
 
-export const openHistoryImport = (file: File): HistoryImportSource => {
+export const openHistoryImport = (file: File, alreadyLocal = false): HistoryImportSource => {
   // 本地 HTML 可以用 file:// 打开，此时浏览器可能禁止加载 Worker 脚本。
   if (location.protocol === 'file:') {
     const module = import('./history/importArchive.js')
@@ -112,7 +112,7 @@ export const openHistoryImport = (file: File): HistoryImportSource => {
   return {
     async preview(signal) {
       const preview = await request(
-        { type: 'preview', file, cacheOnImport: Capacitor.getPlatform() === 'android' },
+        { type: 'preview', file, cacheOnImport: !alreadyLocal && Capacitor.getPlatform() === 'android' },
         signal
       )
       if (!preview) {

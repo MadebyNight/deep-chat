@@ -6,7 +6,7 @@ import { useOfficialAccount } from '../officialAccount.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
-import { useSettings } from '../settings.js'
+import { getSelectedPrompt, useSettings } from '../settings.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 import * as db from './db.js'
 import {
@@ -1059,7 +1059,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         )
         const messageBody: CreateMessageRequest = {
           model: initial.model ?? MODEL,
-          system: SYSTEM_PROMPT,
+          system: getSelectedPrompt(useSettings.getState().prompts)?.body ?? SYSTEM_PROMPT,
           messages,
           thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
           safety_check: SAFETY_CHECK,

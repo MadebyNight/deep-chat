@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { useMobileViewport } from '../../app/viewport.js'
 import { useTranslate } from '../../i18n/index.js'
 import { IconChevronRightOutline14, IconCloseOutline16 } from './icons.js'
 import { IconButton } from './IconButton.js'
@@ -18,6 +19,7 @@ export const Modal = ({
   backLabel,
   className,
   mainClassName,
+  fitViewport = false,
   onClose,
 }: {
   title: ReactNode
@@ -29,10 +31,12 @@ export const Modal = ({
   className?: string
   /** 内容区的 class */
   mainClassName?: string
+  fitViewport?: boolean
   onClose: () => void
 }) => {
   const t = useTranslate()
   const titleId = useId()
+  const viewportRef = useMobileViewport(fitViewport)
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
   useEffect(() => {
@@ -53,7 +57,8 @@ export const Modal = ({
 
   return createPortal(
     <div
-      className={styles.overlay}
+      ref={viewportRef}
+      className={clsx(styles.overlay, fitViewport && styles.fitViewport)}
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
       <div

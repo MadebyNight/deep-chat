@@ -15,7 +15,7 @@ const checkMessages: Record<string, TranslationKey> = {
   'version-error': 'updateVersionError',
 }
 
-export const VersionSetting = () => {
+export const VersionSetting = ({ showAction = false }: { showAction?: boolean }) => {
   const t = useTranslate()
   const { version, busy } = useUpdates()
   const [message, setMessage] = useState<TranslationKey | null>(null)
@@ -25,15 +25,15 @@ export const VersionSetting = () => {
         type="button"
         className={styles.settingsLink}
         disabled={busy}
-        aria-label={`${t('currentVersion')} ${version ?? ''} · ${t('checkUpdates')}`}
+        aria-label={showAction ? t('checkUpdates') : `${t('currentVersion')} ${version ?? ''} · ${t('checkUpdates')}`}
         onClick={async () => {
           setMessage(null)
           await checkForUpdates(true)
           setMessage(checkMessages[useUpdates.getState().status] ?? null)
         }}
       >
-        {t('currentVersion')}
-        <span>{busy ? t('updateChecking') : version ?? '—'}</span>
+        {t(showAction ? 'checkUpdates' : 'currentVersion')}
+        {busy || !showAction ? <span>{busy ? t('updateChecking') : version ?? '—'}</span> : null}
         <IconChevronRightOutline14 />
       </button>
       {message ? <p role="status" className={styles.description}>{t(message)}</p> : null}

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deep Chat</title>
+  <style>
+    body { margin: 2rem; font: 1rem/1.6 system-ui, sans-serif; }
+    main { max-width: 32rem; margin: 12vh auto; }
+    @media (prefers-color-scheme: dark) { body { background: #141414; color: #eee; } a { color: #9bbaff; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 id="title">Deep Chat could not open</h1>
+    <p id="help">Close and reopen the app. If it still fails, update the system WebView used by your device (such as Android System WebView or Chrome), then try again.</p>
+    <p><small><code>WEBVIEW_VERSION_OR_MAIN_DOCUMENT</code></small></p>
+    <a href="/" id="retry">Try again</a>
+  </main>
+  <script>
+    if (/^zh/i.test(navigator.language || '')) {
+      document.documentElement.lang = 'zh-CN';
+      document.getElementById('title').textContent = 'Deep Chat 无法打开';
+      document.getElementById('help').textContent = '请关闭应用后重新打开。如果仍无法启动，请更新设备使用的系统 WebView（例如 Android System WebView 或 Chrome）后再试。';
+      document.getElementById('retry').textContent = '重试';
+    }
+  </script>
+</body>
+</html>

@@ -33,6 +33,13 @@
     0 12px 32px 0 rgba(0, 0, 0, 0.08);
 }
 
+.fitViewport {
+  top: var(--app-viewport-top, 0px);
+  height: var(--app-viewport-height, 100dvh);
+  bottom: auto;
+  backdrop-filter: blur(8px);
+}
+
 .header {
   display: flex;
   align-items: center;

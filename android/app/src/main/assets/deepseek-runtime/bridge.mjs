@@ -9,6 +9,10 @@ import {
 } from '@deepseek-ai/dsh-web-search-deepseek'
 import { createInterface } from 'node:readline'
 import { once } from 'node:events'
+import { constants } from 'node:fs'
+import { open, unlink } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 const provider = 'deepseek-account'
 const client = {
@@ -81,6 +85,7 @@ export default class DeepChatMobile extends Service {
         }
         case 'signOut': result = await account.signOut(client); break
         case 'balance': result = { balance: await account.getBalance(client) }; break
+        case 'transcribe': result = await this.transcribe(id); break
         case 'chat':
           await this.chat(id, params)
           result = {}
@@ -98,6 +103,52 @@ export default class DeepChatMobile extends Service {
         code: typeof failure.code === 'string' ? failure.code : 'ACCOUNT_RUNTIME',
         status: Number.isInteger(failure.status) ? failure.status : undefined,
       } })
+    }
+  }
+
+  async transcribe(id) {
+    if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(id)) {
+      throw Object.assign(new Error('Invalid recording ID'), { code: 'ACCOUNT_ASR_FAILED' })
+    }
+    const endpoint = 'https://api.deepseek.com/v1/tools/asr'
+    const path = join(tmpdir(), `deepchat-asr-${id}.wav`)
+    const controller = new AbortController()
+    this.requests.set(id, controller)
+    try {
+      const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+      let audio
+      try {
+        const stat = await file.stat()
+        if (!stat.isFile() || stat.size <= 44 || stat.size > 44 + 120 * 16000 * 2) {
+          throw new Error('Invalid recording size')
+        }
+        audio = await file.readFile({ signal: controller.signal })
+        if (audio.length !== stat.size || audio.toString('ascii', 0, 4) !== 'RIFF' ||
+            audio.toString('ascii', 8, 12) !== 'WAVE') throw new Error('Invalid recording format')
+      } finally {
+        await file.close()
+        await unlink(path).catch(() => {})
+      }
+      const token = await this.ctx.deepseekAccount.resolveToken(endpoint)
+      if (!token) throw Object.assign(new Error('Missing account authorization'), { code: 'ACCOUNT_SIGN_IN_REQUIRED' })
+      const body = new FormData()
+      body.set('file', new Blob([audio], { type: 'audio/wav' }), 'recording.wav')
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'x-dsh-auth-token': token },
+        redirect: 'error',
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)]),
+        body,
+      })
+      if (!response.ok) {
+        await response.body?.cancel()
+        throw Object.assign(new Error('Account transcription failed'), { code: 'ACCOUNT_ASR_FAILED', status: response.status })
+      }
+      const result = await response.json()
+      if (typeof result?.text !== 'string') throw new Error('Invalid transcription response')
+      return { text: result.text }
+    } finally {
+      this.requests.delete(id)
     }
   }
 

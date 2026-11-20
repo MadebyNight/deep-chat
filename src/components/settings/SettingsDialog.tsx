@@ -1,6 +1,7 @@
 import clsx from 'clsx'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { useIsMobile } from '../../app/viewport.js'
+import whaleLogo from '../../assets/whale.png'
 import {
   IconChevronRightOutline14,
   IconDarkOutline16,
@@ -8,7 +9,9 @@ import {
   IconDownloadOutline16,
   IconFollowsystemOutline16,
   IconLightOutline16,
+  IconLinkOutline16,
   IconSettingsOutline16,
+  IconTrashOutline16,
   IconUploadOutline14,
 } from '../base/icons.js'
 import {
@@ -19,7 +22,10 @@ import {
   openHistoryImport,
   type HistoryImportSource,
 } from '../../services/chat/backup.js'
+import { canDownloadHistoryExport, downloadHistoryExport } from '../../services/chat/history/downloadExport.js'
 import { useChatStore } from '../../services/chat/store.js'
+import { useUpdates } from '../../services/updates.js'
+import { isNative, saveArchive } from '../../services/native.js'
 import {
   setAutoCollapseThinking,
   setAutoReadAloud,
@@ -38,7 +44,6 @@ import { Switch } from '../base/Switch.js'
 import { showToast } from '../base/toastState.js'
 import { ConnectionSetting } from './ConnectionDialog.js'
 import { VersionSetting } from './UpdateDialog.js'
-import { saveArchive } from '../../services/native.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import styles from './Settings.module.css'
 
@@ -79,30 +84,23 @@ const SettingsContent = () => {
   const [page, setPage] = useState<keyof typeof mobilePageTitles>(() =>
     section === 'data' ? 'data' : 'home'
   )
+  const importFileRef = useRef<HTMLInputElement>(null)
+  const chooseImportFile = () => importFileRef.current?.click()
   const dataActions = (
-    <>
-      <ImportHistory historyImport={historyImport} disabled={historyBusy} />
-      <ExportHistory disabled={historyBusy} />
-      <SettingCell
-        label={t('deleteAllSessions')}
-        status={null}
-        action={
-          <Button
-            variant="dangerOutlined"
-            size="m"
-            className={styles.cellButton}
-            disabled={historyBusy}
-            onClick={historyDelete.open}
-          >
-            {t('delete')}
-          </Button>
-        }
-      />
-    </>
+    <div className={styles.dataActions}>
+      <div className={styles.settingsGroup}>
+        <ImportHistory historyImport={historyImport} disabled={historyBusy} fileRef={importFileRef} />
+        <ExportHistory disabled={historyBusy} />
+      </div>
+      <div className={styles.settingsGroup}>
+        <DataAction label={t('deleteAllSessions')} icon={<IconTrashOutline16 />} danger
+          disabled={historyBusy} onClick={historyDelete.open} />
+      </div>
+    </div>
   )
   const confirmations = (
     <>
-      {historyImport.open ? <ImportConfirm historyImport={historyImport} /> : null}
+      {historyImport.open ? <ImportConfirm historyImport={historyImport} onChooseFile={chooseImportFile} /> : null}
       {historyDelete.opened ? <DeleteAllConfirm historyDelete={historyDelete} /> : null}
     </>
   )
@@ -156,17 +154,12 @@ const SettingsContent = () => {
       ),
       voice: (
         <section className={styles.settingsGroup}>
-          <TtsVoiceSetting />
+          <TtsVoiceSetting mobile />
           <AutoReadSetting />
         </section>
       ),
-      data: <section className={styles.settingsGroup}>{dataActions}</section>,
-      about: (
-        <section className={styles.settingsGroup}>
-          <p>{t('settingsAboutDeepChat')}</p>
-          <VersionSetting />
-        </section>
-      ),
+      data: dataActions,
+      about: <AboutSettings />,
     }
     return (
       <>
@@ -225,7 +218,7 @@ const SettingsContent = () => {
             <>
               <ConnectionSetting />
               {dataActions}
-              <p>{t('settingsAboutDeepChat')}</p>
+              <AboutSettings />
             </>
           )}
         </div>
@@ -345,38 +338,88 @@ const MobilePreferences = ({ onFont }: { onFont: () => void }) => {
   )
 }
 
+const AboutSettings = () => {
+  const t = useTranslate()
+  const version = useUpdates((state) => state.version)
+  const [panel, setPanel] = useState<'app' | 'thirdParty' | null>(null)
+  const notices = __OPEN_SOURCE_NOTICES__.filter(({ androidOnly }) => !androidOnly || isNative)
+  return (
+    <>
+      <div className={styles.aboutBrand}>
+        <img src={whaleLogo} width={48} height={38} alt="" />
+        <h2>Deep Chat</h2>
+        <p>{t('settingsAboutSubtitle')}{version ? ` · v${version}` : ''}</p>
+      </div>
+      <section className={styles.settingsGroup}>
+        <div className={styles.settingsValue}>
+          <span>{t('settingsDeveloper')}</span><strong>MadebyNight</strong>
+        </div>
+        <button type="button" className={styles.settingsLink} onClick={() => setPanel('app')}>
+          {t('settingsAppLicense')}<span>MIT</span><IconChevronRightOutline14 />
+        </button>
+        <SettingsPageLink label={t('settingsOpenSource')} onClick={() => setPanel('thirdParty')} />
+      </section>
+      <section className={styles.settingsGroup}><VersionSetting showAction /></section>
+      {panel && (
+        <Modal
+          title={t(panel === 'app' ? 'settingsAppLicense' : 'settingsOpenSource')}
+          className={styles.licenseDialog}
+          mainClassName={styles.licenseBody}
+          closable
+          onClose={() => setPanel(null)}
+        >
+          {panel === 'app' ? <pre className={styles.licenseText}>{__APP_LICENSE__}</pre> : (
+            notices.map(({ name, version: noticeVersion, license, text }) => (
+              <details key={name} className={styles.licenseEntry}>
+                <summary><span>{name}</span><small>{noticeVersion} · {license}</small></summary>
+                <pre className={styles.licenseText}>{text}</pre>
+              </details>
+            ))
+          )}
+        </Modal>
+      )}
+    </>
+  )
+}
+
 const FontSizeSetting = () => {
   const t = useTranslate()
   const size = useSettings((state) => state.chatFontSize)
   const defaultSize = 15
   return (
-    <section className={styles.settingsGroup}>
-      <p style={{ fontSize: `${(size ?? defaultSize) / 16}rem` }} className={styles.fontPreview}>
-        {t('chatFontPreview')}
-      </p>
-      <SettingCell
-        label={t('chatFontFollowSystem')}
-        status={null}
-        action={
-          <Switch
-            aria-label={t('chatFontFollowSystem')}
-            checked={size === null}
-            onClick={() => setChatFontSize(size === null ? defaultSize : null)}
-          />
-        }
-      />
-      <label className={styles.fontSlider}>
-        {t('chatFontSize')} <output>{size ?? defaultSize}</output>
-        <input
-          type="range"
-          min={14}
-          max={22}
-          value={size ?? defaultSize}
-          disabled={size === null}
-          onChange={(event) => setChatFontSize(event.currentTarget.valueAsNumber)}
+    <>
+      <section className={styles.settingsGroup}>
+        <div className={styles.fontPreview} style={{ fontSize: `${(size ?? defaultSize) / 16}rem` }}>
+          <span>{t('chatFontPreviewRequest')}</span>
+          <p>{t('chatFontPreview')}</p>
+        </div>
+      </section>
+      <section className={styles.settingsGroup}>
+        <SettingCell
+          label={t('chatFontFollowSystem')}
+          status={null}
+          action={
+            <Switch
+              aria-label={t('chatFontFollowSystem')}
+              checked={size === null}
+              onClick={() => setChatFontSize(size === null ? defaultSize : null)}
+            />
+          }
         />
-      </label>
-    </section>
+        {size !== null && (
+          <label className={styles.fontSlider}>
+            {t('chatFontSize')} <output>{size}</output>
+            <input
+              type="range"
+              min={14}
+              max={22}
+              value={size}
+              onChange={(event) => setChatFontSize(event.currentTarget.valueAsNumber)}
+            />
+          </label>
+        )}
+      </section>
+    </>
   )
 }
 
@@ -476,9 +519,38 @@ const LocaleSetting = () => {
 }
 
 /** 朗读音色：stella（海星，女声）/ tide（暗潮，男声） */
-const TtsVoiceSetting = () => {
+const TtsVoiceSetting = ({ mobile = false }: { mobile?: boolean }) => {
   const t = useTranslate()
   const ttsVoice = useSettings((state) => state.ttsVoice)
+  const [choosing, setChoosing] = useState(false)
+  const options = [
+    { value: 'stella', label: t('settingsTtsVoiceStella') },
+    { value: 'tide', label: t('settingsTtsVoiceTide') },
+  ] as const
+  if (mobile) {
+    return (
+      <>
+        <button type="button" className={styles.settingsLink} onClick={() => setChoosing(true)}>
+          {t('settingsTtsVoice')}
+          <span>{options[ttsVoice === 'tide' ? 1 : 0].label}</span>
+          <IconChevronRightOutline14 />
+        </button>
+        {choosing && (
+          <Modal title={t('settingsTtsVoice')} closable onClose={() => setChoosing(false)}>
+            {options.map(({ value, label }) => (
+              <label key={value} className={styles.settingsLink}>
+                <input type="radio" name="settings-tts-voice" checked={ttsVoice === value} onChange={() => {
+                  setTtsVoice(value)
+                  setChoosing(false)
+                }} />
+                {label}
+              </label>
+            ))}
+          </Modal>
+        )}
+      </>
+    )
+  }
   return (
     <SettingCell
       label={t('settingsTtsVoice')}
@@ -487,10 +559,7 @@ const TtsVoiceSetting = () => {
         <Select
           ariaLabel={t('settingsTtsVoice')}
           value={ttsVoice}
-          options={[
-            { value: 'stella', label: t('settingsTtsVoiceStella') },
-            { value: 'tide', label: t('settingsTtsVoiceTide') },
-          ]}
+          options={[...options]}
           onChange={setTtsVoice}
         />
       }
@@ -538,12 +607,15 @@ const ThinkingCollapseSetting = () => {
 
 const ImportConfirm = ({
   historyImport,
+  onChooseFile,
 }: {
   historyImport: ReturnType<typeof useHistoryImport>
+  onChooseFile: () => void
 }) => {
   const t = useTranslate()
   const { phase, selected, preview, progress, error, confirm, cancel, toggle } = historyImport
   const phaseText = {
+    downloading: 'historyLinkDownloading',
     reading: 'backupImportReading',
     importing: 'backupImportProgress',
     committing: 'backupImportSaving',
@@ -552,7 +624,7 @@ const ImportConfirm = ({
   const busy = phase !== 'ready'
   return (
     <Modal
-      title={t('historyImportConfirmTitle')}
+      title={t(error && !preview.length ? 'historyImportErrorTitle' : 'historyImport')}
       className={styles.importConfirm}
       onClose={cancel}
       footer={
@@ -564,8 +636,13 @@ const ImportConfirm = ({
             disabled={phase === 'committing' || phase === 'cancelling'}
             onClick={cancel}
           >
-            {t('cancel')}
+            {t(error && !preview.length ? 'close' : 'cancel')}
           </Button>
+          {error && !preview.length && historyImport.fromLink && !busy ? (
+            <Button size="m" onClick={() => { cancel(); onChooseFile() }}>
+              {t('historyChooseZip')}
+            </Button>
+          ) : null}
           {preview.length > 0 ? (
             <Button
               variant="outlined"
@@ -586,7 +663,7 @@ const ImportConfirm = ({
       ) : null}
       {error ? (
         <div role="alert" className={clsx(styles.importConfirmText, styles.error)}>
-          {t('historyImportFailed', { message: t(error) })}
+          {t(error.key, error.params)}
         </div>
       ) : null}
       {phase === 'ready' && preview.length === 0 && !error ? (
@@ -712,21 +789,20 @@ const SettingCell = ({
   )
 }
 
-const importError = (error: unknown): TranslationKey => {
+const importError = (error: unknown): TranslationMessage => {
   if (error instanceof BackupError) {
-    return error.key
+    return { key: error.key, params: error.params }
   }
-  if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-    return 'backupImportNoSpace'
-  }
-  return 'backupImportReadError'
+  return { key: error instanceof DOMException && error.name === 'QuotaExceededError'
+    ? 'backupImportNoSpace' : 'backupImportReadError' }
 }
 
 const useHistoryImport = () => {
   const [open, setOpen] = useState(false)
-  const [phase, setPhase] = useState<'ready' | 'reading' | 'importing' | 'committing' | 'cancelling'>('ready')
+  const [phase, setPhase] = useState<'ready' | 'downloading' | 'reading' | 'importing' | 'committing' | 'cancelling'>('ready')
   const [status, setStatus] = useState<Status>(null)
-  const [error, setError] = useState<TranslationKey | null>(null)
+  const [error, setError] = useState<TranslationMessage | null>(null)
+  const [fromLink, setFromLink] = useState(false)
   const [progress, setProgress] = useState({ completed: 0, total: 0 })
   const [preview, setPreview] = useState<
     { id: string; title: string; messages: number; duplicate: boolean }[]
@@ -748,25 +824,42 @@ const useHistoryImport = () => {
     source.current = null
     setOpen(false)
   }
-  const select = async (candidate: File) => {
+  const select = async (candidate: File | string) => {
     if (active.current) {
       return
     }
     const operation = new AbortController()
     active.current = operation
     setOpen(true)
-    setPhase('reading')
+    setFromLink(typeof candidate === 'string')
+    setPhase(typeof candidate === 'string' ? 'downloading' : 'reading')
     setStatus(null)
     setError(null)
     setPreview([])
     setSelected(new Set())
+    let downloaded: Awaited<ReturnType<typeof downloadHistoryExport>> | undefined
     try {
-      source.current = openHistoryImport(candidate)
+      if (typeof candidate === 'string') {
+        downloaded = await downloadHistoryExport(candidate, operation.signal)
+        operation.signal.throwIfAborted()
+        setPhase('reading')
+        const reader = openHistoryImport(downloaded.file, true)
+        const release = downloaded.cleanup
+        source.current = { ...reader, close: () => { reader.close(); release() } }
+      } else {
+        source.current = openHistoryImport(candidate)
+      }
       const items = await source.current.preview(operation.signal)
       const existing = new Set(useChatStore.getState().sessions.map((item) => item.id))
       setPreview(items.map((item) => ({ ...item, duplicate: existing.has(item.id) })))
       setSelected(new Set(items.filter((item) => !existing.has(item.id)).map((item) => item.id)))
     } catch (failure) {
+      if (source.current) {
+        source.current.close()
+        source.current = null
+      } else {
+        downloaded?.cleanup()
+      }
       if (!operation.signal.aborted) {
         setError(importError(failure))
       }
@@ -814,6 +907,7 @@ const useHistoryImport = () => {
   }
   return {
     open,
+    fromLink,
     busy: phase !== 'ready',
     phase,
     status,
@@ -846,49 +940,77 @@ const useHistoryImport = () => {
   }
 }
 
-const ImportHistory = ({
-  historyImport,
-  disabled,
-}: {
+const DataAction = ({ label, icon, danger, disabled, onClick }: {
+  label: string
+  icon: ReactNode
+  danger?: boolean
+  disabled?: boolean
+  onClick: () => void
+}) => (
+  <button type="button" className={clsx(styles.settingsLink, styles.dataAction)} data-danger={danger} disabled={disabled} onClick={onClick}>
+    <span className={styles.dataActionIcon} aria-hidden="true">{icon}</span>
+    <span className={styles.dataActionLabel}>{label}</span>
+    <span className={styles.dataActionArrow} aria-hidden="true"><IconChevronRightOutline14 /></span>
+  </button>
+)
+
+const ImportHistory = ({ historyImport, disabled, fileRef }: {
   historyImport: ReturnType<typeof useHistoryImport>
   disabled: boolean
+  fileRef: RefObject<HTMLInputElement>
 }) => {
   const t = useTranslate()
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [step, setStep] = useState<'source' | 'link' | null>(null)
+  const [link, setLink] = useState('')
+  const close = () => {
+    setLink('')
+    setStep(null)
+  }
 
   return (
-    <SettingCell
-      label={t('historyImport')}
-      description={t('historyImportDescription')}
-      status={historyImport.status}
-      action={
-        <>
-          <Button
-            variant="outlined"
-            size="m"
-            className={clsx(styles.cellButton, styles.uploadButton)}
-            disabled={disabled}
-            onClick={() => inputRef.current?.click()}
-          >
-            <IconUploadOutline14 />
-            {t('upload')}
-          </Button>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".zip,application/zip,application/x-zip-compressed"
-            hidden
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              event.target.value = ''
-              if (file) {
-                historyImport.select(file)
+    <>
+      <DataAction label={t('historyImport')} icon={<IconUploadOutline14 />} disabled={disabled}
+        onClick={() => canDownloadHistoryExport ? setStep('source') : fileRef.current?.click()} />
+      {historyImport.status && (
+        <p className={styles.dataStatus} role="status">{t(historyImport.status.key, historyImport.status.params)}</p>
+      )}
+      <input ref={fileRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          event.target.value = ''
+          if (file) {
+            void historyImport.select(file)
+          }
+        }} />
+      {step && (
+        <Modal title={t(step === 'source' ? 'historyImport' : 'historyLinkImport')} fitViewport closable
+          className={styles.dataDialog} onClose={close}>
+          {step === 'source' ? (
+            <div className={styles.dataSource}>
+              <DataAction label={t('historyChooseZip')} icon={<IconUploadOutline14 />} onClick={() => {
+                close()
+                fileRef.current?.click()
+              }} />
+              <DataAction label={t('historyLinkImport')} icon={<IconLinkOutline16 />} onClick={() => setStep('link')} />
+            </div>
+          ) : (
+            <form className={styles.historyLinkForm} onSubmit={(event) => {
+              event.preventDefault()
+              const url = link.trim()
+              if (url && !disabled) {
+                close()
+                void historyImport.select(url)
               }
-            }}
-          />
-        </>
-      }
-    />
+            }}>
+              <input value={link} onChange={(event) => setLink(event.target.value)} type="text"
+                aria-label={t('historyLinkLabel')} placeholder={t('historyLinkLabel')}
+                inputMode="url" spellCheck={false} autoCapitalize="none" autoComplete="off" />
+              <Button size="m" type="submit" disabled={!link.trim() || disabled}>{t('historyLinkDownload')}</Button>
+            </form>
+          )}
+        </Modal>
+      )}
+    </>
   )
 }
 
@@ -913,22 +1035,14 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
   }
 
   return (
-    <SettingCell
-      label={t('exportAllLabel')}
-      description={t('historyExportDescription')}
-      status={status}
-      action={
-        <Button
-          variant="outlined"
-          size="m"
-          className={styles.cellButton}
-          disabled={disabled || busy || empty}
-          onClick={() => void onExport()}
-        >
-          <IconDownloadOutline16 />
-          {t('exportAllDownload')}
-        </Button>
-      }
-    />
+    <>
+      <DataAction label={t('exportAllLabel')} icon={<IconDownloadOutline16 />}
+        disabled={disabled || busy || empty} onClick={() => void onExport()} />
+      {status && (
+        <p role="alert" className={clsx(styles.dataStatus, styles.error)}>
+          {t(status.key, status.reason ? { message: t(status.reason) } : status.params)}
+        </p>
+      )}
+    </>
   )
 }

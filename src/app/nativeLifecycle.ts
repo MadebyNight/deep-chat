@@ -10,7 +10,7 @@ import { backMobileSider, useMobileSider } from '../components/sider/mobileSider
 import { closeSearchPanel, useSearchPanel } from '../components/search/searchPanelState.js'
 import { flushDrafts } from '../services/chat/drafts.js'
 
-export const initializeNative = async () => {
+export const initializeNative = () => {
   const onReturn = () => {
     if (document.visibilityState === 'visible') {
       resumeConnection()
@@ -21,11 +21,17 @@ export const initializeNative = async () => {
     document.addEventListener('visibilitychange', onReturn)
     return
   }
-  void initializeOfficialAccount()
-  await Browser.addListener('browserFinished', resumeConnection)
-  await NativeApp.addListener('resume', resumeConnection)
-  await NativeApp.addListener('pause', () => void flushDrafts())
-  await NativeApp.addListener('backButton', () => {
+  const run = (operation: () => unknown) => {
+    void Promise.resolve().then(operation).catch((error: unknown) => {
+      // eslint-disable-next-line no-console
+      console.warn('Deep Chat native lifecycle operation failed', error)
+    })
+  }
+  run(initializeOfficialAccount)
+  run(() => Browser.addListener('browserFinished', resumeConnection))
+  run(() => NativeApp.addListener('resume', resumeConnection))
+  run(() => NativeApp.addListener('pause', () => run(flushDrafts)))
+  run(() => NativeApp.addListener('backButton', () => {
     if (document.body.classList.contains('keyboard-open')) {
       void Keyboard.hide().catch(() => {})
     } else if (document.querySelector('[role="dialog"], [role="menu"], [role="listbox"]')) {
@@ -39,16 +45,14 @@ export const initializeNative = async () => {
     } else if (useChatStore.getState().activeId) {
       newChat()
     } else {
-      void NativeApp.minimizeApp()
+      run(() => NativeApp.minimizeApp())
     }
-  })
-  await Keyboard.addListener('keyboardWillShow', () => document.body.classList.add('keyboard-open'))
-  await Keyboard.addListener('keyboardWillHide', () =>
-    document.body.classList.remove('keyboard-open')
-  )
+  }))
+  run(() => Keyboard.addListener('keyboardWillShow', () => document.body.classList.add('keyboard-open')))
+  run(() => Keyboard.addListener('keyboardWillHide', () => document.body.classList.remove('keyboard-open')))
   const updateBars = () => {
     const dark = document.body.hasAttribute('data-ds-dark-theme')
-    void StatusBar.setStyle({ style: dark ? Style.Dark : Style.Light })
+    run(() => StatusBar.setStyle({ style: dark ? Style.Dark : Style.Light }))
     const background = getComputedStyle(document.body).backgroundColor.match(/\d+/g)
     if (background) {
       const color =
@@ -57,7 +61,7 @@ export const initializeNative = async () => {
           .slice(0, 3)
           .map((channel) => Number(channel).toString(16).padStart(2, '0'))
           .join('')
-      void StatusBar.setBackgroundColor({ color }).catch(() => {})
+      run(() => StatusBar.setBackgroundColor({ color }))
     }
   }
   updateBars()

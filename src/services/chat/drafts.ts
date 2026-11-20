@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { openDB } from 'idb'
+import { openDB, type IDBPDatabase } from 'idb'
 import { useSettings } from '../settings.js'
 import type { TranslationMessage } from '../../i18n/index.js'
 import { createId } from '../../utils/id.js'
@@ -155,23 +155,28 @@ export const clearDraft = (sessionId: string | null) => {
   updateDraft(sessionId, () => EMPTY_DRAFT)
 }
 
-const draftDB = openDB('deepchat-drafts', 1, {
-  upgrade(db) { db.createObjectStore('drafts') },
-})
+let draftDB: IDBPDatabase | undefined
 let saving: Promise<unknown> = Promise.resolve()
 let timer: ReturnType<typeof setTimeout> | undefined
 export const flushDrafts = () => {
   clearTimeout(timer)
+  const db = draftDB
+  if (!db) {
+    return Promise.resolve()
+  }
   const snapshot = [...useDrafts.getState().drafts].map(([id, draft]) => [id, {
     text: draft.text,
     attachments: draft.attachments.map((attachment) => ({ ...attachment, previewUrl: null })),
   }])
-  const task = saving.catch(() => {}).then(async () => (await draftDB).put('drafts', snapshot, 'all'))
+  const task = saving.catch(() => {}).then(() => db.put('drafts', snapshot, 'all'))
   saving = task
   return task
 }
 export const initializeDrafts = async () => {
-  const saved = await (await draftDB).get('drafts', 'all') as [string | null, Draft][] | undefined
+  const db = await openDB('deepchat-drafts', 1, {
+    upgrade(database) { database.createObjectStore('drafts') },
+  })
+  const saved = await db.get('drafts', 'all') as [string | null, Draft][] | undefined
   const key = useSettings.getState().apiKey
   const drafts = new Map(saved ?? [])
   for (const draft of drafts.values()) {
@@ -183,6 +188,7 @@ export const initializeDrafts = async () => {
     }
   }
   useDrafts.setState({ drafts })
+  draftDB = db
   useDrafts.subscribe(() => {
     clearTimeout(timer)
     timer = setTimeout(() => { void flushDrafts().catch(() => {}) }, 200)

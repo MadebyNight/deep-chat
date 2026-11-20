@@ -5,8 +5,110 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="theme-color" content="#ffffff" />
     <title>Deep Chat · DeepSeek 第三方客户端</title>
+    <style>
+      #root[inert] { visibility: hidden; }
+      #startup-status { position: fixed; inset: 0; z-index: 10000; overflow: auto; padding: 1.5rem; background: #fff; color: #202124; font: 1rem/1.6 system-ui, sans-serif; }
+      #startup-status > div { max-width: 30rem; margin: 12vh auto; }
+      #startup-status a { color: #1656bd; }
+      #startup-diagnostic { overflow-wrap: anywhere; font-size: 0.9rem; user-select: text; }
+      @media (prefers-color-scheme: dark) {
+        #startup-status { background: #141414; color: #eee; }
+        #startup-status a { color: #9bbaff; }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="startup-status" hidden>
+      <div>
+        <h1>Deep Chat</h1>
+        <p id="startup-message" role="alert"></p>
+        <p><code id="startup-diagnostic"></code></p>
+        <a id="startup-retry" href="">Try again</a>
+      </div>
+    </div>
+    <noscript>Deep Chat requires JavaScript.</noscript>
+    <script>
+      (function () {
+        var panel = document.getElementById('startup-status');
+        var message = document.getElementById('startup-message');
+        var retry = document.getElementById('startup-retry');
+        var zh = /^zh/i.test(navigator.language || '');
+        var ready = false;
+        var styles = document.querySelectorAll('link[rel="deepchat-startup-style"]');
+        var remainingStyles = styles.length;
+        message.lang = retry.lang = zh ? 'zh-CN' : 'en';
+        if (zh) {
+          retry.textContent = '重试';
+        }
+        var diagnostic = document.getElementById('startup-diagnostic');
+        var stages = ['THEME_SETUP', 'CREDENTIAL_STORAGE', 'DRAFT_STORAGE', 'REACT_RENDER'];
+        function startupStage(stage) {
+          return stages.indexOf(stage) >= 0 ? stage : 'ENTRY_SCRIPT';
+        }
+        function errorType(name) {
+          var known = ['Error', 'TypeError', 'SyntaxError', 'ReferenceError', 'RangeError', 'SecurityError', 'InvalidStateError', 'QuotaExceededError', 'NotSupportedError'];
+          return known.indexOf(name) >= 0 ? name : 'UnknownError';
+        }
+        function assetName(url) {
+          var match = /\/static\/(?:js|css)\/(?:async\/)?((?:main|\d+)\.[a-f0-9]{8}\.(?:js|css))(?:[?#]|$)/.exec(url || '');
+          return match ? match[1] : '';
+        }
+        function showFailure(code, details) {
+          clearTimeout(deadline);
+          message.textContent = zh
+            ? 'Deep Chat 暂时无法启动。请重试，或更新系统 WebView 后重新打开应用。'
+            : 'Deep Chat could not start. Try again, or update your system WebView and reopen the app.';
+          diagnostic.textContent = [code].concat(details || []).filter(Boolean).join(' · ');
+          panel.hidden = false;
+        }
+        function onStartupError(event) {
+          if (ready || !panel.hidden) return;
+          if (event.target === window) {
+            var file = assetName(event.filename);
+            var location = file && event.lineno ? file + ':' + event.lineno + ':' + (event.colno || 0) : file;
+            showFailure('STARTUP_SCRIPT_EXCEPTION', [errorType(event.error && event.error.name), location]);
+          } else if (event.target && event.target.tagName === 'SCRIPT') {
+            showFailure('SCRIPT_LOAD_FAILED', [assetName(event.target.src)]);
+          }
+        }
+        var timeoutMs = 8000;
+        var deadline = setTimeout(function () {
+          var stage = ready && remainingStyles ? 'STYLESHEET' : startupStage(document.documentElement.getAttribute('data-startup-stage'));
+          showFailure('STARTUP_TIMEOUT', [stage, timeoutMs + ' ms']);
+        }, timeoutMs);
+        function hideWhenReady() {
+          if (!ready || remainingStyles !== 0) return;
+          clearTimeout(deadline);
+          window.removeEventListener('error', onStartupError, true);
+          panel.hidden = true;
+          document.getElementById('root').removeAttribute('inert');
+        }
+        window.addEventListener('error', onStartupError, true);
+        window.addEventListener('deepchat:startup-failed', function (event) {
+          ready = false;
+          var detail = event.detail || {};
+          showFailure('STARTUP_EXCEPTION', [startupStage(detail.stage), errorType(detail.errorType)]);
+        });
+        window.addEventListener('deepchat:startup-ready', function () {
+          ready = true;
+          hideWhenReady();
+        });
+        for (var i = 0; i < styles.length; i++) {
+          var link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = styles[i].href;
+          link.onload = function () {
+            remainingStyles--;
+            hideWhenReady();
+          };
+          link.onerror = function (event) {
+            showFailure('STYLESHEET_LOAD_FAILED', [assetName(event.currentTarget.href)]);
+          };
+          document.head.appendChild(link);
+        }
+        if (typeof Object.hasOwn !== 'function') showFailure('WEBVIEW_INCOMPATIBLE', ['Object.hasOwn']);
+      })();
+    </script>
+    <div id="root" inert></div>
   </body>
 </html>

@@ -3,6 +3,7 @@ import type { TranslationMessage } from '../../i18n/index.js'
 import { transcribe } from '../../services/api/speech.js'
 import { startRecording, type Recording } from '../../services/speech/recorder.js'
 import { useSettings } from '../../services/settings.js'
+import { transcribeOfficialRecording, useOfficialAccount } from '../../services/officialAccount.js'
 import { showToast } from '../base/toastState.js'
 
 export type VoiceInputStatus = 'idle' | 'recording' | 'transcribing'
@@ -75,10 +76,18 @@ export const useVoiceInput = (onText: (text: string) => void) => {
       if (operationRef.current !== operation || !audio) {
         return
       }
+      const official = useOfficialAccount.getState().active
+      const apiKey = useSettings.getState().apiKey
+      if (!official && !apiKey) {
+        showToast({ key: 'voiceInputRequiresApiKey' })
+        return
+      }
       controller = new AbortController()
       controllerRef.current = controller
       setStatus('transcribing')
-      const text = await transcribe(useSettings.getState().apiKey ?? '', audio, controller.signal)
+      const text = official
+        ? await transcribeOfficialRecording(audio, controller.signal)
+        : await transcribe(apiKey ?? '', audio, controller.signal)
       if (controller.signal.aborted || operationRef.current !== operation) {
         return
       }
@@ -87,9 +96,17 @@ export const useVoiceInput = (onText: (text: string) => void) => {
       } else {
         showToast({ key: 'voiceInputEmpty' })
       }
-    } catch {
+    } catch (error) {
       if (operationRef.current === operation && !controller?.signal.aborted) {
-        showToast({ key: 'voiceInputFailed' })
+        const failure = error as { code?: string; data?: { status?: number } }
+        const status = failure?.data?.status
+        let key: TranslationMessage['key'] = 'voiceInputFailed'
+        if (failure?.code === 'ACCOUNT_SIGN_IN_REQUIRED' || status === 401 || status === 403) {
+          key = 'voiceInputAccountExpired'
+        } else if (status === 402) {
+          key = 'voiceInputBalanceLow'
+        }
+        showToast({ key })
       }
     } finally {
       if (operationRef.current === operation) {

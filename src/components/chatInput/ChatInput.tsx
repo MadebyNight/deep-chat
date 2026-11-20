@@ -270,7 +270,7 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
               onClick={() => {
                 if (
                   voice.status !== 'idle' ||
-                  (!useChatStore.getState().importingHistory && ensureApiKey())
+                  !useChatStore.getState().importingHistory
                 ) {
                   void voice.toggle()
                 }

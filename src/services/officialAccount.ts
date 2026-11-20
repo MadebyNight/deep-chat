@@ -1,6 +1,8 @@
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 import { create } from 'zustand'
+import { Directory, Filesystem } from '@capacitor/filesystem'
 import { openOfficialPage } from './native.js'
+import { readPreference, writePreference } from './settings.js'
 
 const preference = 'deepchat:official-account'
 
@@ -21,7 +23,7 @@ export type AccountChunk =
   | { type: 'usage'; usage: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number } }
   | { type: 'finish'; reason: string }
 
-type AccountOperation = 'state' | 'signIn' | 'cancelSignIn' | 'signOut' | 'balance' | 'chat' | 'cancelChat'
+type AccountOperation = 'state' | 'signIn' | 'cancelSignIn' | 'signOut' | 'balance' | 'chat' | 'cancelChat' | 'transcribe'
 const account = registerPlugin<{
   availability(): Promise<{ supported: boolean }>
   request<T>(options: { id: string; method: AccountOperation; params?: object }): Promise<T>
@@ -30,20 +32,51 @@ const account = registerPlugin<{
 
 export const useOfficialAccount = create(() => ({
   available: false,
-  active: localStorage.getItem(preference) === 'true' && Capacitor.getPlatform() === 'android',
+  active: readPreference(preference) === 'true' && Capacitor.getPlatform() === 'android',
   signedIn: false,
   authorizing: false,
   browserOpened: false,
 }))
 
 export function selectOfficialAccount(active: boolean) {
-  if (active) {localStorage.setItem(preference, 'true')}
-  else {localStorage.removeItem(preference)}
+  writePreference(preference, active ? 'true' : null)
   useOfficialAccount.setState({ active })
 }
 
 export const officialAccountRequest = <T>(method: AccountOperation, params?: object, id = crypto.randomUUID()) =>
   account.request<T>({ id, method, params })
+
+export async function transcribeOfficialRecording(audio: Blob, signal: AbortSignal) {
+  const id = crypto.randomUUID()
+  const path = `deepchat-asr-${id}.wav`
+  const data = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result.slice(reader.result.indexOf(',') + 1))
+      } else {
+        reject(new Error('Could not encode recording'))
+      }
+    }
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(audio)
+  })
+  signal.throwIfAborted()
+  const cancel = () => {
+    void officialAccountRequest('cancelChat', { id }).catch(() => undefined)
+  }
+  try {
+    await Filesystem.writeFile({ path, directory: Directory.Cache, data })
+    signal.throwIfAborted()
+    signal.addEventListener('abort', cancel, { once: true })
+    const result = await officialAccountRequest<{ text: string }>('transcribe', undefined, id)
+    signal.throwIfAborted()
+    return result.text
+  } finally {
+    signal.removeEventListener('abort', cancel)
+    await Filesystem.deleteFile({ path, directory: Directory.Cache }).catch(() => undefined)
+  }
+}
 
 export function applyAccountState(state: AccountState) {
   const signedIn = state.status === 'credential-stored'

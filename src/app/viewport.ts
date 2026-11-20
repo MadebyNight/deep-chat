@@ -1,14 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react'
+import { subscribeMediaQuery } from './mediaQuery.js'
 
 /** 窄于 768px 按移动端布局 */
-const query = window.matchMedia('not all and (min-width: 768px)')
+const query = window.matchMedia?.('not all and (min-width: 768px)')
+const subscribe = (onChange: () => void) => subscribeMediaQuery(query, onChange)
 
-const subscribe = (onChange: () => void) => {
-  query.addEventListener('change', onChange)
-  return () => query.removeEventListener('change', onChange)
-}
-
-export const useIsMobile = () => useSyncExternalStore(subscribe, () => query.matches)
+export const useIsMobile = () => useSyncExternalStore(subscribe, () => query?.matches ?? window.innerWidth < 768)
 
 const preventPageScroll = (event: TouchEvent) => {
   if (event.touches.length !== 1) {

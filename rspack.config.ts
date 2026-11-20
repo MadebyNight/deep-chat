@@ -2,14 +2,25 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from '@rspack/cli'
-import { rspack, type Configuration } from '@rspack/core'
+import { rspack, type Compiler, type Configuration } from '@rspack/core'
 
 const dev = process.env.NODE_ENV !== 'production'
 const targets = ['chrome >= 105', 'edge >= 105', 'safari >= 16', 'firefox >= 110']
 const root = path.dirname(fileURLToPath(import.meta.url))
-const { version } = JSON.parse(
+const { version, dependencies } = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf8')
-) as { version: string }
+) as { version: string; dependencies: Record<string, string> }
+
+const openSourceNotices = [
+  { name: 'DeepSeek chat-demo', version: '0.1.1', license: 'MIT', text: readFileSync(path.join(root, 'licenses/chat-demo-LICENSE'), 'utf8') },
+  { name: 'DeepSeek Harness', version: '0.2.2-rc.5', license: 'MIT', text: readFileSync(path.join(root, 'licenses/deepseek-harness-LICENSE'), 'utf8'), androidOnly: true },
+  ...Object.keys(dependencies).filter((name) => !name.startsWith('@types/')).map((name) => {
+    const dir = path.join(root, 'node_modules', name)
+    const { version, license } = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')) as { version: string; license: string }
+    const file = name.startsWith('mdast-') || name.startsWith('micromark-') || name === 'clsx' ? 'license' : 'LICENSE'
+    return { name, version, license, text: readFileSync(path.join(dir, file), 'utf8'), androidOnly: name.startsWith('@capacitor/') && name !== '@capacitor/core' }
+  }),
+]
 
 const cssLoader = {
   loader: 'builtin:lightningcss-loader',
@@ -76,15 +87,34 @@ export const createConfig = ({
     ],
   },
   plugins: [
+    {
+      apply(compiler: Compiler) {
+        compiler.hooks.compilation.tap('StartupStyles', (compilation) => {
+          rspack.HtmlRspackPlugin.getCompilationHooks(compilation).alterAssetTags.tap('StartupStyles', (data) => {
+            for (const tag of data.assetTags.styles) {
+              tag.attributes.rel = 'deepchat-startup-style'
+            }
+            return data
+          })
+        })
+      },
+    },
     // 经典 defer 脚本支持 file:// 页面的资源加载
     new rspack.HtmlRspackPlugin({
       template: './src/index.html',
       scriptLoading: 'defer',
       meta: { 'application-version': version },
     }),
-    new rspack.DefinePlugin({ __API_ORIGIN__: JSON.stringify(apiOrigin) }),
+    new rspack.DefinePlugin({
+      __API_ORIGIN__: JSON.stringify(apiOrigin),
+      __APP_LICENSE__: JSON.stringify(readFileSync(path.join(root, 'LICENSE'), 'utf8')),
+      __OPEN_SOURCE_NOTICES__: JSON.stringify(openSourceNotices),
+    }),
     new rspack.CopyRspackPlugin({
-      patterns: [{ from: path.resolve(root, 'licenses/chat-demo-LICENSE'), to: 'LICENSE', toType: 'file' }],
+      patterns: [
+        { from: path.resolve(root, 'licenses/chat-demo-LICENSE'), to: 'LICENSE', toType: 'file' },
+        { from: path.resolve(root, 'src/webview-error.html'), to: 'webview-error.html', toType: 'file' },
+      ],
     }),
   ],
   performance: { hints: false },

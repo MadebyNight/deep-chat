@@ -13,6 +13,15 @@ declare module '*.png' {
 /** 公开 API 的地址，见 rspack.config.ts 的 createConfig */
 declare const __API_ORIGIN__: string
 
+declare const __APP_LICENSE__: string
+declare const __OPEN_SOURCE_NOTICES__: readonly {
+  name: string
+  version: string
+  license: string
+  text: string
+  androidOnly?: boolean
+}[]
+
 /** Prism 语言包通过副作用注册到全局 Prism */
 declare module 'prismjs/components/*' {}
 

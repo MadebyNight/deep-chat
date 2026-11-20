@@ -8,6 +8,9 @@ export type Locale = 'zh-CN' | 'en-US'
 export type ThemePreference = 'light' | 'dark' | 'system'
 
 /** 非敏感设置保存在本机；连接密钥仅在内存及 Android Keystore 加密存储中。 */
+export type PromptPreset = { id: string; title: string; body: string }
+type PromptPreferences = { presets: PromptPreset[]; selectedId: string | null }
+
 type Settings = {
   apiKey: string | null
   locale: Locale
@@ -19,6 +22,7 @@ type Settings = {
   autoCollapseThinking: boolean
   thinking: boolean
   search: boolean
+  prompts: PromptPreferences
   siderCollapsed: boolean
 }
 
@@ -32,10 +36,12 @@ const KEYS = {
   autoCollapseThinking: 'chat-demo:auto-collapse-thinking',
   thinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
+  systemPrompt: 'deepchat:system-prompt',
+  prompts: 'deepchat:prompt-presets-v1',
   siderCollapsed: 'chat-demo:sider-collapsed',
 } as const
 
-const read = (key: string) => {
+export const readPreference = (key: string) => {
   try {
     return localStorage.getItem(key)
   } catch {
@@ -43,15 +49,17 @@ const read = (key: string) => {
   }
 }
 
-const write = (key: string, value: string | null) => {
+export const writePreference = (key: string, value: string | null) => {
   try {
     if (value === null) {
       localStorage.removeItem(key)
     } else {
       localStorage.setItem(key, value)
     }
+    return true
   } catch {
     // 存储不可用时只在内存中生效
+    return false
   }
 }
 
@@ -59,7 +67,7 @@ const isChineseBrowser = (): boolean =>
   (typeof navigator === 'undefined' ? 'zh' : navigator.language).toLowerCase().startsWith('zh')
 
 const initialLocale = (): Locale => {
-  const saved = read(KEYS.locale)
+  const saved = readPreference(KEYS.locale)
   if (saved === 'zh-CN' || saved === 'en-US') {
     return saved
   }
@@ -68,17 +76,49 @@ const initialLocale = (): Locale => {
 
 /** 未保存过时跟随系统 */
 const initialThemePreference = (): ThemePreference => {
-  const saved = read(KEYS.themePreference)
+  const saved = readPreference(KEYS.themePreference)
   return saved === 'light' || saved === 'dark' ? saved : 'system'
 }
 
 const initialChatFontSize = () => {
-  const value = Number(read(KEYS.chatFontSize))
+  const value = Number(readPreference(KEYS.chatFontSize))
   return Number.isInteger(value) && value >= 14 && value <= 22 ? value : null
 }
 
 /** 未保存过时使用服务端默认音色 stella（海星） */
-const initialTtsVoice = (): TtsVoice => (read(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
+const initialTtsVoice = (): TtsVoice => (readPreference(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
+
+const initialPrompts = (): PromptPreferences => {
+  const raw = readPreference(KEYS.prompts)
+  if (raw !== null) {
+    try {
+      const stored = JSON.parse(raw) as Partial<PromptPreferences> | null
+      if (Array.isArray(stored?.presets)) {
+        const presets = stored.presets.filter((item) =>
+          typeof item?.id === 'string' && typeof item.title === 'string' &&
+          typeof item.body === 'string' && item.title.trim() && item.body.trim()
+        )
+        const selectedId = presets.some((item) => item.id === stored.selectedId)
+          ? stored.selectedId ?? null : null
+        return { presets, selectedId }
+      }
+    } catch {
+      // Use the legacy value if the saved list cannot be read.
+    }
+  }
+  const body = readPreference(KEYS.systemPrompt)
+  if (!body?.trim()) {
+    return { presets: [], selectedId: null }
+  }
+  const migrated = {
+    presets: [{ id: 'legacy', title: initialLocale() === 'zh-CN' ? '自定义提示词' : 'Custom prompt', body }],
+    selectedId: 'legacy',
+  }
+  if (writePreference(KEYS.prompts, JSON.stringify(migrated))) {
+    writePreference(KEYS.systemPrompt, null)
+  }
+  return migrated
+}
 
 export const useSettings = create<Settings>(() => ({
   apiKey: null,
@@ -86,47 +126,48 @@ export const useSettings = create<Settings>(() => ({
   themePreference: initialThemePreference(),
   chatFontSize: initialChatFontSize(),
   ttsVoice: initialTtsVoice(),
-  autoReadAloud: read(KEYS.autoReadAloud) === 'true',
+  autoReadAloud: readPreference(KEYS.autoReadAloud) === 'true',
   // 未保存过时默认开启，与官方「思考内容自动折叠」初始状态一致
-  autoCollapseThinking: read(KEYS.autoCollapseThinking) !== 'false',
-  thinking: read(KEYS.thinking) === 'true',
-  search: read(KEYS.search) === 'true',
-  siderCollapsed: read(KEYS.siderCollapsed) === 'true',
+  autoCollapseThinking: readPreference(KEYS.autoCollapseThinking) !== 'false',
+  thinking: readPreference(KEYS.thinking) === 'true',
+  search: readPreference(KEYS.search) === 'true',
+  prompts: initialPrompts(),
+  siderCollapsed: readPreference(KEYS.siderCollapsed) === 'true',
 }))
 
 export const setLocale = (locale: Locale) => {
-  write(KEYS.locale, locale)
+  writePreference(KEYS.locale, locale)
   useSettings.setState({ locale })
 }
 
 export const setThemePreference = (themePreference: ThemePreference) => {
-  write(KEYS.themePreference, themePreference)
+  writePreference(KEYS.themePreference, themePreference)
   useSettings.setState({ themePreference })
 }
 
 export const setChatFontSize = (chatFontSize: number | null) => {
-  write(KEYS.chatFontSize, chatFontSize === null ? null : String(chatFontSize))
+  writePreference(KEYS.chatFontSize, chatFontSize === null ? null : String(chatFontSize))
   useSettings.setState({ chatFontSize })
 }
 
 export const setTtsVoice = (ttsVoice: TtsVoice) => {
-  write(KEYS.ttsVoice, ttsVoice)
+  writePreference(KEYS.ttsVoice, ttsVoice)
   useSettings.setState({ ttsVoice })
 }
 
 export const setAutoReadAloud = (autoReadAloud: boolean) => {
-  write(KEYS.autoReadAloud, String(autoReadAloud))
+  writePreference(KEYS.autoReadAloud, String(autoReadAloud))
   useSettings.setState({ autoReadAloud })
 }
 
 export const setAutoCollapseThinking = (autoCollapseThinking: boolean) => {
-  write(KEYS.autoCollapseThinking, String(autoCollapseThinking))
+  writePreference(KEYS.autoCollapseThinking, String(autoCollapseThinking))
   useSettings.setState({ autoCollapseThinking })
 }
 
 export const initializeCredentials = async () => {
-  write(KEYS.apiKey, null)
-  write('chat-demo:location', null)
+  writePreference(KEYS.apiKey, null)
+  writePreference('chat-demo:location', null)
   if (isNative) {
     const { value } = await credentials.read()
     useSettings.setState({ apiKey: value })
@@ -141,16 +182,27 @@ export const setApiKey = async (apiKey: string | null) => {
 }
 
 export const setThinking = (thinking: boolean) => {
-  write(KEYS.thinking, String(thinking))
+  writePreference(KEYS.thinking, String(thinking))
   useSettings.setState({ thinking })
 }
 
 export const setSearch = (search: boolean) => {
-  write(KEYS.search, String(search))
+  writePreference(KEYS.search, String(search))
   useSettings.setState({ search })
 }
 
+export const setPrompts = (prompts: PromptPreferences) => {
+  if (!writePreference(KEYS.prompts, JSON.stringify(prompts))) {
+    return false
+  }
+  useSettings.setState({ prompts })
+  return true
+}
+
+export const getSelectedPrompt = ({ presets, selectedId }: PromptPreferences) =>
+  presets.find((preset) => preset.id === selectedId)
+
 export const setSiderCollapsed = (siderCollapsed: boolean) => {
-  write(KEYS.siderCollapsed, String(siderCollapsed))
+  writePreference(KEYS.siderCollapsed, String(siderCollapsed))
   useSettings.setState({ siderCollapsed })
 }

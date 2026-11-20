@@ -1,16 +1,12 @@
 import { useSyncExternalStore } from 'react'
 import { useSettings, type ThemePreference } from '../services/settings.js'
+import { subscribeMediaQuery } from './mediaQuery.js'
 
 export type Theme = 'light' | 'dark'
 
-const query = window.matchMedia('(prefers-color-scheme: dark)')
-
-const subscribeOsTheme = (listener: () => void) => {
-  query.addEventListener('change', listener)
-  return () => query.removeEventListener('change', listener)
-}
-
-const getOsTheme = (): Theme => (query.matches ? 'dark' : 'light')
+const query = window.matchMedia?.('(prefers-color-scheme: dark)')
+const subscribeOsTheme = (listener: () => void) => subscribeMediaQuery(query, listener)
+const getOsTheme = (): Theme => (query?.matches ? 'dark' : 'light')
 
 const resolveTheme = (preference: ThemePreference, osTheme: Theme): Theme =>
   preference === 'system' ? osTheme : preference
@@ -66,6 +62,6 @@ export const setupTheme = () => {
   if (document.readyState !== 'complete') {
     window.addEventListener('load', syncPageBackground, { once: true })
   }
-  query.addEventListener('change', syncTheme)
+  subscribeMediaQuery(query, syncTheme)
   useSettings.subscribe(syncTheme)
 }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="startup_recovery_title">Deep Chat 无法打开</string>
+    <string name="startup_recovery_message">请尝试重新打开 Deep Chat。如果问题持续，请更新系统 WebView 后再试。</string>
+    <string name="startup_recovery_retry">重试</string>
+</resources>

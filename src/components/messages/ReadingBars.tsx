@@ -11,6 +11,7 @@
 
 import { Fragment, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
+import { subscribeMediaQuery } from '../../app/mediaQuery.js'
 
 import styles from './ReadingBars.module.css'
 
@@ -101,13 +102,10 @@ export function ReadingBars({ mode }: { mode: 'loading' | 'playing' }) {
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
 
 function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(() => window.matchMedia(REDUCED_MOTION_QUERY).matches)
+  const [reduced, setReduced] = useState(() => window.matchMedia?.(REDUCED_MOTION_QUERY)?.matches ?? false)
   useEffect(() => {
-    const queryList = window.matchMedia(REDUCED_MOTION_QUERY)
-    const listener = ({ matches }: { matches: boolean }) => setReduced(matches)
-    // addListener 支持 iOS 12 的 MediaQueryList。
-    queryList.addListener(listener)
-    return () => queryList.removeListener(listener)
+    const query = window.matchMedia?.(REDUCED_MOTION_QUERY)
+    return subscribeMediaQuery(query, () => setReduced(query?.matches ?? false))
   }, [])
   return reduced
 }

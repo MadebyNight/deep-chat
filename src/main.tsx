@@ -1,3 +1,4 @@
+import { Component, useLayoutEffect, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './app/App.js'
 import { setupTheme } from './app/theme.js'
@@ -8,19 +9,60 @@ import { initializeNative } from './app/nativeLifecycle.js'
 import { showToast } from './components/base/toastState.js'
 import './app/theme.css'
 import './app/global.css'
+import { translate } from './i18n/index.js'
 import './app/mobile.css'
 
-ensureKatex()
-setupTheme()
+const startupFailed = (error: unknown, stage = document.documentElement.dataset.startupStage) =>
+  window.dispatchEvent(new CustomEvent('deepchat:startup-failed', {
+    detail: { stage, errorType: error instanceof Error ? error.name : undefined },
+  }))
 
-const start = async () => {
-  let storageError = false
-  try { await initializeCredentials() } catch { storageError = true }
-  try { await initializeDrafts() } catch { storageError = true }
-  await initializeNative()
-  createRoot(document.getElementById('root') as HTMLElement).render(<App />)
-  if (storageError) {
-    showToast('部分本机配置或草稿未能恢复，请检查保存状态。')
+class AppBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  override state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  override componentDidCatch(error: Error) {
+    // eslint-disable-next-line no-console
+    console.error('Deep Chat render failed', error)
+    startupFailed(error, 'REACT_RENDER')
+  }
+
+  override render() {
+    return this.state.failed ? null : this.props.children
   }
 }
-void start()
+
+function StartedApp({ storageError }: { storageError: boolean }) {
+  useLayoutEffect(() => {
+    window.dispatchEvent(new Event('deepchat:startup-ready'))
+    if (storageError) {
+      showToast(translate('startupStorageError'))
+    }
+  }, [storageError])
+  return <App />
+}
+
+const start = async () => {
+  const startup = document.documentElement.dataset
+  startup.startupStage = 'THEME_SETUP'
+  setupTheme()
+  let storageError = false
+  startup.startupStage = 'CREDENTIAL_STORAGE'
+  try { await initializeCredentials() } catch { storageError = true }
+  startup.startupStage = 'DRAFT_STORAGE'
+  try { await initializeDrafts() } catch { storageError = true }
+  startup.startupStage = 'REACT_RENDER'
+  createRoot(document.getElementById('root') as HTMLElement).render(
+    <AppBoundary><StartedApp storageError={storageError} /></AppBoundary>
+  )
+  initializeNative()
+  void Promise.resolve(ensureKatex()).catch(() => {})
+}
+void start().catch((error: unknown) => {
+  // eslint-disable-next-line no-console
+  console.error('Deep Chat startup failed', error)
+  startupFailed(error)
+})
