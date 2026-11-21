@@ -308,7 +308,7 @@
   }
 }
 
-/* 抽屉底部：左侧名称 + 右侧设置图标 */
+/* 抽屉底部操作区 */
 .bottomMobile {
   display: flex;
   align-items: center;
@@ -318,10 +318,40 @@
   padding: 0 17px;
 }
 
+.accountRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 0 0 0 6px;
+  box-sizing: border-box;
+}
+
+.accountAvatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--dsw-specific-sidebar-nav-item-hover);
+  color: var(--dsw-alias-label-secondary);
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
 .account {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
-  font-size: 16px;
+  font-size: 0.875rem;
   font-weight: 500;
   white-space: nowrap;
   text-overflow: ellipsis;

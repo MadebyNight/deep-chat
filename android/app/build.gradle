@@ -6,34 +6,48 @@ def accountRuntime = rootProject.file(providers.gradleProperty('deepSeekRuntimeD
         .getOrElse('../.toolchain/harness-probe/deploy'))
 def accountNative = rootProject.file(providers.gradleProperty('deepSeekRuntimeJniDir')
         .getOrElse('../.toolchain/harness-probe/android-probe/app/src/main/jniLibs'))
-def accountAssets = layout.buildDirectory.dir('generated/deepseekAccountAssets')
-def prepareAccountAssets = tasks.register('prepareAccountAssets', Sync) {
-    from(accountRuntime.toPath().resolve('harness.zip').toFile()) {
-        into 'deepseek-runtime'
-    }
-    into accountAssets
-    doFirst {
-        if (!new File(accountRuntime, 'harness.zip').isFile() ||
-                !['libnode.so', 'libdshengine.so', 'libc++_shared.so'].every {
-                    new File(accountNative, "arm64-v8a/$it").isFile()
-                }) {
-            throw new GradleException('Missing DeepSeek account runtime. Supply deepSeekRuntimeDir and deepSeekRuntimeJniDir.')
+apply from: 'account-harness.gradle'
+
+abstract class PrepareAccountAssets extends DefaultTask {
+    @OutputDirectory
+    abstract DirectoryProperty getOutputDirectory()
+}
+
+def originalHarness = new File(accountRuntime, 'harness.zip')
+def accountLibraries = ['libnode.so', 'libdshengine.so', 'libc++_shared.so'].collect {
+    new File(accountNative, "arm64-v8a/$it")
+}
+def trimAccountHarness = !providers.gradleProperty('deepSeekHarnessDedupOnly').isPresent()
+def prepareAccountAssets = tasks.register('prepareAccountAssets', PrepareAccountAssets) {
+    outputDirectory.set(layout.buildDirectory.dir('generated/deepseekAccountAssets'))
+    inputs.file(originalHarness).withPathSensitivity(PathSensitivity.NONE)
+    inputs.file('account-harness.gradle').withPathSensitivity(PathSensitivity.NONE)
+    inputs.files(accountLibraries).withPathSensitivity(PathSensitivity.NAME_ONLY)
+    inputs.property('trim', trimAccountHarness)
+    doLast {
+        if (!accountLibraries.every { it.isFile() }) {
+            throw new GradleException('Missing DeepSeek arm64-v8a libraries. Supply deepSeekRuntimeJniDir.')
         }
+        packAccountHarness(originalHarness, outputDirectory.file('deepseek-runtime/harness.zip').get().asFile, trimAccountHarness)
+    }
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.sources.assets.addGeneratedSourceDirectory(prepareAccountAssets, { it.outputDirectory })
     }
 }
 
 android {
-    sourceSets.main.assets.srcDir(prepareAccountAssets)
     sourceSets.main.jniLibs.srcDir(accountNative)
     packaging.jniLibs.useLegacyPackaging = true
-    androidResources.noCompress += 'zip'
     namespace = "app.deepchat.mobile"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "app.deepchat.mobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 5
+        versionCode 6
         versionName appVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
@@ -74,6 +88,7 @@ repositories {
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation 'androidx.browser:browser:1.9.0'
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')

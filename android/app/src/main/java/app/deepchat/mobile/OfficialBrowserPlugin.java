@@ -3,6 +3,9 @@ package app.deepchat.mobile;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
+
+import androidx.browser.customtabs.CustomTabsClient;
+
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -20,8 +23,16 @@ public class OfficialBrowserPlugin extends Plugin {
         }
         getActivity().runOnUiThread(() -> {
             try {
-                // Launch directly from MainActivity: no translucent controller can stay above it.
-                getActivity().startActivity(new Intent(Intent.ACTION_VIEW, page).addCategory(Intent.CATEGORY_BROWSABLE));
+                MainActivity activity = (MainActivity) getActivity();
+                if ("/dsh/authorize".equals(page.getPath())) {
+                    String provider = CustomTabsClient.getPackageName(activity, java.util.List.of("com.android.chrome"));
+                    if (provider != null) {
+                        activity.openAccountAuthorization(page, provider);
+                        call.resolve();
+                        return;
+                    }
+                }
+                activity.startActivity(new Intent(Intent.ACTION_VIEW, page).addCategory(Intent.CATEGORY_BROWSABLE));
                 call.resolve();
             } catch (ActivityNotFoundException | SecurityException exception) {
                 call.reject("Could not open the official page", exception);

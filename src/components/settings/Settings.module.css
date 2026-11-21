@@ -549,6 +549,9 @@
   font-size: 1rem;
 }
 
+.updateProgress { display: grid; gap: 8px; }
+.updateProgress progress { width: 100%; accent-color: var(--dsw-alias-brand-primary); }
+
 .importConfirm {
   --modal-header-gap: 10px;
 }

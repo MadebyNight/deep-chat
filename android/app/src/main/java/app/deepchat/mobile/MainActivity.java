@@ -1,5 +1,7 @@
 package app.deepchat.mobile;
 
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
@@ -10,6 +12,9 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.widget.TextView;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.browser.auth.AuthTabIntent;
+
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
@@ -18,6 +23,17 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 public class MainActivity extends BridgeActivity {
     private View recoveryPanel;
+    private final ActivityResultLauncher<Intent> accountAuthorization =
+            AuthTabIntent.registerActivityResultLauncher(this, result -> {
+                // The loopback callback has already validated authorization and stored credentials.
+                // The browser result only closes its tab. The WebView polls the account state.
+            });
+
+    void openAccountAuthorization(Uri page, String provider) {
+        AuthTabIntent tab = new AuthTabIntent.Builder().build();
+        tab.intent.setPackage(provider);
+        tab.launch(accountAuthorization, page, getPackageName());
+    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -26,6 +42,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(OfficialBrowserPlugin.class);
         registerPlugin(DeepSeekAccountPlugin.class);
         registerPlugin(HistoryExportDownloadPlugin.class);
+        registerPlugin(UpdateInstallerPlugin.class);
         super.onCreate(savedInstanceState);
     }
 

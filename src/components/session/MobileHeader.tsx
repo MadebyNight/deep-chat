@@ -30,7 +30,7 @@ export const MobileHeader = ({ title }: { title?: string }) => {
       <IconButton
         size="xl"
         tone="primary"
-        icon={<IconPlayMediaOutline16 />}
+        icon={<IconPlayMediaOutline16 muted={!autoReadAloud} />}
         aria-label={t('autoReadAloud')}
         aria-pressed={autoReadAloud}
         className={autoReadAloud ? styles.autoReadOn : undefined}

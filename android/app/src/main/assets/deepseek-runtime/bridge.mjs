@@ -85,6 +85,20 @@ export default class DeepChatMobile extends Service {
         }
         case 'signOut': result = await account.signOut(client); break
         case 'balance': result = { balance: await account.getBalance(client) }; break
+        case 'profile': {
+          const profile = await account.getProfile(client)
+          if (profile?.status !== 'ready') {
+            result = { profile: null }
+            break
+          }
+          const { name, avatarUrl } = profile.value
+          const avatar = typeof avatarUrl === 'string' && URL.canParse(avatarUrl) ? new URL(avatarUrl) : null
+          result = { profile: {
+            name: name?.trim() || null,
+            avatarUrl: avatar?.protocol === 'https:' && !avatar.username && !avatar.password ? avatar.href : null,
+          } }
+          break
+        }
         case 'transcribe': result = await this.transcribe(id); break
         case 'chat':
           await this.chat(id, params)
@@ -99,8 +113,12 @@ export default class DeepChatMobile extends Service {
       await send({ id, result })
     } catch (error) {
       const failure = error.failure ?? error
+      const inputOverflow = method === 'chat' && [undefined, 400, 413, 422].includes(failure.status) && (
+        /^(context_length_exceeded|context_window_exceeded|input_token_limit_exceeded)$/i.test(failure.code ?? '') ||
+        /maximum context length is\s+[\d,]+\s+tokens|(?:input tokens|input token count)\s*\([^)]*\)\s*exceed(?:s|ed)?\s+(?:the )?(?:maximum|context)|(?:input|prompt) (?:length|tokens).*exceed(?:s|ed)?.*(?:context window|context length|input token limit)/i.test(failure.message ?? '')
+      )
       await send({ id, error: {
-        code: typeof failure.code === 'string' ? failure.code : 'ACCOUNT_RUNTIME',
+        code: inputOverflow ? 'context_length_exceeded' : typeof failure.code === 'string' ? failure.code : 'ACCOUNT_RUNTIME',
         status: Number.isInteger(failure.status) ? failure.status : undefined,
       } })
     }
@@ -206,6 +224,7 @@ export default class DeepChatMobile extends Service {
         system,
         messages,
         reasoningEffort: body.thinking.type === 'enabled' ? 'high' : 'off',
+        ...(body.max_tokens === undefined ? {} : { maxTokens: body.max_tokens }),
         signal,
       })) {
         if (chunk.type === 'finish') {

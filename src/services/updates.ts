@@ -1,12 +1,23 @@
 import { App } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
+import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 import { create } from 'zustand'
 import { isNative } from './native.js'
 
 export const RELEASES_API = 'https://api.github.com/repos/MadebyNight/deep-chat/releases/latest'
 const DOWNLOAD_PATH = '/MadebyNight/deep-chat/releases/download/'
-export type AppRelease = { version: string; downloadUrl: string }
-type UpdateStatus = 'idle' | 'checking' | 'latest' | 'available' | 'unpublished' | 'limited' | 'network' | 'invalid' | 'version-error' | 'download-error'
+export type AppRelease = { version: string; downloadUrl?: string }
+export const usesNativeUpdater = Capacitor.getPlatform() === 'android'
+type UpdateProgress = { source: 'GitHub' | 'Gitee'; bytes: number; total: number }
+const installer = registerPlugin<{
+  check(): Promise<{ version?: string; ready?: boolean }>
+  download(options: { version: string }): Promise<void>
+  cancel(): Promise<void>
+  install(options: { version: string }): Promise<{ needsPermission: boolean }>
+  addListener(event: 'progress', callback: (progress: UpdateProgress) => void): Promise<PluginListenerHandle>
+}>('UpdateInstaller')
+
+type UpdateStatus = 'idle' | 'checking' | 'latest' | 'available' | 'unpublished' | 'limited' | 'network' | 'invalid' | 'version-error'
 class UpdateError extends Error {
   constructor(readonly status: UpdateStatus) {
     super(status)
@@ -91,6 +102,11 @@ export const useUpdates = create(() => ({
   status: 'idle' as UpdateStatus,
   busy: false,
   downloading: false,
+  installing: false,
+  ready: false,
+  progress: null as UpdateProgress | null,
+  installPermissionNeeded: false,
+  actionError: null as 'download' | 'integrity' | 'storage' | 'install' | null,
   release: null as AppRelease | null,
   prompt: null as 'auto' | 'manual' | null,
 }))
@@ -110,6 +126,11 @@ export const initializeVersion = () => versionTask ??= (async () => {
 let checking: Promise<void> | undefined
 let manualRequested = false
 export const checkForUpdates = (manual = false): Promise<void> => {
+  const state = useUpdates.getState()
+  if (state.downloading || state.installing) {
+    if (manual) { useUpdates.setState({ prompt: 'manual' }) }
+    return Promise.resolve()
+  }
   manualRequested ||= manual
   if (checking) {
     return checking
@@ -120,6 +141,26 @@ export const checkForUpdates = (manual = false): Promise<void> => {
       const current = await initializeVersion()
       if (!current) {
         throw new UpdateError('version-error')
+      }
+      if (usesNativeUpdater) {
+        let update: Awaited<ReturnType<typeof installer.check>>
+        try {
+          update = await installer.check()
+        } catch (error) {
+          const code = (error as { code?: string } | null)?.code
+          throw new UpdateError(code === 'INVALID' ? 'invalid' : code === 'LIMITED' ? 'limited' : 'network')
+        }
+        const latest = update.version
+        const newer = latest !== undefined && compareVersions(latest, current) === 1
+        useUpdates.setState({
+          status: newer ? 'available' : 'latest',
+          release: newer ? { version: latest } : null,
+          ready: Boolean(newer && update.ready),
+          actionError: null,
+          installPermissionNeeded: false,
+          prompt: newer ? (manualRequested ? 'manual' : 'auto') : null,
+        })
+        return
       }
       const response = await fetch(RELEASES_API, {
         headers: { Accept: 'application/vnd.github+json' },
@@ -165,13 +206,28 @@ export const initializeUpdates = () => {
   }
 }
 export const dismissUpdate = () => useUpdates.setState({ prompt: null })
+let cancelRequested = false
 export const downloadUpdate = async () => {
-  const { release, downloading } = useUpdates.getState()
-  if (!release || downloading || !isReleaseDownload(release.downloadUrl)) {
+  const { release, downloading, ready } = useUpdates.getState()
+  if (!release || downloading || ready) {
     return
   }
-  useUpdates.setState({ downloading: true })
+  cancelRequested = false
+  useUpdates.setState({ downloading: true, progress: null, actionError: null })
+  let listener: PluginListenerHandle | undefined
   try {
+    if (usesNativeUpdater) {
+      listener = await installer.addListener('progress', (progress) => useUpdates.setState({ progress }))
+      if (cancelRequested) {
+        return
+      }
+      await installer.download({ version: release.version })
+      useUpdates.setState({ ready: true })
+      return
+    }
+    if (!isReleaseDownload(release.downloadUrl)) {
+      throw new UpdateError('invalid')
+    }
     if (isNative) {
       await Browser.open({ url: release.downloadUrl })
     } else {
@@ -179,9 +235,37 @@ export const downloadUpdate = async () => {
       if (opened) { opened.opener = null }
     }
     dismissUpdate()
-  } catch {
-    useUpdates.setState({ status: 'download-error' })
+  } catch (error) {
+    const code = (error as { code?: string } | null)?.code
+    if (code !== 'CANCELLED') {
+      useUpdates.setState({ actionError: code === 'INTEGRITY' || code === 'PACKAGE' ? 'integrity' : code === 'STORAGE' ? 'storage' : 'download' })
+    }
   } finally {
-    useUpdates.setState({ downloading: false })
+    await listener?.remove().catch(() => undefined)
+    useUpdates.setState({ downloading: false, progress: null })
+  }
+}
+
+export const cancelUpdateDownload = async () => {
+  if (usesNativeUpdater && useUpdates.getState().downloading) {
+    cancelRequested = true
+    await installer.cancel().catch(() => undefined)
+  }
+}
+
+export const installUpdate = async () => {
+  const { release, ready, installing } = useUpdates.getState()
+  if (!usesNativeUpdater || !release || !ready || installing) {
+    return
+  }
+  useUpdates.setState({ installing: true, actionError: null })
+  try {
+    const { needsPermission } = await installer.install({ version: release.version })
+    useUpdates.setState({ installPermissionNeeded: needsPermission })
+  } catch (error) {
+    const missing = (error as { code?: string } | null)?.code === 'MISSING'
+    useUpdates.setState({ actionError: missing ? 'download' : 'install', ready: !missing })
+  } finally {
+    useUpdates.setState({ installing: false })
   }
 }

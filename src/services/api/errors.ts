@@ -54,6 +54,17 @@ export const isRetryableApiError = (error: unknown): boolean => {
   )
 }
 
+export const isInputContextOverflow = (error: unknown): boolean =>
+  error instanceof ApiError &&
+  (error.kind === 'stream' ||
+    (error.kind === 'http' && [undefined, 400, 413, 422].includes(error.status))) &&
+  (/^(context_length_exceeded|context_window_exceeded|input_token_limit_exceeded)$/i.test(
+    error.code ?? ''
+  ) ||
+    /maximum context length is\s+[\d,]+\s+tokens|(?:input tokens|input token count)\s*\([^)]*\)\s*exceed(?:s|ed)?\s+(?:the )?(?:maximum|context)|(?:input|prompt) (?:length|tokens).*exceed(?:s|ed)?.*(?:context window|context length|input token limit)/i.test(
+      error.message
+    ))
+
 /** 服务端判定附件失效的情况：本地有原件时重新上传即可自愈 */
 export type FileErrorCode = 'fileIdMissing' | 'fileDataMissing' | 'invalidFileId'
 

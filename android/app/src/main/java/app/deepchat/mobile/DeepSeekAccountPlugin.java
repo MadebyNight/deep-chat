@@ -21,6 +21,8 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.TimeZone;
@@ -73,7 +75,7 @@ public final class DeepSeekAccountPlugin extends Plugin {
         String id = call.getString("id", "");
         String method = call.getString("method", "");
         if (!id.matches("[a-zA-Z0-9-]{1,64}") || !Arrays.asList("state", "signIn",
-                "cancelSignIn", "signOut", "balance", "chat", "cancelChat", "transcribe").contains(method)) {
+                "cancelSignIn", "signOut", "balance", "profile", "chat", "cancelChat", "transcribe").contains(method)) {
             call.reject("Invalid account operation");
             return;
         }
@@ -210,9 +212,10 @@ public final class DeepSeekAccountPlugin extends Plugin {
             Os.setenv("TMPDIR", context.getCacheDir().getAbsolutePath(), true);
             Os.setenv("TZ", TimeZone.getDefault().getID(), true);
             Os.setenv("NO_COLOR", "1", true);
+            Os.setenv("DEEPCHAT_ANDROID_PACKAGE", context.getPackageName(), true);
 
             String[] args = {
-                    "--expose-internals", "--require", new File(runtime, "probe-env.cjs").getPath(),
+                    "--expose-internals", "--preserve-symlinks", "--require", new File(runtime, "probe-env.cjs").getPath(),
                     new File(runtime, "node_modules/@deepseek-ai/dsh/lib/bin.js").getPath(),
                     "--profile", "deepchat"
             };
@@ -287,6 +290,7 @@ public final class DeepSeekAccountPlugin extends Plugin {
 
         private static void extract(Context context, File runtime) throws IOException {
             String root = runtime.getCanonicalPath() + File.separator;
+            var zodLinks = new ArrayList<Path>();
             try (ZipInputStream zip = new ZipInputStream(context.getAssets().open(ASSETS + "harness.zip"))) {
                 byte[] buffer = new byte[65536];
                 ZipEntry entry;
@@ -295,7 +299,9 @@ public final class DeepSeekAccountPlugin extends Plugin {
                     if (!name.startsWith("node_modules/") && !name.equals("probe-env.cjs")) continue;
                     File target = new File(runtime, name);
                     if (!target.getCanonicalPath().startsWith(root)) throw new IOException("Invalid runtime archive");
-                    if (entry.isDirectory()) {
+                    if (name.matches("node_modules/@deepseek-ai/[^/]+/node_modules/\\.deepchat-zod-link")) {
+                        zodLinks.add(target.toPath().resolveSibling("zod"));
+                    } else if (entry.isDirectory()) {
                         Files.createDirectories(target.toPath());
                     } else {
                         Files.createDirectories(target.getParentFile().toPath());
@@ -304,6 +310,14 @@ public final class DeepSeekAccountPlugin extends Plugin {
                             while ((count = zip.read(buffer)) != -1) out.write(buffer, 0, count);
                         }
                     }
+                }
+            }
+            if (!zodLinks.isEmpty()) {
+                Path shared = runtime.toPath().resolve("node_modules/.deepchat-zod-4.6.6");
+                if (!Files.isRegularFile(shared.resolve("package.json"))) throw new IOException("Missing shared Zod package");
+                for (Path link : zodLinks) {
+                    Files.createDirectories(link.getParent());
+                    Files.createSymbolicLink(link, link.getParent().relativize(shared));
                 }
             }
         }
@@ -319,7 +333,7 @@ public final class DeepSeekAccountPlugin extends Plugin {
         }
 
         private static void deleteTree(File path) throws IOException {
-            File[] children = path.listFiles();
+            File[] children = Files.isSymbolicLink(path.toPath()) ? null : path.listFiles();
             if (children != null) {
                 for (File child : children) deleteTree(child);
             }

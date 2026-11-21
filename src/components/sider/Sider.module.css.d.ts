@@ -20,6 +20,10 @@ declare const styles: {
   readonly "drawer": string;
   readonly "drawerMask": string;
   readonly "mobile": string;
+  readonly "bottomMobile": string;
+  readonly "accountRow": string;
+  readonly "accountAvatar": string;
+  readonly "account": string;
 };
 export = styles;
 

@@ -28,6 +28,7 @@ import { useUpdates } from '../../services/updates.js'
 import { isNative, saveArchive } from '../../services/native.js'
 import {
   setAutoCollapseThinking,
+  setAutoCompactContext,
   setAutoReadAloud,
   setChatFontSize,
   setLocale,
@@ -150,6 +151,7 @@ const SettingsContent = () => {
       personalization: (
         <section className={styles.settingsGroup}>
           <ThinkingCollapseSetting />
+          <ContextCompactionSetting />
         </section>
       ),
       voice: (
@@ -211,6 +213,7 @@ const SettingsContent = () => {
               <LocaleSetting />
               <TtsVoiceSetting />
               <ThinkingCollapseSetting />
+              <ContextCompactionSetting />
               <AutoReadSetting />
               <VersionSetting />
             </>
@@ -599,6 +602,25 @@ const ThinkingCollapseSetting = () => {
           checked={autoCollapseThinking}
           aria-label={t('settingsAutoCollapseThinking')}
           onClick={() => setAutoCollapseThinking(!autoCollapseThinking)}
+        />
+      }
+    />
+  )
+}
+
+const ContextCompactionSetting = () => {
+  const t = useTranslate()
+  const enabled = useSettings((state) => state.autoCompactContext)
+  return (
+    <SettingCell
+      label={t('settingsAutoCompactContext')}
+      description={t('settingsAutoCompactContextDescription')}
+      status={null}
+      action={
+        <Switch
+          checked={enabled}
+          aria-label={t('settingsAutoCompactContext')}
+          onClick={() => setAutoCompactContext(!enabled)}
         />
       }
     />

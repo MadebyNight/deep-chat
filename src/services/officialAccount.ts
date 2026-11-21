@@ -23,7 +23,9 @@ export type AccountChunk =
   | { type: 'usage'; usage: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number } }
   | { type: 'finish'; reason: string }
 
-type AccountOperation = 'state' | 'signIn' | 'cancelSignIn' | 'signOut' | 'balance' | 'chat' | 'cancelChat' | 'transcribe'
+type AccountProfile = { name: string | null; avatarUrl: string | null }
+type AccountOperation = 'state' | 'signIn' | 'cancelSignIn' | 'signOut' | 'balance' | 'profile' | 'chat' | 'cancelChat' | 'transcribe'
+let profileRevision = 0
 const account = registerPlugin<{
   availability(): Promise<{ supported: boolean }>
   request<T>(options: { id: string; method: AccountOperation; params?: object }): Promise<T>
@@ -34,17 +36,32 @@ export const useOfficialAccount = create(() => ({
   available: false,
   active: readPreference(preference) === 'true' && Capacitor.getPlatform() === 'android',
   signedIn: false,
+  profile: null as AccountProfile | null,
   authorizing: false,
   browserOpened: false,
 }))
 
 export function selectOfficialAccount(active: boolean) {
   writePreference(preference, active ? 'true' : null)
-  useOfficialAccount.setState({ active })
+  if (!active) profileRevision++
+  useOfficialAccount.setState(active ? { active } : { active, profile: null })
 }
 
 export const officialAccountRequest = <T>(method: AccountOperation, params?: object, id = crypto.randomUUID()) =>
   account.request<T>({ id, method, params })
+
+async function refreshOfficialProfile() {
+  const revision = ++profileRevision
+  try {
+    const { profile } = await officialAccountRequest<{ profile: AccountProfile | null }>('profile')
+    const { active, signedIn } = useOfficialAccount.getState()
+    if (revision === profileRevision && active && signedIn) {
+      useOfficialAccount.setState({ profile })
+    }
+  } catch {
+    // Profile display is optional and does not affect the connection.
+  }
+}
 
 export async function transcribeOfficialRecording(audio: Blob, signal: AbortSignal) {
   const id = crypto.randomUUID()
@@ -91,9 +108,11 @@ export async function initializeOfficialAccount() {
     const { supported } = await account.availability()
     useOfficialAccount.setState({ available: supported })
     if (supported && useOfficialAccount.getState().active) {
-      applyAccountState(await officialAccountRequest<AccountState>('state'))
+      if (applyAccountState(await officialAccountRequest<AccountState>('state'))) {
+        void refreshOfficialProfile()
+      }
     } else if (!supported) {
-      useOfficialAccount.setState({ active: false })
+      selectOfficialAccount(false)
     }
   } catch {
     // The user can retry through the connection dialog.
@@ -132,6 +151,7 @@ export async function signInOfficialAccount() {
     signal.throwIfAborted()
     applyAccountState(state)
     selectOfficialAccount(true)
+    void refreshOfficialProfile()
   } catch (error) {
     await officialAccountRequest('cancelSignIn').catch(() => undefined)
     throw error

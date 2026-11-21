@@ -105,6 +105,13 @@ export type AssistantMessage = MessageBranch & {
 
 export type Message = UserMessage | AssistantMessage
 
+export type ContextCheckpoint = {
+  version: 1
+  throughReplyId: string
+  fingerprint: string
+  summary: string
+}
+
 export type Session = {
   id: string
   title: string
@@ -113,6 +120,7 @@ export type Session = {
   pinned?: boolean
   /** 包含所有分支的消息，按创建顺序存储。 */
   messages: Message[]
+  contextCheckpoint?: ContextCheckpoint
   /** undefined 表示线性消息列表；null 表示空会话。 */
   rootMessageId?: string | null
 }

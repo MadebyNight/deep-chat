@@ -45,6 +45,7 @@ declare const styles: {
   readonly "dataStatus": string;
   readonly "dataDialog": string;
   readonly "historyLinkForm": string;
+  readonly "updateProgress": string;
   readonly "importConfirm": string;
   readonly "importConfirmText": string;
   readonly "deleteConfirm": string;

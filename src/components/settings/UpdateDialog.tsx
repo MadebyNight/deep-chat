@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useTranslate, type TranslationKey } from '../../i18n/index.js'
-import { checkForUpdates, dismissUpdate, downloadUpdate, useUpdates } from '../../services/updates.js'
+import {
+  cancelUpdateDownload, checkForUpdates, dismissUpdate, downloadUpdate, installUpdate,
+  usesNativeUpdater, useUpdates,
+} from '../../services/updates.js'
 import { Button } from '../base/Button.js'
 import { IconChevronRightOutline14 } from '../base/icons.js'
 import { Modal } from '../base/Modal.js'
@@ -43,7 +46,7 @@ export const VersionSetting = ({ showAction = false }: { showAction?: boolean })
 
 export const UpdateDialog = ({ allowAutomatic }: { allowAutomatic: boolean }) => {
   const t = useTranslate()
-  const { version, release, prompt, status, downloading } = useUpdates()
+  const { version, release, prompt, downloading, installing, ready, progress, installPermissionNeeded, actionError } = useUpdates()
   const [visible, setVisible] = useState(false)
   useEffect(() => {
     if (prompt !== 'auto' || !allowAutomatic || visible) {
@@ -74,10 +77,15 @@ export const UpdateDialog = ({ allowAutomatic }: { allowAutomatic: boolean }) =>
     return null
   }
   const close = () => {
-    if (!downloading) {
+    if (downloading) {
+      void cancelUpdateDownload()
+    } else if (!installing) {
       dismissUpdate()
     }
   }
+  const errorKey = actionError === 'integrity' ? 'updateIntegrityError'
+    : actionError === 'storage' ? 'updateStorageError'
+    : actionError === 'install' ? 'updateInstallError' : 'updateDownloadError'
   return (
     <Modal
       title={t('updateAvailable')}
@@ -85,15 +93,27 @@ export const UpdateDialog = ({ allowAutomatic }: { allowAutomatic: boolean }) =>
       onClose={close}
       footer={
         <>
-          <Button size="m" variant="outlined" disabled={downloading} onClick={close}>{t('updateLater')}</Button>
-          <Button size="m" disabled={downloading} onClick={() => void downloadUpdate()}>{t('updateDownload')}</Button>
+          <Button size="m" variant="outlined" disabled={installing || (downloading && !usesNativeUpdater)} onClick={close}>
+            {t(downloading ? 'cancel' : 'updateLater')}
+          </Button>
+          <Button size="m" disabled={downloading || installing} onClick={() => void (ready ? installUpdate() : downloadUpdate())}>
+            {t(ready ? 'updateInstall' : 'updateDownload')}
+          </Button>
         </>
       }
     >
       <div className="connection-body">
         <p>{t('updateVersionChange', { current: version, latest: release.version })}</p>
-        <p>{t('updateDownloadHint')}</p>
-        {status === 'download-error' ? <p role="alert" className="connection-error">{t('updateDownloadError')}</p> : null}
+        {downloading && usesNativeUpdater ? (
+          <div role="status" className={styles.updateProgress}>
+            <span>{progress ? t('updateProgress', { source: progress.source, percent: Math.floor(progress.bytes * 100 / progress.total) }) : t('updatePreparing')}</span>
+            <progress aria-label={t('updateDownload')} max={progress?.total} value={progress?.bytes} />
+          </div>
+        ) : (
+          <p>{t(ready ? (installPermissionNeeded ? 'updatePermissionHint' : 'updateInstallHint')
+            : usesNativeUpdater ? 'updateNativeDownloadHint' : 'updateDownloadHint')}</p>
+        )}
+        {actionError && <p role="alert" className="connection-error">{t(errorKey)}</p>}
       </div>
     </Modal>
   )

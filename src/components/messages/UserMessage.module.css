@@ -61,14 +61,12 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 28px;
-  margin-top: 6px;
+  min-height: 28px;
+  margin-top: 4px;
 }
 
 .actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  composes: messageActions from './MessageList.module.css';
   opacity: 0;
   transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
 

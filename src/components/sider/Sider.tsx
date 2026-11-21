@@ -9,6 +9,7 @@ import {
   NewChatIcon,
 } from '../base/icons.js'
 import { setSiderCollapsed } from '../../services/settings.js'
+import { useOfficialAccount } from '../../services/officialAccount.js'
 import { groupSessions } from '../../services/chat/sessionGroups.js'
 import { newChat, removeSession, useChatStore } from '../../services/chat/store.js'
 import { Button } from '../base/Button.js'
@@ -24,6 +25,63 @@ import {
 } from './mobileSiderState.js'
 import { SessionItem } from './SessionItem.js'
 import styles from './Sider.module.css'
+
+const AccountAvatar = ({ url }: { url: string | null }) => {
+  const [failed, setFailed] = useState(false)
+  return (
+    <span className={styles.accountAvatar} aria-hidden="true">
+      {url && !failed ? (
+        <img src={url} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+      ) : (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+        >
+          <circle cx="10" cy="7" r="2.75" />
+          <path d="M4.5 16v-.5a3.5 3.5 0 0 1 3.5-3.5h4a3.5 3.5 0 0 1 3.5 3.5v.5" />
+        </svg>
+      )}
+    </span>
+  )
+}
+
+const SiderSettings = ({ mobile }: { mobile: boolean }) => {
+  const t = useTranslate()
+  const signedIn = useOfficialAccount((state) => state.active && state.signedIn)
+  const profile = useOfficialAccount((state) => state.profile)
+  const showSettings = () => {
+    if (mobile) closeMobileSider()
+    openSettings('general')
+  }
+  if (!signedIn) {
+    return (
+      <button type="button" className={styles.settings} onClick={showSettings}>
+        <span className={styles.settingsIcon}>
+          <IconSettingsOutline16 />
+        </span>
+        <span className={styles.settingsLabel}>{t('settings')}</span>
+      </button>
+    )
+  }
+  const avatar = profile?.avatarUrl ?? null
+  return (
+    <div className={styles.accountRow}>
+      <AccountAvatar key={avatar} url={avatar} />
+      <span className={styles.account}>{profile?.name || t('siderDeepSeekAccount')}</span>
+      <IconButton
+        size="xl"
+        icon={<IconSettingsOutline16 />}
+        aria-label={t('settings')}
+        onClick={showSettings}
+      />
+    </div>
+  )
+}
 
 export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const t = useTranslate()
@@ -225,30 +283,13 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
                 {t('delete')} ({selection.length})
               </Button>
             ) : (
-              <button
-                type="button"
-                className={styles.settings}
-                onClick={() => {
-                  closeMobileSider()
-                  openSettings('general')
-                }}
-              >
-                <span className={styles.settingsIcon}>
-                  <IconSettingsOutline16 />
-                </span>
-                <span className={styles.settingsLabel}>{t('settings')}</span>
-              </button>
+              <SiderSettings mobile />
             )}
           </div>
         )
       ) : (
         <div className={styles.bottom}>
-          <button type="button" className={styles.settings} onClick={() => openSettings('general')}>
-            <span className={styles.settingsIcon}>
-              <IconSettingsOutline16 />
-            </span>
-            <span className={styles.settingsLabel}>{t('settings')}</span>
-          </button>
+          <SiderSettings mobile={false} />
         </div>
       )}
       {deleting.length ? (

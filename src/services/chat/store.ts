@@ -4,11 +4,23 @@ import { createId } from '../../utils/id.js'
 import { ApiError, streamMessage, streamOfficialMessage } from '../api/client.js'
 import { useOfficialAccount } from '../officialAccount.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
-import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
+import {
+  extractFileIds,
+  getFileErrorCode,
+  isInputContextOverflow,
+  isRetryableApiError,
+} from '../api/errors.js'
 import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
 import { getSelectedPrompt, useSettings } from '../settings.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 import * as db from './db.js'
+import {
+  compactContext,
+  ContextPreparationError,
+  estimateMessages,
+  inputBudget,
+  selectContext,
+} from './compaction.js'
 import {
   clearAllDrafts,
   clearDraft,
@@ -874,12 +886,16 @@ const refreshRequest = (sessionId: string, request: Request): Request => {
  * - 历史轮次（仅进入上下文的）中没有 serverId 的附件，多为导入的图片：从最新的消息往前逐张补传，
  *   失败静默跳过，该附件不进入本次请求，下次发送时再试。
  */
-const prepareFiles = async (sessionId: string, request: Request, signal: AbortSignal) => {
+const prepareFiles = async (
+  sessionId: string,
+  request: Request,
+  apiKey: string,
+  signal: AbortSignal
+) => {
   const epoch = historyEpoch
   // 服务端判定 file_id 失效时会清掉会话里的 serverId，先用最新消息替换请求快照，
   // 否则快照里仍是旧 id，补传会直接复用它。
   request = refreshRequest(sessionId, request)
-  const apiKey = useSettings.getState().apiKey ?? ''
   const serverIds = new Map<string, string>()
   // 停止生成立即生效；上传本身不取消（输入框与其他消息可能共用同一任务），完成后照常写回 serverId
   const aborted = new Promise<never>((_, reject) => {
@@ -964,10 +980,9 @@ const reuploadInvalidatedFiles = (sessionId: string, request: Request, error: un
   }
   const mentioned = extractFileIds(error.message)
   // 重试时原始快照里还是上一轮已被清掉的 serverId，先换成会话里的最新消息
+  const sentIds = collectServerFileIds(request)
   const targets =
-    mentioned.length > 0
-      ? new Set(mentioned)
-      : collectServerFileIds(refreshRequest(sessionId, request))
+    mentioned.length > 0 ? new Set(mentioned.filter((id) => sentIds.has(id))) : sentIds
   const session = getSession(sessionId)
   if (targets.size === 0 || !session) {
     return false
@@ -1035,18 +1050,92 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   }
   streamFlushes.set(sessionId, flush)
 
+  const settings = useSettings.getState()
+  const apiKey = settings.apiKey ?? ''
+  const official = useOfficialAccount.getState().active
+  const stream = official
+    ? streamOfficialMessage
+    : (body: CreateMessageRequest, signal: AbortSignal) => streamMessage(apiKey, body, signal)
+  const budget = inputBudget(official)
+  const latestReminder = request.prefix
+    ? request.prefix.latestReminder
+    : createLatestReminder(settings)
+  const options = {
+    model: initial.model ?? MODEL,
+    system: getSelectedPrompt(settings.prompts)?.body ?? SYSTEM_PROMPT,
+    thinking: { type: initial.thinking ? ('enabled' as const) : ('disabled' as const) },
+    safety_check: SAFETY_CHECK,
+    tools: serverTools(initial.search ?? false),
+  }
+  const estimateBody = (history: Message[], summary?: string) => ({
+    ...options,
+    messages: estimateMessages(
+      history,
+      request.question,
+      request.prefix,
+      !!initial.thinking,
+      latestReminder,
+      summary
+    ),
+  })
+  const epoch = historyEpoch
+  let forceCompact = false
+  let retriedOverflow = false
+  let fileRetries = 0
   try {
-    for (let attempt = 0; ; attempt += 1) {
-      /** 附件补齐前出错属于上传失败，请求还没有发出 */
-      let preparing = true
+    for (;;) {
+      let preparing = false
+      let sent: Request | undefined
       let receivedContent = false
       try {
-        const prepared = await prepareFiles(sessionId, request, controller.signal)
+        const context = settings.autoCompactContext
+          ? await selectContext(request.history, getSession(sessionId)?.contextCheckpoint)
+          : undefined
+        const checkpoint = context
+          ? await compactContext(
+              context,
+              estimateBody,
+              budget,
+              stream,
+              controller.signal,
+              forceCompact
+            )
+          : undefined
+        controller.signal.throwIfAborted()
+        forceCompact = false
+        let history = context?.history ?? request.history
+        let summary = context?.summary
+        if (checkpoint) {
+          const current = getSession(sessionId)
+          const path = current && getVisibleMessages(current)
+          const questionIndex =
+            path?.findIndex((message) => message.id === request.question.id) ?? -1
+          const selected = await selectContext(
+            path && questionIndex >= 0 ? path.slice(0, questionIndex) : [],
+            checkpoint
+          )
+          controller.signal.throwIfAborted()
+          if (
+            !selected.masked ||
+            epoch !== historyEpoch ||
+            get().importingHistory ||
+            deletingSessions.has(sessionId)
+          ) {
+            throw new ContextPreparationError('summaryFailed')
+          }
+          updateSession(sessionId, (session) => ({ ...session, contextCheckpoint: checkpoint }))
+          persist(sessionId)
+          history = selected.history
+          summary = selected.summary
+        }
+        preparing = true
+        const prepared = await prepareFiles(
+          sessionId,
+          { ...request, history },
+          apiKey,
+          controller.signal
+        )
         preparing = false
-        // 附件就绪后获取本轮信息；续写沿用原回答快照，重新生成的快照独立保存。
-        const latestReminder = prepared.prefix
-          ? prepared.prefix.latestReminder
-          : createLatestReminder(useSettings.getState())
         reply = { ...reply, latestReminder }
         updateReply(sessionId, reply)
         persist(sessionId)
@@ -1054,21 +1143,17 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           prepared.history,
           prepared.question,
           prepared.prefix,
-          initial.thinking ?? false,
-          latestReminder
+          !!initial.thinking,
+          latestReminder,
+          summary
         )
         const messageBody: CreateMessageRequest = {
-          model: initial.model ?? MODEL,
-          system: getSelectedPrompt(useSettings.getState().prompts)?.body ?? SYSTEM_PROMPT,
+          ...options,
           messages,
-          thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
-          safety_check: SAFETY_CHECK,
-          tools: serverTools(initial.search ?? false),
           ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
         }
-        const events = useOfficialAccount.getState().active
-          ? streamOfficialMessage(messageBody, controller.signal)
-          : streamMessage(useSettings.getState().apiKey ?? '', messageBody, controller.signal)
+        sent = prepared
+        const events = stream(messageBody, controller.signal)
         const blockIndexes = new Map<number, number>()
         for await (const event of events) {
           receivedContent ||= event.type === 'content_block_start'
@@ -1107,20 +1192,37 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           })
           break
         }
+        if (settings.autoCompactContext && sent && !receivedContent && !retriedOverflow && isInputContextOverflow(error)) {
+          retriedOverflow = true
+          forceCompact = true
+          continue
+        }
         // 附件失效：重新补传后重发。收到过内容块（含丢弃的客户端工具）后不自动重发。
         if (
-          attempt < FILE_RETRY_LIMIT &&
+          sent &&
+          fileRetries < FILE_RETRY_LIMIT &&
           !receivedContent &&
-          reuploadInvalidatedFiles(sessionId, request, error)
+          reuploadInvalidatedFiles(sessionId, sent, error)
         ) {
-          await waitForRetry(attempt, controller.signal)
+          await waitForRetry(fileRetries++, controller.signal)
           if (controller.signal.aborted) {
             reply = settleReply(reply, 'stopped', Date.now())
             break
           }
           continue
         }
-        if (error instanceof ApiError && error.kind === 'interrupted' && reply.stopReason) {
+        if (error instanceof ContextPreparationError || isInputContextOverflow(error)) {
+          reply = settleReply(reply, 'error', Date.now(), {
+            kind: 'protocol',
+            message: '',
+            localMessage: {
+              key:
+                error instanceof ContextPreparationError && error.reason === 'summaryFailed'
+                  ? 'replyRequestFailed'
+                  : 'replyContextTooLong',
+            },
+          })
+        } else if (error instanceof ApiError && error.kind === 'interrupted' && reply.stopReason) {
           // 已收到 message_delta 的结束原因，只是缺了结尾的 message_stop
           reply = settleReply(reply, 'done', Date.now())
         } else if (error instanceof ApiError) {

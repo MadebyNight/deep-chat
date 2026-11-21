@@ -37,7 +37,8 @@ export class ApiError extends Error {
   constructor(
     readonly kind: ApiErrorKind,
     message: string | TranslationMessage,
-    readonly status?: number
+    readonly status?: number,
+    readonly code?: string
   ) {
     super(typeof message === 'string' ? message : translate(message.key, message.params))
     this.name = 'ApiError'
@@ -58,15 +59,17 @@ const readErrorResponse = async (
 ): Promise<ApiError> => {
   const text = await response.text().catch(() => '')
   let message = text || fallback
+  let code: string | undefined
   try {
     const body: unknown = JSON.parse(text)
     if (isErrorBody(body)) {
       message = body.error.message
+      code = body.error.code ?? body.error.type
     }
   } catch {
     // 非 JSON 响应体直接展示原文
   }
-  return new ApiError(kind, message, response.status)
+  return new ApiError(kind, message, response.status, code)
 }
 
 export const request = async (url: string, init: RequestInit): Promise<Response> => {
@@ -210,7 +213,7 @@ export async function* streamOfficialMessage(
     }
     const key = failure?.code === 'ACCOUNT_SEARCH_FAILED' ? 'connectionAccountSearchFailed'
       : failure?.code === 'ACCOUNT_ATTACHMENT' ? 'connectionAccountAttachment' : 'connectionAccountError'
-    throw new ApiError('http', { key }, status)
+    throw new ApiError('http', { key }, status, failure?.code)
   } finally {
     if (usage) {reportUsage?.(usage)}
   }
@@ -264,7 +267,7 @@ export async function* streamMessage(
         }
       }
       if (isErrorBody(payload)) {
-        throw new ApiError('stream', payload.error.message)
+        throw new ApiError('stream', payload.error.message, undefined, payload.error.code ?? payload.error.type)
       }
       if (eventName === 'error') {
         throw new ApiError('stream', data)

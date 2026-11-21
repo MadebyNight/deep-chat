@@ -180,6 +180,7 @@ export type CreateMessageRequest = {
   tools: (DeepseekWebSearchTool | DeepseekReadUrlTool)[]
   safety_check: { level: 'high' }
   title?: { enabled: boolean }
+  max_tokens?: number
 }
 
 // ---------- 响应：流式事件 ----------

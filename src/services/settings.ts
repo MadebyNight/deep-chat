@@ -20,6 +20,7 @@ type Settings = {
   autoReadAloud: boolean
   /** 思考内容自动折叠：生成结束后收起思考过程，只留标题行 */
   autoCollapseThinking: boolean
+  autoCompactContext: boolean
   thinking: boolean
   search: boolean
   prompts: PromptPreferences
@@ -34,6 +35,7 @@ const KEYS = {
   ttsVoice: 'chat-demo:tts-voice',
   autoReadAloud: 'chat-demo:auto-read-aloud',
   autoCollapseThinking: 'chat-demo:auto-collapse-thinking',
+  autoCompactContext: 'deepchat:auto-compact-context',
   thinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
   systemPrompt: 'deepchat:system-prompt',
@@ -129,6 +131,7 @@ export const useSettings = create<Settings>(() => ({
   autoReadAloud: readPreference(KEYS.autoReadAloud) === 'true',
   // 未保存过时默认开启，与官方「思考内容自动折叠」初始状态一致
   autoCollapseThinking: readPreference(KEYS.autoCollapseThinking) !== 'false',
+  autoCompactContext: readPreference(KEYS.autoCompactContext) !== 'false',
   thinking: readPreference(KEYS.thinking) === 'true',
   search: readPreference(KEYS.search) === 'true',
   prompts: initialPrompts(),
@@ -163,6 +166,11 @@ export const setAutoReadAloud = (autoReadAloud: boolean) => {
 export const setAutoCollapseThinking = (autoCollapseThinking: boolean) => {
   writePreference(KEYS.autoCollapseThinking, String(autoCollapseThinking))
   useSettings.setState({ autoCollapseThinking })
+}
+
+export const setAutoCompactContext = (autoCompactContext: boolean) => {
+  writePreference(KEYS.autoCompactContext, String(autoCompactContext))
+  useSettings.setState({ autoCompactContext })
 }
 
 export const initializeCredentials = async () => {

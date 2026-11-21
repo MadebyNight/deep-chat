@@ -1,0 +1,160 @@
+import groovy.json.JsonSlurper
+
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.security.DigestInputStream
+import java.security.MessageDigest
+import java.time.LocalDateTime
+import java.util.zip.CRC32
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
+
+String sharedZod = 'node_modules/.deepchat-zod-4.6.6/'
+String zodLink = '.deepchat-zod-link'
+String zodManifest = 'package.json'
+String zodVersion = '4.6.6'
+
+// Keep declarations referenced by the shipped JavaScript, even when the feature is inactive on Android.
+List<String> declarationExceptions = [
+        'node_modules/@deepseek-ai/dsh-experimental-client-ui-forge/',
+        'node_modules/@deepseek-ai/libreoffice-kit/',
+        'node_modules/bowser/',
+        'node_modules/undici/'
+]
+
+def accountModule = 'node_modules/@deepseek-ai/dsh-deepseek-account/lib/index.js'
+
+def addAndroidAuthorizationReturn = { String source ->
+    def upstreamSuccess = source =~ /if \(outcome\.status === "authorized" && attempt\.completionUrl !== void 0\) attempt\.callback\?\.writeHead\(302, \{/
+    if (!upstreamSuccess.find()) {
+        throw new GradleException('DeepSeek account success handler changed. Revalidate the Android browser return.')
+    }
+    int offset = upstreamSuccess.start()
+    if (upstreamSuccess.find()) throw new GradleException('Ambiguous DeepSeek account success handler')
+    // The upstream handler reaches this branch only after validating the callback and committing credentials.
+    String androidSuccess = '''const deepChatPackage = process.env.DEEPCHAT_ANDROID_PACKAGE ?? "";
+                if (outcome.status === "authorized" && /^app[.]deepchat[.]mobile(?:[.][a-z][a-z0-9]*)?$/.test(deepChatPackage)) {
+                    const returnUrl = `${deepChatPackage}://account/authorized`;
+                    const intentUrl = `intent://account/authorized#Intent;scheme=${deepChatPackage};package=${deepChatPackage};end`;
+                    attempt.callback?.writeHead(200, {
+                        "content-type": "text/html; charset=utf-8",
+                        "cache-control": "no-store",
+                        "referrer-policy": "no-referrer",
+                        "content-security-policy": "default-src 'none'; script-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"
+                    }).end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Deep Chat</title><p id="status">Authorization complete.</p><a id="return" href="${intentUrl}">Return to Deep Chat</a><script>if(navigator.language.startsWith('zh')){document.querySelector('#status').textContent='授权完成。';document.querySelector('#return').textContent='返回 Deep Chat';}location.replace('${returnUrl}');</script>`);
+                } else '''
+    source.substring(0, offset) + androidSuccess + source.substring(offset)
+}
+
+ext.packAccountHarness = { File source, File output, boolean trim ->
+    Files.createDirectories(output.parentFile.toPath())
+    def temporary = Files.createTempFile(output.parentFile.toPath(), 'harness-', '.zip')
+    try {
+        new ZipFile(source).withCloseable { input ->
+            def entries = input.entries().toList()
+            def zodCopies = entries.findAll { entry ->
+                entry.name ==~ /node_modules\/@deepseek-ai\/[^\/]+\/node_modules\/zod\/.+/
+            }.groupBy { entry ->
+                entry.name.substring(0, entry.name.indexOf('/node_modules/zod/') + '/node_modules/zod/'.length())
+            }
+            def json = new JsonSlurper()
+            List<String> sharedCopies = []
+            if (!entries.any { it.name.startsWith(sharedZod) }) {
+                Map<String, List<String>> signatures = zodCopies.collectEntries { prefix, files ->
+                    def manifest = input.getEntry(prefix + zodManifest)
+                    if (manifest == null || input.getInputStream(manifest).withCloseable { json.parse(it).version } != zodVersion) {
+                        return [:]
+                    }
+                    // Include directory names as well as SHA-256 hashes of every file.
+                    [(prefix): files.collect { entry ->
+                        def name = entry.name.substring(prefix.length())
+                        if (entry.isDirectory()) return name
+                        def digest = MessageDigest.getInstance('SHA-256')
+                        input.getInputStream(entry).withCloseable { stream ->
+                            new DigestInputStream(stream, digest).transferTo(OutputStream.nullOutputStream())
+                        }
+                        return name + ':' + digest.digest().encodeHex().toString()
+                    }.sort()]
+                }
+                def matchingGroups = signatures.keySet().groupBy { signatures[it] }.values()
+                def matches = matchingGroups.max { it.size() }
+                if (matches != null && matches.size() > 1) {
+                    sharedCopies = matches.sort()
+                }
+            }
+
+            Map<String, ZipEntry> files = [:]
+            entries.each { entry ->
+                String name = entry.name
+                // Android extracts only node_modules and the Node startup shim.
+                if (!name.startsWith('node_modules/') && name != 'probe-env.cjs') return
+                def nestedZod = name =~ /^(node_modules\/@deepseek-ai\/[^\/]+\/node_modules\/zod\/)/
+                if (nestedZod.find()) {
+                    String prefix = nestedZod.group(1)
+                    if (sharedCopies.contains(prefix)) {
+                        if (sharedCopies.first() != prefix) return
+                        name = sharedZod + name.substring(prefix.length())
+                    }
+                }
+                if (trim) {
+                    if (name ==~ /node_modules\/node-pty\/(?:build\/Release\/conpty|third_party\/conpty\/[^\/]+\/win10-[^\/]+)\/[^\/]+\.(?:dll|exe)/) return
+                    if (name ==~ /.*\.d\.(?:ts|mts|cts)/ && !declarationExceptions.any { name.startsWith(it) }) return
+                    // The published domino package includes its Yarn workspace plugin for development.
+                    if (name.startsWith('node_modules/@mixmark-io/domino/.yarn/')) return
+                }
+                files[name] = entry
+            }
+            sharedCopies.each { prefix -> files[prefix.substring(0, prefix.length() - 'zod/'.length()) + zodLink] = null }
+
+            if (!files.containsKey('probe-env.cjs') || !files.containsKey('node_modules/@deepseek-ai/dsh/lib/bin.js')) {
+                throw new GradleException('Incomplete DeepSeek account runtime archive')
+            }
+            def accountEntry = files[accountModule]
+            if (accountEntry == null) throw new GradleException('Missing DeepSeek account module')
+            byte[] accountCode = input.getInputStream(accountEntry).withCloseable {
+                addAndroidAuthorizationReturn(it.getText('UTF-8')).getBytes('UTF-8')
+            }
+            def accountCrc = new CRC32()
+            accountCrc.update(accountCode)
+
+            // ZipInputStream creates the parents of every extracted file. Preserve empty directories.
+            def parentDirectories = new HashSet<String>()
+            files.keySet().each { name ->
+                for (int slash = name.lastIndexOf('/', name.length() - 2); slash >= 0; slash = name.lastIndexOf('/', slash - 1)) {
+                    parentDirectories.add(name.substring(0, slash + 1))
+                }
+            }
+            files.keySet().removeAll(parentDirectories)
+
+            long unpackedBytes = 0
+            int fileCount = 0
+            // Let the APK compress the ZIP as one stream, including repeated data across files.
+            new ZipOutputStream(new BufferedOutputStream(Files.newOutputStream(temporary))).withCloseable { archive ->
+                files.sort().each { name, original ->
+                    def entry = new ZipEntry(name)
+                    entry.setTimeLocal(LocalDateTime.of(2000, 1, 1, 0, 0))
+                    entry.method = ZipEntry.STORED
+                    boolean patchedAccount = name == accountModule
+                    entry.size = patchedAccount ? accountCode.length : original == null ? 0 : original.size
+                    entry.crc = patchedAccount ? accountCrc.value : original == null ? 0 : original.crc
+                    archive.putNextEntry(entry)
+                    if (patchedAccount) {
+                        archive.write(accountCode)
+                    } else if (original != null && !original.isDirectory()) {
+                        input.getInputStream(original).withCloseable { it.transferTo(archive) }
+                    }
+                    if (original != null && !original.isDirectory()) {
+                        unpackedBytes += entry.size
+                        fileCount++
+                    }
+                    archive.closeEntry()
+                }
+            }
+            logger.lifecycle("DeepSeek Harness: ${Files.size(temporary)} ZIP bytes, ${fileCount} files, ${unpackedBytes} unpacked bytes")
+        }
+        Files.move(temporary, output.toPath(), StandardCopyOption.REPLACE_EXISTING)
+    } finally {
+        Files.deleteIfExists(temporary)
+    }
+}
