@@ -58,8 +58,10 @@
     object-fit: cover;
   }
 
-  &:hover .remove {
-    opacity: 1;
+  @media (hover: hover) and (pointer: fine) {
+    &:hover .remove {
+      opacity: 1;
+    }
   }
 }
 
@@ -281,8 +283,10 @@
   transition-property: border, background;
   transition-duration: 0.2s;
 
-  &:hover:not(:disabled) {
-    background-color: var(--dsw-alias-interactive-bg-hover);
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(:disabled) {
+      background-color: var(--dsw-alias-interactive-bg-hover);
+    }
   }
 
   &:disabled {
@@ -295,8 +299,10 @@
     color: var(--dsw-alias-brand-text);
     border-color: var(--dsw-alias-button-ghost-active-border);
 
-    &:hover {
-      background-color: var(--dsw-alias-button-ghost-active-hover);
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background-color: var(--dsw-alias-button-ghost-active-hover);
+      }
     }
   }
 }
@@ -327,13 +333,68 @@
   object-fit: contain;
 }
 
+.composer {
+  width: 100%;
+  min-width: 0;
+}
+
+.composer:has(.attachmentChoices) :is(.textarea, .mirror) {
+  min-height: calc(var(--line-height) * 2 + var(--input-padding-top) + 8px);
+}
+
+@media (max-width: 439px) {
+  .composer:has(.attachmentChoices) :is(.textarea, .mirror) {
+    min-height: calc(var(--line-height) * 1.5 + var(--input-padding-top) + 8px);
+  }
+}
+
 .attachmentChoices {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+  margin: clamp(8px, 1.6dvh, 14px) 8px clamp(8px, 3.5dvh, 28px);
+
+  button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+    min-height: clamp(64px, 13dvh, 108px);
+    padding: 10px 4px;
+    border: 1px solid var(--dsw-alias-border-l2);
+    border-radius: 15px;
+    background: var(--dsw-alias-bg-layer-2);
+    color: var(--dsw-alias-label-primary);
+    font: inherit;
+    font-size: 0.8125rem;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+
+    &[data-pressed] {
+      background: var(--dsw-alias-interactive-bg-hover);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--dsw-alias-brand-text);
+      outline-offset: 2px;
+    }
+  }
+
+  svg {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+  }
 }
 
 @media (max-width: 767px) {
+  .home + .attachmentChoices {
+    margin-bottom: 8px;
+  }
+
   .wrapper {
     container-type: inline-size;
   }
@@ -411,8 +472,10 @@
   cursor: pointer;
   transition: background 0.2s ease;
 
-  &:not(.disabled):hover {
-    background: var(--dsw-alias-button-primary-hover);
+  @media (hover: hover) and (pointer: fine) {
+    &:not(.disabled):hover {
+      background: var(--dsw-alias-button-primary-hover);
+    }
   }
 
   &.disabled {

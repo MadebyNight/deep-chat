@@ -1,11 +1,9 @@
+import { ActionButton, Input, IconEditOutline16, IconEllipsisOutline16, IconTrashOutline16, IconButton, Menu } from "../base/index.js"
 import clsx from 'clsx'
 import { memo, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { IconEditOutline16, IconEllipsisOutline16, IconTrashOutline16 } from '../base/icons.js'
 import { renameSession, selectSession, toggleSessionPinned } from '../../services/chat/store.js'
 import type { SessionSummary } from '../../services/chat/types.js'
-import { IconButton } from '../base/IconButton.js'
-import { Menu } from '../base/Menu.js'
 import { closeMobileSider } from './mobileSiderState.js'
 import styles from './SessionItem.module.css'
 
@@ -36,7 +34,7 @@ export const SessionItem = memo(function SessionItem({
       }
     }
     return (
-      <input
+      <Input
         className={styles.renameInput}
         defaultValue={displayTitle}
         autoFocus
@@ -55,7 +53,7 @@ export const SessionItem = memo(function SessionItem({
 
   return (
     <div className={clsx(styles.item, (active || selected) && styles.active)}>
-      <button
+      <ActionButton
         type="button"
         className={styles.title}
         aria-current={active || undefined}
@@ -71,7 +69,7 @@ export const SessionItem = memo(function SessionItem({
       >
         {selected !== undefined ? <span aria-hidden>{selected ? '☑' : '☐'} </span> : null}
         {displayTitle}
-      </button>
+      </ActionButton>
       {selected === undefined ? (
         <div className={styles.action}>
           <Menu

@@ -1,7 +1,8 @@
+import { ActionButton, IconRefreshOutline16, IconShareOutline16, IconWarningOutline16, IconButton, Button } from "../base/index.js"
 import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo } from 'react'
-import { IconRefreshOutline16, IconShareOutline16, IconWarningOutline16 } from '../base/icons.js'
+
 import { describeReply } from '../../services/chat/describe.js'
 import { canContinueReply } from '../../services/chat/reply.js'
 import { continueReply, regenerateReply } from '../../services/chat/store.js'
@@ -9,8 +10,8 @@ import { stopReadAloud } from '../../services/speech/readAloud.js'
 import { shareText } from '../../services/native.js'
 import type { AssistantMessage as AssistantMessageType } from '../../services/chat/types.js'
 import { openConnection, visitOfficial } from '../../services/connection.js'
-import { IconButton } from '../base/IconButton.js'
-import { Button } from '../base/Button.js'
+
+
 import { Markdown } from '../markdown/Markdown.js'
 import { SiteThumbnails } from '../search/SiteLogo.js'
 import { toggleSearchPanel, useSearchPanel } from '../search/searchPanelState.js'
@@ -96,24 +97,24 @@ export const AssistantMessage = memo(function AssistantMessage({
           <IconWarningOutline16 />
           <span>
             {notice.text}
-            {notice.action === 'apiKey' ? (
+            {notice.action === 'apiKey' || notice.action === 'signIn' ? (
               <>
                 {' '}
-                <button
+                <ActionButton
                   type="button"
                   className={styles.noticeAction}
                   onClick={openConnection}
                 >
-                  {t('changeApiKey')}
-                </button>
+                  {t(notice.action === 'signIn' ? 'connectionAccountLogin' : 'changeApiKey')}
+                </ActionButton>
               </>
             ) : null}
             {notice.action === 'topUp' ? (
               <>
                 {' '}
-                <button type="button" className={styles.noticeAction} onClick={() => void visitOfficial('topup')}>
+                <ActionButton type="button" className={styles.noticeAction} onClick={() => void visitOfficial('topup')}>
                   {t('topUp')}
-                </button>
+                </ActionButton>
               </>
             ) : null}
           </span>

@@ -1,11 +1,12 @@
+import { ActionButton, IconPhotoErrorFill20, IconRefreshOutline16, Tooltip } from "../base/index.js"
 import clsx from 'clsx'
 import { useEffect, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { useUploads } from '../../services/attachments.js'
+import { attachmentTaskKey, useAttachmentScope, useUploads } from '../../services/attachments.js'
 import { loadFile } from '../../services/chat/db.js'
 import type { FileAttachment } from '../../services/chat/types.js'
-import { IconPhotoErrorFill20, IconRefreshOutline16 } from '../base/icons.js'
-import { Tooltip } from '../base/Tooltip.js'
+
+
 import { FileCard } from '../files/FileCard.js'
 import styles from './MessageFile.module.css'
 
@@ -32,14 +33,13 @@ const useFileUrl = (id: string) => {
 }
 
 /** 历史或失效附件的补传状态：只在还没有 serverId 时显示 */
-const useUploadState = (file: FileAttachment) =>
-  useUploads((state) => {
-    if (file.serverId) {
-      return null
-    }
-    const task = state.tasks[file.id]
-    return task?.status === 'uploading' || task?.status === 'error' ? task : null
+const useUploadState = (file: FileAttachment) => {
+  const scope = useAttachmentScope()
+  return useUploads((state) => {
+    const task = scope && state.tasks[attachmentTaskKey(file.id, scope)]
+    return task && (task.status === 'uploading' || task.status === 'error') ? task : null
   })
+}
 
 /**
  * 消息里的附件：
@@ -118,7 +118,7 @@ export const MessageFile = ({
       const retryLabel = t('uploadRetry', { message: errorText ?? t('uploadFileStatusFailed') })
       return (
         <Tooltip content={retryLabel}>
-          <button
+          <ActionButton
             type="button"
             className={clsx(styles.image, styles.imageThumb, styles.retryImage)}
             aria-label={retryLabel}
@@ -129,7 +129,7 @@ export const MessageFile = ({
               <IconRefreshOutline16 />
             </div>
             {reason}
-          </button>
+          </ActionButton>
         </Tooltip>
       )
     }

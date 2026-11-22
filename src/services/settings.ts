@@ -182,9 +182,15 @@ export const initializeCredentials = async () => {
   }
 }
 
+export const apiKeyFileScopePreference = 'deepchat:api-key-file-scope'
+
 export const setApiKey = async (apiKey: string | null) => {
+  const changed = apiKey !== useSettings.getState().apiKey
   if (isNative) {
     await credentials.write({ value: apiKey })
+  }
+  if (changed) {
+    writePreference(apiKeyFileScopePreference, crypto.randomUUID())
   }
   useSettings.setState({ apiKey })
 }

@@ -1,3 +1,4 @@
+import { ActionButton, Input, Textarea, Button, IconButton, Modal, IconCheckOutline16, IconChevronDownOutline14, IconCopyOutline16, IconEditOutline16, IconTrashOutline16 } from "../base/index.js"
 import { useId, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import {
@@ -7,16 +8,6 @@ import {
   type PromptPreset,
 } from '../../services/settings.js'
 import { createId } from '../../utils/id.js'
-import { Button } from '../base/Button.js'
-import { IconButton } from '../base/IconButton.js'
-import { Modal } from '../base/Modal.js'
-import {
-  IconCheckOutline16,
-  IconChevronDownOutline14,
-  IconCopyOutline16,
-  IconEditOutline16,
-  IconTrashOutline16,
-} from '../base/icons.js'
 import { showToast } from '../base/toastState.js'
 import styles from './Welcome.module.css'
 
@@ -91,7 +82,7 @@ export function PromptPicker() {
 
   return (
     <section className={styles.prompt}>
-      <button
+      <ActionButton
         ref={toggleRef}
         className={styles.promptToggle}
         type="button"
@@ -101,10 +92,10 @@ export function PromptPicker() {
       >
         <span className={styles.promptTitle}>{selected?.title ?? t('prompt')}</span>
         <IconChevronDownOutline14 />
-      </button>
+      </ActionButton>
       <div id={listId} className={styles.promptList} hidden={!expanded}>
         <div className={styles.promptRow}>
-          <button
+          <ActionButton
             type="button"
             className={styles.promptChoice}
             aria-pressed={!selected}
@@ -112,11 +103,11 @@ export function PromptPicker() {
           >
             <span className={styles.promptTitle}>{t('promptDefault')}</span>
             {!selected && <IconCheckOutline16 />}
-          </button>
+          </ActionButton>
         </div>
         {prompts.presets.map((preset) => (
           <div className={styles.promptRow} key={preset.id}>
-            <button
+            <ActionButton
               type="button"
               className={styles.promptChoice}
               title={preset.title}
@@ -125,7 +116,7 @@ export function PromptPicker() {
             >
               <span className={styles.promptTitle}>{preset.title}</span>
               {preset.id === selected?.id && <IconCheckOutline16 />}
-            </button>
+            </ActionButton>
             <IconButton
               size="xl"
               aria-label={t('promptEditItem', { name: preset.title })}
@@ -205,7 +196,7 @@ export function PromptPicker() {
           >
             <label className={styles.promptField}>
               {t('promptName')}
-              <input
+              <Input
                 value={editor.title}
                 onChange={(event) => setEditor({ ...editor, title: event.target.value })}
                 placeholder={t('promptNamePlaceholder')}
@@ -213,7 +204,7 @@ export function PromptPicker() {
             </label>
             <label className={styles.promptField}>
               {t('promptBody')}
-              <textarea
+              <Textarea
                 rows={10}
                 aria-describedby={helpId}
                 value={editor.body}

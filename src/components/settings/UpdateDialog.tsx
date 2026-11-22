@@ -1,12 +1,10 @@
+import { ActionButton, Button, IconChevronRightOutline14, Modal } from "../base/index.js"
 import { useEffect, useState } from 'react'
 import { useTranslate, type TranslationKey } from '../../i18n/index.js'
 import {
   cancelUpdateDownload, checkForUpdates, dismissUpdate, downloadUpdate, installUpdate,
   usesNativeUpdater, useUpdates,
 } from '../../services/updates.js'
-import { Button } from '../base/Button.js'
-import { IconChevronRightOutline14 } from '../base/icons.js'
-import { Modal } from '../base/Modal.js'
 import styles from './Settings.module.css'
 
 const checkMessages: Record<string, TranslationKey> = {
@@ -24,7 +22,7 @@ export const VersionSetting = ({ showAction = false }: { showAction?: boolean })
   const [message, setMessage] = useState<TranslationKey | null>(null)
   return (
     <>
-      <button
+      <ActionButton
         type="button"
         className={styles.settingsLink}
         disabled={busy}
@@ -38,7 +36,7 @@ export const VersionSetting = ({ showAction = false }: { showAction?: boolean })
         {t(showAction ? 'checkUpdates' : 'currentVersion')}
         {busy || !showAction ? <span>{busy ? t('updateChecking') : version ?? '—'}</span> : null}
         <IconChevronRightOutline14 />
-      </button>
+      </ActionButton>
       {message ? <p role="status" className={styles.description}>{t(message)}</p> : null}
     </>
   )

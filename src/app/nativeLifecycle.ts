@@ -34,7 +34,7 @@ export const initializeNative = () => {
   run(() => NativeApp.addListener('backButton', () => {
     if (document.body.classList.contains('keyboard-open')) {
       void Keyboard.hide().catch(() => {})
-    } else if (document.querySelector('[role="dialog"], [role="menu"], [role="listbox"]')) {
+    } else if (document.querySelector('[role="dialog"], [role="menu"], [role="listbox"], [data-attachment-panel]')) {
       document.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
       )

@@ -2,19 +2,7 @@ import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo, useEffect, useState, type ReactNode } from 'react'
 import { useSettings } from '../../services/settings.js'
-import {
-  IconBrowseOutline16,
-  IconBrowseWarningOutline16,
-  IconChevronDownOutline14,
-  IconChevronRightOutline14,
-  IconCheckedOutline14,
-  IconCloseFill14,
-  IconLinkOutline16,
-  IconRightUpOutline14,
-  IconSearchOutline16,
-  IconSearchWarningOutline16,
-  IconThinkOutline16,
-} from '../base/icons.js'
+import { IconBrowseOutline16, IconBrowseWarningOutline16, IconChevronDownOutline14, IconChevronRightOutline14, IconCheckedOutline14, IconCloseFill14, IconLinkOutline16, IconRightUpOutline14, IconSearchOutline16, IconSearchWarningOutline16, IconThinkOutline16, Tooltip } from "../base/index.js"
 import type { AssistantMessage } from '../../services/chat/types.js'
 import {
   getAreaTitle,
@@ -29,7 +17,7 @@ import {
   type Source,
   type Step,
 } from '../../services/chat/view.js'
-import { Tooltip } from '../base/Tooltip.js'
+
 import { Markdown } from '../markdown/Markdown.js'
 import { SiteThumbnails } from '../search/SiteLogo.js'
 import { toggleSearchPanel, useSearchPanel } from '../search/searchPanelState.js'

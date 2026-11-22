@@ -2,7 +2,7 @@ import { translate, type TranslationMessage } from '../../i18n/index.js'
 import { recordChatRequest } from '../chat/usage.js'
 import { readMessageEvent } from './parseEvent.js'
 import { readServerSentEvents } from './sse.js'
-import { applyAccountState, officialAccountChunks, officialAccountRequest, type AccountState } from '../officialAccount.js'
+import { applyAccountState, officialAccountRequest, officialAccountStream, type AccountState } from '../officialAccount.js'
 import type {
   ApiErrorBody,
   CreateMessageRequest,
@@ -136,86 +136,25 @@ export const deleteFile = async (apiKey: string, fileId: string): Promise<void> 
   })
 }
 
-export async function* streamOfficialMessage(
-  body: CreateMessageRequest, signal: AbortSignal
-): AsyncGenerator<MessageStreamEvent> {
-  signal.throwIfAborted()
-  const reportUsage = recordChatRequest(new Date())
-  let usage: MessageUsage | undefined
-  let stopReason: 'end_turn' | 'max_tokens' | undefined
-  let searchId = ''
-  // The two local search blocks precede the provider's non-negative stream indexes.
-  const searchIndex = -2
-  const resultsIndex = -1
+export const accountRequestError = (error: unknown) => {
+  const failure = error as { code?: string; data?: { status?: number; detail?: string } } | undefined
+  const status = failure?.code === 'ACCOUNT_SIGN_IN_REQUIRED' ? 401 : failure?.data?.status
+  if (status === 401) {
+    void officialAccountRequest<AccountState>('state').then(applyAccountState).catch(() => undefined)
+    return new ApiError('http', { key: 'connectionAccountSignInAgain' }, status, failure?.code)
+  }
+  return new ApiError('http', failure?.data?.detail || { key: 'connectionAccountError' }, status, failure?.code)
+}
+
+export async function* streamOfficialMessage(body: CreateMessageRequest, signal: AbortSignal) {
+  const stream = officialAccountStream('messages', { ...body, stream: true }, signal)
   try {
-    for await (const chunk of officialAccountChunks(body, signal)) {
-      switch (chunk.type) {
-        case 'search-start':
-          searchId = `srvtoolu_s_0_${crypto.randomUUID().replaceAll('-', '')}`
-          yield { type: 'content_block_start', index: searchIndex, content_block: {
-            type: 'server_tool_use', id: searchId, name: 'deepseek_web_search', kind: 'search',
-            caller: { type: 'direct' }, input: { action: 'search', queries: [chunk.query] },
-          } }
-          yield { type: 'content_block_stop', index: searchIndex }
-          break
-        case 'search-results':
-          yield { type: 'content_block_start', index: resultsIndex, content_block: {
-            type: 'web_search_tool_result', tool_use_id: searchId, kind: 'search',
-            content: chunk.sources.map(({ url, title, snippet }) => ({
-              type: 'web_search_result', url, title, snippet, site_icon: null, site_name: null,
-              encrypted_content: '', page_age: null,
-            })),
-          } }
-          yield { type: 'content_block_stop', index: resultsIndex }
-          break
-        case 'block-start':
-          if (chunk.blockType === 'text' || chunk.blockType === 'reasoning') {
-            yield { type: 'content_block_start', index: chunk.index,
-              content_block: chunk.blockType === 'text'
-                ? { type: 'text', text: '' }
-                : { type: 'thinking', thinking: '', signature: '' } }
-          }
-          break
-        case 'text-delta':
-          yield { type: 'content_block_delta', index: chunk.index, delta: { type: 'text_delta', text: chunk.text } }
-          break
-        case 'reasoning-delta':
-          yield { type: 'content_block_delta', index: chunk.index, delta: { type: 'thinking_delta', thinking: chunk.text } }
-          break
-        case 'block-end':
-          yield { type: 'content_block_stop', index: chunk.index }
-          break
-        case 'usage':
-          usage = {
-            input_tokens: chunk.usage.inputTokens,
-            output_tokens: chunk.usage.outputTokens,
-            cache_creation_input_tokens: chunk.usage.cacheWriteTokens ?? 0,
-            cache_read_input_tokens: chunk.usage.cacheReadTokens ?? 0,
-          }
-          break
-        case 'finish':
-          if (chunk.reason === 'stop' || chunk.reason === 'max-tokens') {
-            stopReason = chunk.reason === 'stop' ? 'end_turn' : 'max_tokens'
-          }
-          break
-      }
-    }
-    if (!stopReason) {throw new ApiError('interrupted', '')}
-    yield { type: 'message_delta', delta: { stop_reason: stopReason, stop_sequence: null }, usage }
-    yield { type: 'message_stop' }
+    yield* readMessageStream(stream, signal, recordChatRequest(new Date()))
   } catch (error) {
     if (signal.aborted || error instanceof ApiError) {throw error}
-    const failure = error as { code?: string; data?: { status?: number } }
-    const status = failure?.code === 'ACCOUNT_SIGN_IN_REQUIRED' ? 401
-      : failure?.code === 'QUOTA' ? 402 : failure?.data?.status
-    if (status === 401) {
-      void officialAccountRequest<AccountState>('state').then(applyAccountState).catch(() => undefined)
-    }
-    const key = failure?.code === 'ACCOUNT_SEARCH_FAILED' ? 'connectionAccountSearchFailed'
-      : failure?.code === 'ACCOUNT_ATTACHMENT' ? 'connectionAccountAttachment' : 'connectionAccountError'
-    throw new ApiError('http', { key }, status, failure?.code)
+    throw accountRequestError(error)
   } finally {
-    if (usage) {reportUsage?.(usage)}
+    await stream.cancel().catch(() => undefined)
   }
 }
 
@@ -255,9 +194,17 @@ export async function* streamMessage(
   if (!response.body || !contentType.includes('text/event-stream')) {
     throw await readErrorResponse(response, 'protocol', '')
   }
+  yield* readMessageStream(response.body, signal, reportUsage)
+}
+
+async function* readMessageStream(
+  stream: ReadableStream<Uint8Array>,
+  signal: AbortSignal,
+  reportUsage: ReturnType<typeof recordChatRequest>
+): AsyncGenerator<MessageStreamEvent> {
   let latestUsage: MessageUsage | undefined
   try {
-    for await (const { event: eventName, data } of readServerSentEvents(response.body, signal)) {
+    for await (const { event: eventName, data } of readServerSentEvents(stream, signal)) {
       let payload: unknown
       try {
         payload = JSON.parse(data)

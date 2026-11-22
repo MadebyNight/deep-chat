@@ -178,23 +178,41 @@ async function queryOfficialBalance(): Promise<Balance> {
   return { is_available: balance_infos.some((item) => Number(item.total_balance) > 0), balance_infos }
 }
 
-export const refreshBalance = async (finish = false) => {
+export const refreshBalance = async (finish = false, manual = false) => {
   const key = useSettings.getState().apiKey
   const official = hasOfficialConnection()
   const readBalance = official ? queryOfficialBalance : key ? () => queryBalance(key) : null
   if (!readBalance || useConnection.getState().busy) {
     return
   }
+  const stillConnected = () => official === hasOfficialConnection() &&
+    (official ? accountScope === useOfficialAccount.getState().fileScope : key === useSettings.getState().apiKey)
+  const accountScope = useOfficialAccount.getState().fileScope
   useConnection.setState({ busy: true, error: '' })
+  const motion = manual && typeof matchMedia === 'function' && !matchMedia('(prefers-reduced-motion: reduce)').matches
+  const animation = motion ? new Promise<void>((resolve) => setTimeout(resolve, 420)) : undefined
   try {
     const balance = await readBalance()
-    useConnection.setState({ balance, ...(finish && balance.is_available ? { open: false } : {}) })
+    if (stillConnected()) {
+      await animation
+    }
+    if (stillConnected()) {
+      useConnection.setState({ balance, ...(finish && balance.is_available ? { open: false } : {}) })
+    }
   } catch (error) {
-    useConnection.setState({ balance: null, error: connectionError(error) })
+    if (stillConnected()) {
+      await animation
+    }
+    if (stillConnected()) {
+      useConnection.setState({ ...(manual ? {} : { balance: null }), error: connectionError(error) })
+    }
   } finally {
-    useConnection.setState({ busy: false })
+    const changed = !stillConnected()
+    useConnection.setState({ busy: false, ...(changed ? { balance: null } : {}) })
     if (topupReturned) {
       resumeConnection()
+    } else if (changed) {
+      void refreshBalance()
     }
   }
 }

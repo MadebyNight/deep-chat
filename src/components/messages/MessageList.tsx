@@ -1,7 +1,7 @@
+import { ActionButton, IconChevronDownOutline14 } from "../base/index.js"
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useIsMobile } from '../../app/viewport.js'
 import { useTranslate } from '../../i18n/index.js'
-import { IconChevronDownOutline14 } from '../base/icons.js'
 import {
   buildMessageVersions,
   getVisibleMessages,
@@ -180,7 +180,7 @@ export const MessageList = ({
           </div>
         </div>
         {isMobile && aboveBottom ? (
-          <button
+          <ActionButton
             type="button"
             className={styles.jumpToBottom}
             aria-label={t('backToBottom')}
@@ -191,7 +191,7 @@ export const MessageList = ({
             }}
           >
             <IconChevronDownOutline14 />
-          </button>
+          </ActionButton>
         ) : null}
         {footer}
       </div>

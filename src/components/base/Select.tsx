@@ -1,3 +1,4 @@
+import { ActionButton } from "./Control.js"
 import clsx from 'clsx'
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -40,7 +41,7 @@ export const Select = <T extends string>({
 
   return (
     <>
-      <button
+      <ActionButton
         ref={anchorRef}
         type="button"
         className={clsx(styles.trigger, open && styles.open, className)}
@@ -58,7 +59,7 @@ export const Select = <T extends string>({
         <span className={styles.arrow}>
           <IconChevronDownOutline14 />
         </span>
-      </button>
+      </ActionButton>
       {open && !disabled
         ? createPortal(
             <div
@@ -69,7 +70,7 @@ export const Select = <T extends string>({
               aria-label={ariaLabel}
             >
               {options.map((option) => (
-                <div
+                <ActionButton
                   key={option.value}
                   role="option"
                   lang={option.lang}
@@ -82,7 +83,7 @@ export const Select = <T extends string>({
                 >
                   <span>{option.label}</span>
                   {option.value === value ? <IconCheckOutline16 /> : null}
-                </div>
+                </ActionButton>
               ))}
             </div>,
             document.body

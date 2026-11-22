@@ -1,8 +1,9 @@
+import { ActionButton, Input, IconEditOutline16, IconButton } from "../base/index.js"
 import { useState } from 'react'
-import { IconEditOutline16 } from '../base/icons.js'
+
 import { useSettings } from '../../services/settings.js'
 import { useIsMobile } from '../../app/viewport.js'
-import { IconButton } from '../base/IconButton.js'
+
 import { useApiKeyForm } from './useApiKeyForm.js'
 import { useTranslate } from '../../i18n/index.js'
 import styles from './Settings.module.css'
@@ -39,7 +40,7 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
           </div>
         ) : (
           <div className={styles.apiKeyInput}>
-            <input
+            <Input
               type="password"
               placeholder={t('apiKeyPlaceholder')}
               autoComplete="off"
@@ -63,7 +64,7 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
             {!isMobile && form.value.trim() ? (
               <>
                 <span className={styles.divider} />
-                <button
+                <ActionButton
                   type="button"
                   className={styles.confirm}
                   disabled={form.verifying}
@@ -72,7 +73,7 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
                   onClick={() => void form.submit()}
                 >
                   {form.verifying ? t('apiKeyVerifying') : t('confirm')}
-                </button>
+                </ActionButton>
               </>
             ) : null}
           </div>
@@ -87,7 +88,7 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
 export const ApiKeyConfirm = ({ editor: { showInput, form } }: { editor: ApiKeyEditor }) => {
   const t = useTranslate()
   return showInput && form.value.trim() ? (
-    <button
+    <ActionButton
       type="button"
       className={styles.mobileConfirm}
       disabled={form.verifying}
@@ -95,6 +96,6 @@ export const ApiKeyConfirm = ({ editor: { showInput, form } }: { editor: ApiKeyE
       onClick={() => void form.submit()}
     >
       {form.verifying ? t('apiKeyVerifying') : t('confirm')}
-    </button>
+    </ActionButton>
   ) : null
 }

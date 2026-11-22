@@ -1,20 +1,11 @@
+import { ActionButton, Input, IconCloseOutline16, IconPanelLeftOutline16, IconSearchOutline16, IconSettingsOutline16, NewChatIcon, Button, IconButton, Modal } from "../base/index.js"
 import clsx from 'clsx'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import {
-  IconCloseOutline16,
-  IconPanelLeftOutline16,
-  IconSearchOutline16,
-  IconSettingsOutline16,
-  NewChatIcon,
-} from '../base/icons.js'
 import { setSiderCollapsed } from '../../services/settings.js'
 import { useOfficialAccount } from '../../services/officialAccount.js'
 import { groupSessions } from '../../services/chat/sessionGroups.js'
 import { newChat, removeSession, useChatStore } from '../../services/chat/store.js'
-import { Button } from '../base/Button.js'
-import { IconButton } from '../base/IconButton.js'
-import { Modal } from '../base/Modal.js'
 import { showToast } from '../base/toastState.js'
 import { openSettings } from '../settings/settingsDialogState.js'
 import {
@@ -60,12 +51,12 @@ const SiderSettings = ({ mobile }: { mobile: boolean }) => {
   }
   if (!signedIn) {
     return (
-      <button type="button" className={styles.settings} onClick={showSettings}>
+      <ActionButton type="button" className={styles.settings} onClick={showSettings}>
         <span className={styles.settingsIcon}>
           <IconSettingsOutline16 />
         </span>
         <span className={styles.settingsLabel}>{t('settings')}</span>
-      </button>
+      </ActionButton>
     )
   }
   const avatar = profile?.avatarUrl ?? null
@@ -147,12 +138,12 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
     closeMobileSider()
   }
   const newChatButton = (
-    <button type="button" className={styles.newChat} onClick={startChat}>
+    <ActionButton type="button" className={styles.newChat} onClick={startChat}>
       <span className={styles.newChatIcon}>
         <NewChatIcon />
       </span>
       {t('newChat')}
-    </button>
+    </ActionButton>
   )
   const confirmDeletion = async () => {
     setDeletePending(true)
@@ -194,7 +185,7 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
           {searching ? (
             <label className={styles.search}>
               <IconSearchOutline16 />
-              <input
+              <Input
                 className={styles.searchInput}
                 type="search"
                 autoFocus
@@ -206,14 +197,14 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
             </label>
           ) : !selecting ? (
             <>
-              <button
+              <ActionButton
                 type="button"
                 className={styles.search}
                 onClick={() => setHistoryMode('search')}
               >
                 <IconSearchOutline16 />
                 {t('searchSessions')}
-              </button>
+              </ActionButton>
               {newChatButton}
             </>
           ) : null}

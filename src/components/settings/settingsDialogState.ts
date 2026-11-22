@@ -16,11 +16,8 @@ export const openSettings = (section: SettingsSection) =>
 
 export const closeSettings = () => useSettingsDialog.setState({ open: false })
 
-export const ensureChatConnection = () => hasOfficialConnection() || ensureApiKey()
-
-/** 附件与语音接口需要 API Key。 */
-export const ensureApiKey = () => {
-  if (useSettings.getState().apiKey) {
+export const ensureChatConnection = () => {
+  if (hasOfficialConnection() || useSettings.getState().apiKey) {
     return true
   }
   openConnection()

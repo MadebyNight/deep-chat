@@ -13,6 +13,10 @@
 - 本地工具链统一放在工作区 `.toolchain/`（不进代码仓）：`source tools/env.sh` 后即有好 JAVA_HOME / ANDROID_HOME / GRADLE_USER_HOME / adb / pnpm。
 - Android SDK Platform-Tools 用于安装与采集（仅开发用途），不是使用 App 的前置条件。
 
+## 组件库
+
+修改界面或交互前请阅读[组件库规范](src/components/COMPONENTS.md)。运行 `npm run components:list` 查找已有组件，运行 `npm run components:preview` 查看共享控件。AI 协作说明见 [AGENTS.md](AGENTS.md)。
+
 ## 构建
 
 ```bash

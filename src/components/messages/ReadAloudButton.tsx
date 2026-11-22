@@ -4,8 +4,8 @@ import {
   toggleReadAloud,
   useReadAloud,
 } from '../../services/speech/readAloud.js'
-import { IconPlayMediaOutline16 } from '../base/icons.js'
-import { IconButton } from '../base/IconButton.js'
+import { IconPlayMediaOutline16, IconButton } from "../base/index.js"
+
 import { showToast } from '../base/toastState.js'
 import { ReadingBars } from './ReadingBars.js'
 

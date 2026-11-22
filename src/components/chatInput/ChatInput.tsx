@@ -1,12 +1,6 @@
+import { ActionButton, Input, Textarea, IconCloseOutline16, IconGlobeLanguageOutline14, IconPaperclipOutline16, IconSendOutline16, IconStopFill16, IconThinkOutline14, IconButton, Tooltip } from "../base/index.js"
 import clsx from 'clsx'
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import {
-  IconGlobeLanguageOutline14,
-  IconPaperclipOutline16,
-  IconSendOutline16,
-  IconStopFill16,
-  IconThinkOutline14,
-} from '../base/icons.js'
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { setSearch, setThinking, useSettings } from '../../services/settings.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { sendMessage, stopReply, useChatStore } from '../../services/chat/store.js'
@@ -15,21 +9,22 @@ import {
   EMPTY_DRAFT,
   getDraft,
   prepareDraftMessage,
+  prepareDraftUploads,
   removeDraftAttachment,
   retryDraftAttachment,
   setDraftText,
   useDrafts,
 } from '../../services/chat/drafts.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
-import { IconButton } from '../base/IconButton.js'
-import { Tooltip } from '../base/Tooltip.js'
-import { Modal } from '../base/Modal.js'
-import { Button } from '../base/Button.js'
-import { ensureApiKey, ensureChatConnection } from '../settings/settingsDialogState.js'
-import { useOfficialAccount } from '../../services/officialAccount.js'
+import { ensureChatConnection } from '../settings/settingsDialogState.js'
 import { DragMask, useFileDrop } from './DragMask.js'
 import { showToast } from '../base/toastState.js'
-import { ACCEPT, useUploads } from '../../services/attachments.js'
+import {
+  ACCEPT,
+  getAttachmentConnection,
+  useAttachmentScope,
+  useUploads,
+} from '../../services/attachments.js'
 import { DraftAttachments } from './DraftAttachments.js'
 import { useVoiceInput } from './useVoiceInput.js'
 import { VoiceButton } from './VoiceButton.js'
@@ -40,16 +35,22 @@ import styles from './ChatInput.module.css'
 /** 输入框：自适应高度的文本框 + 文件 + 深度思考与智能搜索开关 + 语音输入 + 发送 / 停止 */
 export const ChatInput = memo(function ChatInput({ sessionId }: { sessionId: string | null }) {
   // 切换目标时释放录音、转写和 DOM 状态；文字与附件由草稿服务保留。
-  return <Input key={sessionId === null ? 'new' : `session:${sessionId}`} sessionId={sessionId} />
+  return <Composer key={sessionId === null ? 'new' : `session:${sessionId}`} sessionId={sessionId} />
 })
 
-const Input = ({ sessionId }: { sessionId: string | null }) => {
+const Composer = ({ sessionId }: { sessionId: string | null }) => {
   const t = useTranslate()
-  const official = useOfficialAccount((state) => state.active && state.signedIn)
+  const scope = useAttachmentScope()
   const draft = useDrafts((state) => state.drafts.get(sessionId) ?? EMPTY_DRAFT)
   const { text, attachments } = draft
   const setText = (value: string) => setDraftText(sessionId, value)
-  const draftReady = useUploads((state) => prepareDraftMessage(draft, state.tasks) !== null)
+  const draftReady = useUploads((state) => prepareDraftMessage(draft, state.tasks, scope) !== null)
+  useEffect(() => {
+    const connection = getAttachmentConnection()
+    if (connection?.scope === scope && connection) {
+      prepareDraftUploads(attachments, connection)
+    }
+  }, [attachments, scope])
   const streaming = useChatStore(
     (state) => sessionId !== null && Object.hasOwn(state.streaming, sessionId)
   )
@@ -58,11 +59,41 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const isMobile = useIsMobile()
   const search = useSettings((state) => state.search)
   const [attachmentPicker, setAttachmentPicker] = useState(false)
+  const showAttachmentPicker = isMobile && attachmentPicker && !importingHistory
+  const attachmentPanelId = useId()
+  const composerRef = useRef<HTMLDivElement>(null)
+  const attachmentPanelRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const togglesRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!showAttachmentPicker) {
+      return
+    }
+    const dismissOutside = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !composerRef.current?.contains(event.target) &&
+        !attachmentPanelRef.current?.contains(event.target)
+      ) {
+        setAttachmentPicker(false)
+      }
+    }
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented) {
+        setAttachmentPicker(false)
+      }
+    }
+    document.addEventListener('pointerdown', dismissOutside)
+    document.addEventListener('keydown', dismissOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', dismissOutside)
+      document.removeEventListener('keydown', dismissOnEscape)
+    }
+  }, [showAttachmentPicker])
 
   useLayoutEffect(() => {
     const toggles = togglesRef.current
@@ -82,21 +113,31 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   }, [isMobile, t])
 
   const acceptFiles = (files: File[]) => {
-    if (files.length === 0 || useChatStore.getState().importingHistory) {return}
-    if (official) {
-      showToast(t('connectionAccountAttachment'))
+    if (files.length === 0 || useChatStore.getState().importingHistory) {
       return
     }
-    if (!ensureApiKey()) {return}
-    const error = addDraftFiles(sessionId, files, useSettings.getState().apiKey ?? '')
+    if (!ensureChatConnection()) {
+      return
+    }
+    const connection = getAttachmentConnection()
+    if (!connection) {
+      return
+    }
+    const error = addDraftFiles(sessionId, files, connection)
     if (error) {
       showToast(error)
+      return
     }
+    setAttachmentPicker(false)
   }
   const retryFile = useCallback(
     (id: string) => {
-      if (!useChatStore.getState().importingHistory && ensureApiKey()) {
-        retryDraftAttachment(sessionId, id, useSettings.getState().apiKey ?? '')
+      if (useChatStore.getState().importingHistory || !ensureChatConnection()) {
+        return
+      }
+      const connection = getAttachmentConnection()
+      if (connection) {
+        retryDraftAttachment(sessionId, id, connection)
       }
     },
     [sessionId]
@@ -143,22 +184,15 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   const canSend = !importingHistory && !streaming && voice.status === 'idle' && draftReady
 
   const send = () => {
-    if (
-      useChatStore.getState().importingHistory ||
-      voice.status !== 'idle' ||
-      !prepareDraftMessage(getDraft(sessionId), useUploads.getState().tasks)
-    ) {
+    if (useChatStore.getState().importingHistory || voice.status !== 'idle') {
       return
     }
     // 文本与上传完成态由提交动作读取最新快照，不使用上一次渲染的草稿。
-    if (official && getDraft(sessionId).attachments.length > 0) {
-      showToast(t('connectionAccountAttachment'))
-      return
-    }
     if (!ensureChatConnection() || !sendMessage(sessionId)) {
       return
     }
     stopReadAloud()
+    setAttachmentPicker(false)
     if (isMobile) {
       textareaRef.current?.blur()
     } else {
@@ -167,242 +201,273 @@ const Input = ({ sessionId }: { sessionId: string | null }) => {
   }
 
   return (
-    <div
-      className={clsx(styles.wrapper, sessionId === null ? styles.home : styles.session)}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          textareaRef.current?.focus({ preventScroll: true })
-        }
-      }}
-    >
-      <DraftAttachments items={attachments} onRetry={retryFile} onRemove={removeFile} />
-      <div className={styles.textareaWrapper}>
-        <textarea
-          ref={textareaRef}
-          className={clsx(styles.textarea, recording && isMobile && styles.textareaHidden)}
-          placeholder={t('chatInputPlaceholderChat')}
-          rows={2}
-          // 移动端不自动聚焦，避免一打开就弹出键盘
-          autoFocus={!isMobile}
-          disabled={importingHistory}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onMouseDown={(event) => {
-            // 首次点击时手动聚焦，避免 Safari 把整个页面滚到输入框位置。
-            if (isMobile && event.button === 0 && document.activeElement !== event.currentTarget) {
-              event.preventDefault()
-              event.currentTarget.focus({ preventScroll: true })
-            }
-          }}
-          onKeyDown={(event) => {
-            if (
-              !isMobile &&
-              event.key === 'Enter' &&
-              !event.shiftKey &&
-              !event.nativeEvent.isComposing
-            ) {
-              event.preventDefault()
-              send()
-            }
-          }}
-          onPaste={(event) => {
-            const files = Array.from(event.clipboardData.files)
-            if (files.length > 0) {
-              event.preventDefault()
-              acceptFiles(files)
-            }
-          }}
-        />
-        {recording && isMobile ? <Spectrum getAnalyser={voice.getAnalyser} /> : null}
-        <div className={styles.mirror} aria-hidden>
-          {`${text}\n`}
-        </div>
-      </div>
+    <div className={styles.composer}>
       <div
-        className={styles.functionRow}
-        onMouseDown={(event) => {
-          if (
-            isMobile &&
-            document.activeElement === textareaRef.current &&
-            event.target instanceof Element &&
-            event.target.closest('button')
-          ) {
-            event.preventDefault()
+        ref={composerRef}
+        className={clsx(styles.wrapper, sessionId === null ? styles.home : styles.session)}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            textareaRef.current?.focus({ preventScroll: true })
           }
         }}
       >
-        {/* 深度思考 / 智能搜索开关，tooltip 在按钮上方 */}
-        <div ref={togglesRef} className={styles.toggles}>
-          <Tooltip content={t('deactivatedThinkTooltip')}>
-            <button
-              type="button"
-              className={clsx(styles.toggle, thinking && styles.selected)}
-              aria-label={t('thinkingSwitch')}
-              aria-pressed={thinking}
-              onClick={() => setThinking(!thinking)}
-            >
-              <IconThinkOutline14 />
-              <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
-            </button>
-          </Tooltip>
-          <Tooltip content={t('deactivatedSearchTooltip')}>
-            <button
-              type="button"
-              className={clsx(styles.toggle, search && styles.selected)}
-              aria-label={t('search')}
-              aria-pressed={search}
-              onClick={() => setSearch(!search)}
-            >
-              <IconGlobeLanguageOutline14 />
-              <span className={styles.toggleLabel}>{t('search')}</span>
-            </button>
-          </Tooltip>
+        <DraftAttachments
+          items={attachments}
+          scope={scope}
+          onRetry={retryFile}
+          onRemove={removeFile}
+        />
+        <div className={styles.textareaWrapper}>
+          <Textarea
+            ref={textareaRef}
+            className={clsx(styles.textarea, recording && isMobile && styles.textareaHidden)}
+            placeholder={t('chatInputPlaceholderChat')}
+            rows={2}
+            // 移动端不自动聚焦，避免一打开就弹出键盘
+            autoFocus={!isMobile}
+            disabled={importingHistory}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onFocus={() => setAttachmentPicker(false)}
+            onMouseDown={(event) => {
+              // 首次点击时手动聚焦，避免 Safari 把整个页面滚到输入框位置。
+              if (
+                isMobile &&
+                event.button === 0 &&
+                document.activeElement !== event.currentTarget
+              ) {
+                event.preventDefault()
+                event.currentTarget.focus({ preventScroll: true })
+              }
+            }}
+            onKeyDown={(event) => {
+              if (
+                !isMobile &&
+                event.key === 'Enter' &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing
+              ) {
+                event.preventDefault()
+                send()
+              }
+            }}
+            onPaste={(event) => {
+              const files = Array.from(event.clipboardData.files)
+              if (files.length > 0) {
+                event.preventDefault()
+                acceptFiles(files)
+              }
+            }}
+          />
+          {recording && isMobile ? <Spectrum getAnalyser={voice.getAnalyser} /> : null}
+          <div className={styles.mirror} aria-hidden>
+            {`${text}\n`}
+          </div>
         </div>
-        <div className={styles.right}>
-          {!isMobile ||
-          (!text.trim() && attachments.length === 0 && !streaming) ||
-          voice.status !== 'idle' ? (
-            <VoiceButton
-              className={isMobile ? styles.voiceButton : undefined}
-              status={voice.status}
-              disabled={!voice.available}
-              seconds={voice.seconds}
+        <div
+          className={styles.functionRow}
+          onMouseDown={(event) => {
+            if (
+              isMobile &&
+              document.activeElement === textareaRef.current &&
+              event.target instanceof Element &&
+              event.target.closest('button')
+            ) {
+              event.preventDefault()
+            }
+          }}
+        >
+          {/* 深度思考 / 智能搜索开关，tooltip 在按钮上方 */}
+          <div ref={togglesRef} className={styles.toggles}>
+            <Tooltip content={t('deactivatedThinkTooltip')}>
+              <ActionButton
+                type="button"
+                className={clsx(styles.toggle, thinking && styles.selected)}
+                aria-label={t('thinkingSwitch')}
+                aria-pressed={thinking}
+                onClick={() => setThinking(!thinking)}
+              >
+                <IconThinkOutline14 />
+                <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
+              </ActionButton>
+            </Tooltip>
+            <Tooltip content={t('deactivatedSearchTooltip')}>
+              <ActionButton
+                type="button"
+                className={clsx(styles.toggle, search && styles.selected)}
+                aria-label={t('search')}
+                aria-pressed={search}
+                onClick={() => setSearch(!search)}
+              >
+                <IconGlobeLanguageOutline14 />
+                <span className={styles.toggleLabel}>{t('search')}</span>
+              </ActionButton>
+            </Tooltip>
+          </div>
+          <div className={styles.right}>
+            {!isMobile ||
+            (!text.trim() && attachments.length === 0 && !streaming) ||
+            voice.status !== 'idle' ? (
+              <VoiceButton
+                className={isMobile ? styles.voiceButton : undefined}
+                status={voice.status}
+                disabled={!voice.available}
+                seconds={voice.seconds}
+                onClick={() => {
+                  if (voice.status !== 'idle' || !useChatStore.getState().importingHistory) {
+                    void voice.toggle()
+                  }
+                }}
+              />
+            ) : null}
+            <IconButton
+              size="m"
+              tone="primary"
+              className={clsx(isMobile && styles.addButton)}
+              icon={
+                showAttachmentPicker ? (
+                  <IconCloseOutline16 />
+                ) : isMobile ? (
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                  >
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v10M7 12h10" />
+                  </svg>
+                ) : (
+                  <IconPaperclipOutline16 />
+                )
+              }
+              tooltip={t(showAttachmentPicker ? 'close' : 'uploadFile')}
+              aria-expanded={isMobile ? showAttachmentPicker : undefined}
+              aria-controls={showAttachmentPicker ? attachmentPanelId : undefined}
+              disabled={importingHistory}
               onClick={() => {
-                if (
-                  voice.status !== 'idle' ||
-                  !useChatStore.getState().importingHistory
-                ) {
-                  void voice.toggle()
+                if (showAttachmentPicker) {
+                  setAttachmentPicker(false)
+                  return
+                }
+                if (!ensureChatConnection()) {
+                  return
+                }
+                if (isMobile) {
+                  textareaRef.current?.blur()
+                  setAttachmentPicker(true)
+                } else {
+                  fileInputRef.current?.click()
                 }
               }}
             />
-          ) : null}
-          <IconButton
-            size="m"
-            tone="primary"
-            className={clsx(isMobile && styles.addButton)}
-            icon={
-              isMobile ? (
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                >
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 7v10M7 12h10" />
-                </svg>
-              ) : (
-                <IconPaperclipOutline16 />
-              )
-            }
-            tooltip={t('uploadFile')}
-            disabled={importingHistory}
-            onClick={() => {
-              if (official) {
-                showToast(t('connectionAccountAttachment'))
-                return
-              }
-              if (!ensureApiKey()) {
-                return
-              }
-              if (isMobile) {
-                textareaRef.current?.blur()
-                setAttachmentPicker(true)
-              } else {
-                fileInputRef.current?.click()
-              }
-            }}
-          />
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            hidden
-            accept={ACCEPT}
-            onChange={(event) => {
-              acceptFiles(Array.from(event.target.files ?? []))
-              event.target.value = ''
-            }}
-          />
-          {streaming && sessionId ? (
-            <button
-              type="button"
-              className={styles.sendButton}
-              aria-label={t('chatInputStopButtonTooltip')}
-              onClick={() => {
-                stopReadAloud()
-                stopReply(sessionId)
+            <Input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              hidden
+              accept={ACCEPT}
+              onChange={(event) => {
+                acceptFiles(Array.from(event.target.files ?? []))
+                event.target.value = ''
               }}
-            >
-              <IconStopFill16 />
-            </button>
-          ) : !isMobile || !!text.trim() || attachments.length > 0 ? (
-            <button
-              type="button"
-              className={clsx(styles.sendButton, !canSend && styles.disabled)}
-              aria-label={t('send')}
-              aria-disabled={!canSend}
-              onClick={send}
-            >
-              <IconSendOutline16 />
-            </button>
-          ) : null}
-        </div>
-      </div>
-      {isMobile ? (
-        <>
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            hidden
-            onChange={(event) => {
-              acceptFiles(Array.from(event.currentTarget.files ?? []))
-              event.currentTarget.value = ''
-            }}
-          />
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            hidden
-            onChange={(event) => {
-              acceptFiles(Array.from(event.currentTarget.files ?? []))
-              event.currentTarget.value = ''
-            }}
-          />
-        </>
-      ) : null}
-      {attachmentPicker ? (
-        <Modal title={t('uploadFile')} closable onClose={() => setAttachmentPicker(false)}>
-          <div className={styles.attachmentChoices}>
-            {(
-              [
-                ['attachCamera', cameraInputRef],
-                ['attachPhotos', photoInputRef],
-                ['attachFiles', fileInputRef],
-              ] as const
-            ).map(([label, input]) => (
-              <Button
-                key={label}
-                variant="outlined"
+            />
+            {streaming && sessionId ? (
+              <ActionButton
+                type="button"
+                className={styles.sendButton}
+                aria-label={t('chatInputStopButtonTooltip')}
                 onClick={() => {
-                  input.current?.click()
-                  setAttachmentPicker(false)
+                  stopReadAloud()
+                  stopReply(sessionId)
                 }}
               >
-                {t(label)}
-              </Button>
-            ))}
+                <IconStopFill16 />
+              </ActionButton>
+            ) : !isMobile || !!text.trim() || attachments.length > 0 ? (
+              <ActionButton
+                type="button"
+                className={clsx(styles.sendButton, !canSend && styles.disabled)}
+                aria-label={t('send')}
+                aria-disabled={!canSend}
+                onClick={send}
+              >
+                <IconSendOutline16 />
+              </ActionButton>
+            ) : null}
           </div>
-        </Modal>
+        </div>
+        {isMobile ? (
+          <>
+            <Input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={(event) => {
+                acceptFiles(Array.from(event.currentTarget.files ?? []))
+                event.currentTarget.value = ''
+              }}
+            />
+            <Input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              hidden
+              onChange={(event) => {
+                acceptFiles(Array.from(event.currentTarget.files ?? []))
+                event.currentTarget.value = ''
+              }}
+            />
+          </>
+        ) : null}
+        {dragging ? <DragMask /> : null}
+      </div>
+      {showAttachmentPicker ? (
+        <div
+          ref={attachmentPanelRef}
+          id={attachmentPanelId}
+          role="group"
+          aria-label={t('uploadFile')}
+          data-attachment-panel
+          className={styles.attachmentChoices}
+        >
+          {(
+            [
+              [
+                'attachCamera',
+                cameraInputRef,
+                'M4 7h4l2-3h4l2 3h4a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1ZM15.5 13a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Z',
+              ],
+              ['attachPhotos', photoInputRef, 'M4 4h16v16H4zM4 17l5-5 4 4 3-3 4 4M15.5 8.5h.01'],
+              ['attachFiles', fileInputRef, 'M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6'],
+            ] as const
+          ).map(([label, input, path]) => (
+            <ActionButton
+              key={label}
+              type="button"
+              onClick={() => input.current?.click()}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.65"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d={path} />
+              </svg>
+              {t(label)}
+            </ActionButton>
+          ))}
+        </div>
       ) : null}
-      {dragging ? <DragMask /> : null}
     </div>
   )
 }

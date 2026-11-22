@@ -1,5 +1,6 @@
 import clsx from 'clsx'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { ActionButton } from './Control.js'
 import { Tooltip, type TooltipPlacement } from './Tooltip.js'
 import styles from './IconButton.module.css'
 
@@ -23,14 +24,13 @@ export const IconButton = ({
   tooltipPlacement?: TooltipPlacement
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'title'>) => {
   const button = (
-    <button
-      type="button"
+    <ActionButton
       className={clsx(styles.button, styles[size], styles[tone], className)}
       aria-label={tooltip}
       {...props}
     >
       {icon}
-    </button>
+    </ActionButton>
   )
   return tooltip ? (
     <Tooltip content={tooltip} placement={tooltipPlacement}>

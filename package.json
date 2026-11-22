@@ -10,6 +10,10 @@
     "build": "rspack build -c rspack.config.ts",
     "type": "tsc -p tsconfig.json",
     "lint": "oxlint src rspack.config.ts",
+    "components:check": "node component-catalog.mjs",
+    "components:list": "node component-catalog.mjs --list",
+    "components:update": "node component-catalog.mjs --update",
+    "components:preview": "rspack serve -c component-preview.config.ts",
     "format": "oxfmt --write ."
   },
   "dependencies": {
@@ -44,6 +48,7 @@
     "zustand": "4.4.7"
   },
   "devDependencies": {
+    "@babel/parser": "7.28.6",
     "@capacitor/cli": "^8.6.2",
     "@rspack/cli": "2.0.2",
     "@rspack/core": "2.0.2",

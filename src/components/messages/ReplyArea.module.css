@@ -12,8 +12,10 @@
   user-select: none;
   transition: color 0.2s;
 
-  &:hover {
-    color: var(--dsw-alias-label-primary);
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      color: var(--dsw-alias-label-primary);
+    }
   }
 }
 
@@ -169,8 +171,10 @@
     background-color: var(--dsw-alias-interactive-bg-hover);
   }
 
-  &.clickable:hover::before {
-    opacity: 1;
+  @media (hover: hover) and (pointer: fine) {
+    &.clickable:hover::before {
+      opacity: 1;
+    }
   }
 
   &.active::before {
@@ -263,9 +267,11 @@
 .pageDone .pageText {
   color: var(--dsw-alias-label-secondary);
 
-  &:hover {
-    color: var(--dsw-alias-label-primary);
-    text-decoration-color: var(--dsw-alias-label-tertiary);
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      color: var(--dsw-alias-label-primary);
+      text-decoration-color: var(--dsw-alias-label-tertiary);
+    }
   }
 }
 

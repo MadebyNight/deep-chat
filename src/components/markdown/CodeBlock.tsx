@@ -1,3 +1,4 @@
+import { ActionButton, IconCheckOutline16, IconCopyOutline16 } from "../base/index.js"
 import { useTranslate } from '../../i18n/index.js'
 import { memo, useEffect, useMemo, useReducer, useState } from 'react'
 import Prism from 'prismjs'
@@ -6,7 +7,7 @@ import {
   isHighlightLoaded,
   loadHighlight,
 } from '../../services/markdown/highlight.js'
-import { IconCheckOutline16, IconCopyOutline16 } from '../base/icons.js'
+
 import { showToast } from '../base/toastState.js'
 import { copyText } from '../../utils/clipboard.js'
 import { MermaidDiagram } from './MermaidDiagram.js'
@@ -30,27 +31,27 @@ const CodeInfoRow = ({
     <div className={styles.container}>
       {onToggleDiagram ? (
         <div className="md-code-block-switch" aria-label={t('mermaidSwitchLabel')}>
-          <button
+          <ActionButton
             type="button"
             className={styles.button}
             aria-pressed={showDiagram}
             onClick={() => !showDiagram && onToggleDiagram()}
           >
             {t('mermaidDiagram')}
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
             type="button"
             className={styles.button}
             aria-pressed={!showDiagram}
             onClick={() => showDiagram && onToggleDiagram()}
           >
             {t('mermaidCode')}
-          </button>
+          </ActionButton>
         </div>
       ) : (
         <span className={styles.name}>{infostring}</span>
       )}
-      <button
+      <ActionButton
         type="button"
         className={styles.button}
         onClick={async () => {
@@ -64,7 +65,7 @@ const CodeInfoRow = ({
       >
         {copied ? <IconCheckOutline16 /> : <IconCopyOutline16 />}
         <span>{t(copied ? 'copied' : 'copy')}</span>
-      </button>
+      </ActionButton>
     </div>
   )
 }

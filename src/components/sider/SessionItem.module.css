@@ -16,7 +16,7 @@
     color: var(--dsw-alias-brand-primary-invert);
   }
 
-  @media (hover: hover) {
+  @media (hover: hover) and (pointer: fine) {
     &:not(.active):hover {
       background-color: var(--dsw-specific-sidebar-nav-item-hover);
     }

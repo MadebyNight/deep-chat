@@ -30,11 +30,11 @@
   cursor: pointer;
   user-select: none;
 
-  &:active {
+  &[data-pressed] {
     background-color: var(--dsw-alias-interactive-bg-hover);
   }
 
-  @media (hover: hover) {
+  @media (hover: hover) and (pointer: fine) {
     &:hover {
       background-color: var(--dsw-alias-interactive-bg-hover);
     }

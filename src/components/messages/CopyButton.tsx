@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { IconCheckOutline16, IconCopyOutline16 } from '../base/icons.js'
-import { IconButton } from '../base/IconButton.js'
+import { IconCheckOutline16, IconCopyOutline16, IconButton } from "../base/index.js"
+
 import { showToast } from '../base/toastState.js'
 import { copyText } from '../../utils/clipboard.js'
 

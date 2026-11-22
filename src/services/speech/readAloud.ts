@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { TranslationMessage } from '../../i18n/index.js'
-import { ApiError } from '../api/client.js'
+import { accountRequestError, ApiError } from '../api/client.js'
+import { officialAccountStream, useOfficialAccount } from '../officialAccount.js'
 import { classifyApiError } from '../api/errors.js'
 import { synthesize, TTS_SAMPLE_RATE } from '../api/speech.js'
 import { useSettings } from '../settings.js'
@@ -61,6 +62,9 @@ export const describeReadAloudError = (error: unknown): TranslationMessage | str
   if (error instanceof ApiError && error.status === 400) {
     return { key: 'ttsUnavailable' }
   }
+  if (error instanceof ApiError && error.localMessage?.key === 'connectionAccountSignInAgain') {
+    return error.localMessage
+  }
   switch (classifyApiError(error)) {
     case 'unauthorized':
       return { key: 'apiKeyInvalidRetry' }
@@ -99,6 +103,8 @@ export const toggleReadAloud = (
   useReadAloud.setState({ messageId, status: 'loading' })
   // 音色在开始朗读时读取，设置中切换后下一次朗读生效
   const { apiKey, ttsVoice } = useSettings.getState()
+  const { active, signedIn } = useOfficialAccount.getState()
+  const official = active && signedIn
 
   void (async () => {
     let nextTime = 0
@@ -107,7 +113,11 @@ export const toggleReadAloud = (
     let streamEnded = false
     let rest = new Uint8Array(0)
     try {
-      const stream = await synthesize(apiKey ?? '', text, ttsVoice, controller.signal)
+      const stream = official
+        ? officialAccountStream('synthesize', {
+          text, voice_id: ttsVoice, format: 'pcm', filter_markdown: true,
+        }, controller.signal)
+        : await synthesize(apiKey ?? '', text, ttsVoice, controller.signal)
       const reader = stream.getReader()
       controller.signal.addEventListener('abort', () => void reader.cancel().catch(() => {}))
       for (;;) {
@@ -153,7 +163,7 @@ export const toggleReadAloud = (
     } catch (error) {
       if (!controller.signal.aborted) {
         finish(controller)
-        onError(error)
+        onError(official ? accountRequestError(error) : error)
       }
     }
   })()

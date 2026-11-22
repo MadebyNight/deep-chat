@@ -1,14 +1,17 @@
 import { create } from 'zustand'
 import { openDB, type IDBPDatabase } from 'idb'
-import { useSettings } from '../settings.js'
 import type { TranslationMessage } from '../../i18n/index.js'
 import { createId } from '../../utils/id.js'
 import {
+  attachmentTaskKey,
   cancelUpload,
+  getAttachmentConnection,
   isImage,
   resolveMimeType,
   uploadAttachment,
   validateFiles,
+  useUploads,
+  type AttachmentConnection,
   type UploadTask,
 } from '../attachments.js'
 import type { FileAttachment } from './types.js'
@@ -48,10 +51,10 @@ const updateDraft = (sessionId: string | null, update: (draft: Draft) => Draft) 
 export const setDraftText = (sessionId: string | null, text: string) =>
   updateDraft(sessionId, (draft) => ({ ...draft, text }))
 
-const upload = (attachment: DraftAttachment, apiKey: string) => {
+const upload = (attachment: DraftAttachment, connection: AttachmentConnection) => {
   // 上传任务负责记录错误，输入框的附件卡片展示失败及重试入口。
   void uploadAttachment(
-    apiKey,
+    connection,
     attachment.id,
     attachment.file,
     attachment.file.name,
@@ -63,7 +66,7 @@ const upload = (attachment: DraftAttachment, apiKey: string) => {
 export const addDraftFiles = (
   sessionId: string | null,
   files: File[],
-  apiKey: string
+  connection: AttachmentConnection
 ): TranslationMessage | null => {
   if (files.length === 0) {
     return null
@@ -82,30 +85,30 @@ export const addDraftFiles = (
     }
   })
   updateDraft(sessionId, (draft) => ({ ...draft, attachments: [...draft.attachments, ...added] }))
-  added.forEach((attachment) => upload(attachment, apiKey))
+  added.forEach((attachment) => upload(attachment, connection))
   return null
 }
 
 export const retryDraftAttachment = (
   sessionId: string | null,
   attachmentId: string,
-  apiKey: string
+  connection: AttachmentConnection
 ) => {
   const attachment = getDraft(sessionId).attachments.find((item) => item.id === attachmentId)
   if (attachment) {
-    upload(attachment, apiKey)
+    upload(attachment, connection)
   }
 }
 
 /** 发送按钮和实际提交共用规则：有内容，且全部附件已上传成功。 */
-export const prepareDraftMessage = (draft: Draft, tasks: Record<string, UploadTask>) => {
+export const prepareDraftMessage = (draft: Draft, tasks: Record<string, UploadTask>, scope?: string) => {
   const text = draft.text.trim()
   if (!text && draft.attachments.length === 0) {
     return null
   }
   const files: (FileAttachment & { serverId: string; blob: Blob })[] = []
   for (const attachment of draft.attachments) {
-    const task = tasks[attachment.id]
+    const task = scope ? tasks[attachmentTaskKey(attachment.id, scope)] : undefined
     if (task?.status !== 'done' || !task.serverId) {
       return null
     }
@@ -120,6 +123,14 @@ export const prepareDraftMessage = (draft: Draft, tasks: Record<string, UploadTa
     })
   }
   return { text, files }
+}
+
+export const prepareDraftUploads = (attachments: DraftAttachment[], connection: AttachmentConnection) => {
+  for (const attachment of attachments) {
+    if (!useUploads.getState().tasks[attachmentTaskKey(attachment.id, connection.scope)]) {
+      upload(attachment, connection)
+    }
+  }
 }
 
 const releaseAttachment = (attachment: DraftAttachment, cancel: boolean) => {
@@ -177,15 +188,13 @@ export const initializeDrafts = async () => {
     upgrade(database) { database.createObjectStore('drafts') },
   })
   const saved = await db.get('drafts', 'all') as [string | null, Draft][] | undefined
-  const key = useSettings.getState().apiKey
+  const connection = getAttachmentConnection()
   const drafts = new Map(saved ?? [])
   for (const draft of drafts.values()) {
     for (const attachment of draft.attachments) {
       attachment.previewUrl = attachment.isImage ? URL.createObjectURL(attachment.file) : null
-      if (key) {
-        upload(attachment, key)
-      }
     }
+    if (connection) {prepareDraftUploads(draft.attachments, connection)}
   }
   useDrafts.setState({ drafts })
   draftDB = db

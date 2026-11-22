@@ -13,16 +13,20 @@
   cursor: default;
   transition: background-color 0.2s ease-in-out;
 
-  &:hover .remove {
-    opacity: 1;
+  @media (hover: hover) and (pointer: fine) {
+    &:hover .remove {
+      opacity: 1;
+    }
   }
 }
 
 .clickable {
   cursor: pointer;
 
-  &:hover {
-    background-color: var(--dsw-alias-interactive-bg-hover);
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      background-color: var(--dsw-alias-interactive-bg-hover);
+    }
   }
 }
 

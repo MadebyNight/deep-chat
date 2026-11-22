@@ -71,6 +71,7 @@
     position: relative;
     bottom: auto;
     flex-shrink: 0;
+    max-width: calc(100% - 16px);
     margin: 0 auto;
   }
 

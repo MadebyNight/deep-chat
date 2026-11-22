@@ -32,11 +32,11 @@
   outline: none;
   transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
 
-  &:active:not(.recording):not(.disabled) {
+  &[data-pressed]:not(.recording):not(.disabled) {
     background-color: var(--dsw-alias-interactive-bg-hover);
   }
 
-  @media (hover: hover) {
+  @media (hover: hover) and (pointer: fine) {
     &:hover:not(.recording):not(.disabled) {
       background-color: var(--dsw-alias-interactive-bg-hover);
     }

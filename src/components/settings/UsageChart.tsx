@@ -1,3 +1,4 @@
+import { ActionButton } from "../base/index.js"
 import { useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { useSettings } from '../../services/settings.js'
@@ -38,14 +39,14 @@ export const UsageChart = () => {
         <span>{monthLabel.format(now)}</span>
       </div>
       <div className="connection-usage-metrics">
-        <button type="button" aria-pressed={metric === 'calls'} onClick={() => setMetric('calls')}>
+        <ActionButton type="button" aria-pressed={metric === 'calls'} onClick={() => setMetric('calls')}>
           <span>{t('connectionUsageCalls')}</span>
           <strong>{number.format(totalCalls)}</strong>
-        </button>
-        <button type="button" aria-pressed={metric === 'tokens'} onClick={() => setMetric('tokens')}>
+        </ActionButton>
+        <ActionButton type="button" aria-pressed={metric === 'tokens'} onClick={() => setMetric('tokens')}>
           <span>{t('connectionUsageTokens')}</span>
           <strong>{totalReported ? number.format(totalTokens) : '—'}</strong>
-        </button>
+        </ActionButton>
       </div>
       <div className="connection-usage-weekdays" aria-hidden>
         {Array.from({ length: 7 }, (_, index) => (
@@ -57,7 +58,7 @@ export const UsageChart = () => {
           const future = index >= today
           const level = !future && day[metric] > 0 ? Math.ceil((day[metric] / peak) * 4) : 0
           return (
-            <button
+            <ActionButton
               key={day.date.getTime()}
               type="button"
               data-date={formatDate(day.date)}
@@ -70,7 +71,7 @@ export const UsageChart = () => {
               onClick={() => setSelectedDay(day.date.getDate())}
             >
               {day.date.getDate()}
-            </button>
+            </ActionButton>
           )
         })}
       </div>

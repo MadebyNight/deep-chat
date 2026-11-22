@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type { LinkedMessage, TranslationMessage } from '../i18n/index.js'
-import { uploadFile } from './api/client.js'
+import { accountRequestError, ApiError, uploadFile } from './api/client.js'
+import { uploadOfficialFile, useOfficialAccount } from './officialAccount.js'
+import { apiKeyFileScopePreference, readPreference, useSettings } from './settings.js'
 import { classifyApiError, getUploadErrorInfo, isRetryableApiError } from './api/errors.js'
 import type { FilePurpose } from './api/types.js'
 import { ACCEPT_FILE_EXTS } from './uploadExts.js'
@@ -62,6 +64,9 @@ export const validateFiles = (files: File[], currentCount: number): TranslationM
  * 服务端原文多为英文且较长，不直接展示。
  */
 export const describeUploadError = (error: unknown): TranslationMessage => {
+  if (error instanceof ApiError && error.localMessage?.key === 'connectionAccountSignInAgain') {
+    return error.localMessage
+  }
   if (classifyApiError(error) === 'serverBusy') {
     return { key: 'uploadServerBusy' }
   }
@@ -98,6 +103,27 @@ export const describeUploadQuota = (error: unknown): LinkedMessage | undefined =
   return undefined
 }
 
+export type AttachmentConnection = { scope: string; apiKey: string | null }
+export const LEGACY_KEY_FILE_SCOPE = 'key-legacy'
+const keyFileScope = () => readPreference(apiKeyFileScopePreference) ?? LEGACY_KEY_FILE_SCOPE
+
+export const getAttachmentConnection = (): AttachmentConnection | undefined => {
+  const { active, signedIn, fileScope } = useOfficialAccount.getState()
+  if (active && signedIn && fileScope) {
+    return { scope: fileScope, apiKey: null }
+  }
+  const { apiKey } = useSettings.getState()
+  return apiKey ? { scope: keyFileScope(), apiKey } : undefined
+}
+
+export const useAttachmentScope = () => {
+  const accountScope = useOfficialAccount((state) => state.active && state.signedIn ? state.fileScope : null)
+  const apiKey = useSettings((state) => state.apiKey)
+  return accountScope ?? (apiKey ? keyFileScope() : undefined)
+}
+
+export const attachmentTaskKey = (id: string, scope: string) => `${id}:${scope}`
+
 type Job = () => Promise<void>
 const queue: Job[] = []
 let running = 0
@@ -118,7 +144,7 @@ const next = () => {
 
 /** 排队上传，最多同时上传 MAX_CONCURRENT 个；排队期间中止的任务不会发出请求 */
 const enqueueUpload = (
-  apiKey: string,
+  connection: AttachmentConnection,
   file: Blob,
   name: string,
   isImage: boolean,
@@ -131,8 +157,19 @@ const enqueueUpload = (
         return
       }
       try {
-        const body = file instanceof File ? file : new File([file], name, { type: file.type })
-        resolve((await uploadFile(apiKey, body, getUploadPurpose(name, isImage), signal)).id)
+        const body = new File([file], name, { type: file.type || MIME_BY_EXT[getFileExt(name)] })
+        const purpose = getUploadPurpose(name, isImage)
+        if (connection.apiKey === null) {
+          if (connection.scope !== useOfficialAccount.getState().fileScope) {
+            throw new ApiError('http', { key: 'connectionAccountSignInAgain' }, 401)
+          }
+          const result = await uploadOfficialFile(body, purpose, signal).catch((error: unknown) => {
+            throw signal.aborted ? error : accountRequestError(error)
+          })
+          resolve(result.id)
+        } else {
+          resolve((await uploadFile(connection.apiKey, body, purpose, signal)).id)
+        }
       } catch (error) {
         reject(error)
       }
@@ -165,19 +202,20 @@ const pending = new Map<string, { promise: Promise<string>; controller: AbortCon
 
 /** 开始（或复用进行中的）上传，返回服务端 file_id；失败时任务记为 error 并抛出原错误 */
 export const uploadAttachment = (
-  apiKey: string,
-  id: string,
+  connection: AttachmentConnection,
+  fileId: string,
   blob: Blob,
   name: string,
   isImage: boolean
 ): Promise<string> => {
+  const id = attachmentTaskKey(fileId, connection.scope)
   const current = pending.get(id)
   if (current) {
     return current.promise
   }
   const controller = new AbortController()
   setTask(id, { status: 'uploading' })
-  const promise = enqueueUpload(apiKey, blob, name, isImage, controller.signal)
+  const promise = enqueueUpload(connection, blob, name, isImage, controller.signal)
     .then((serverId) => {
       setTask(id, { status: 'done', serverId })
       return serverId
@@ -205,9 +243,13 @@ export const uploadAttachment = (
   return promise
 }
 
-export const cancelUpload = (id: string) => {
-  pending.get(id)?.controller.abort()
-  setTask(id, null)
+export const cancelUpload = (fileId: string, scope?: string) => {
+  const keys = scope ? [attachmentTaskKey(fileId, scope)]
+    : Object.keys(useUploads.getState().tasks).filter((key) => key.startsWith(`${fileId}:`))
+  for (const key of keys) {
+    pending.get(key)?.controller.abort()
+    setTask(key, null)
+  }
 }
 
 /** 各扩展名对应的 MIME：部分系统（如 Windows）给不出 file.type，按扩展名补齐 */

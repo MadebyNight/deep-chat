@@ -18,11 +18,11 @@ const retainDays = (days: Record<string, DailyChatUsage>): Record<string, DailyC
       .map((key) => [key, days[key]])
   )
 
-const load = (): Record<string, DailyChatUsage> => {
+const load = (): Record<string, DailyChatUsage> | undefined => {
   try {
     const stored: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
-    if (!stored || typeof stored !== 'object') {
-      return {}
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) {
+      return undefined
     }
     const days: Record<string, DailyChatUsage> = {}
     for (const [key, entry] of Object.entries(stored)) {
@@ -36,11 +36,22 @@ const load = (): Record<string, DailyChatUsage> => {
     }
     return retainDays(days)
   } catch {
-    return {}
+    return undefined
   }
 }
 
-export const useChatUsage = create(() => ({ days: load() }))
+export const useChatUsage = create(() => ({ days: load() ?? {} }))
+let unpersistedUsage = false
+
+export const refreshChatUsage = () => {
+  if (unpersistedUsage) {
+    return
+  }
+  const days = load()
+  if (days) {
+    useChatUsage.setState({ days })
+  }
+}
 
 const updateDay = (key: string, update: (previous: DailyChatUsage) => DailyChatUsage) => {
   const { days } = useChatUsage.getState()
@@ -53,8 +64,9 @@ const updateDay = (key: string, update: (previous: DailyChatUsage) => DailyChatU
   useChatUsage.setState({ days: retained })
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(useChatUsage.getState().days))
+    unpersistedUsage = false
   } catch {
-    // Usage remains available in memory for this session.
+    unpersistedUsage = true
   }
 }
 

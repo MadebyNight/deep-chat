@@ -1,3 +1,4 @@
+import { ActionButton } from "./Control.js"
 import clsx from 'clsx'
 import type { ButtonHTMLAttributes } from 'react'
 import styles from './Switch.module.css'
@@ -8,7 +9,7 @@ export const Switch = ({
   className,
   ...props
 }: { checked: boolean } & ButtonHTMLAttributes<HTMLButtonElement>) => (
-  <button
+  <ActionButton
     type="button"
     role="switch"
     aria-checked={checked}

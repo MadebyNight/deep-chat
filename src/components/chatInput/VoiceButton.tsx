@@ -1,7 +1,8 @@
+import { ActionButton, IconMicFill16, IconMicOutline16, Tooltip } from "../base/index.js"
 import clsx from 'clsx'
 import { useTranslate } from '../../i18n/index.js'
-import { IconMicFill16, IconMicOutline16 } from '../base/icons.js'
-import { Tooltip } from '../base/Tooltip.js'
+
+
 import type { VoiceInputStatus } from './useVoiceInput.js'
 import styles from './VoiceButton.module.css'
 
@@ -42,7 +43,7 @@ export const VoiceButton = ({
     <>
       {recording ? <span className={styles.timer}>{t('voiceInputTimer', { seconds })}</span> : null}
       <Tooltip content={label}>
-        <button
+        <ActionButton
           type="button"
           className={clsx(
             styles.button,
@@ -75,7 +76,7 @@ export const VoiceButton = ({
           ) : (
             <IconMicOutline16 />
           )}
-        </button>
+        </ActionButton>
       </Tooltip>
     </>
   )

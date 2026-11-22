@@ -1,8 +1,7 @@
-import { IconMenuOutline20, IconNewChatOutline20, IconPlayMediaOutline16 } from '../base/icons.js'
+import { IconMenuOutline20, IconNewChatOutline20, IconPlayMediaOutline16, IconButton } from "../base/index.js"
 import { useTranslate } from '../../i18n/index.js'
 import { newChat } from '../../services/chat/store.js'
 import { useSettings, setAutoReadAloud } from '../../services/settings.js'
-import { IconButton } from '../base/IconButton.js'
 import { openMobileSider } from '../sider/mobileSiderState.js'
 import styles from './MobileHeader.module.css'
 

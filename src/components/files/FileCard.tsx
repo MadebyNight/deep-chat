@@ -1,8 +1,9 @@
+import { ActionButton, IconCloseFill14, IconRefreshOutline16 } from "../base/index.js"
 import clsx from 'clsx'
 import type { ReactNode } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { formatSize, getExtension } from '../../services/attachments.js'
-import { IconCloseFill14, IconRefreshOutline16 } from '../base/icons.js'
+
 import { FileIcon } from './FileIcon.js'
 import styles from './FileCard.module.css'
 
@@ -66,7 +67,7 @@ export const FileCard = ({
         <div className={styles.subCaption}>{description}</div>
       </div>
       {onRemove ? (
-        <button
+        <ActionButton
           type="button"
           className={clsx(styles.remove, status === 'error' && !onRetry && styles.invalidRemove)}
           aria-label={t('delete')}
@@ -76,7 +77,7 @@ export const FileCard = ({
           }}
         >
           <IconCloseFill14 />
-        </button>
+        </ActionButton>
       ) : null}
     </div>
   )

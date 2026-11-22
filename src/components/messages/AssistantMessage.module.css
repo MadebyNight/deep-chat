@@ -76,8 +76,10 @@
   text-decoration: none;
   cursor: pointer;
 
-  &:hover {
-    text-decoration: underline;
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      text-decoration: underline;
+    }
   }
 }
 

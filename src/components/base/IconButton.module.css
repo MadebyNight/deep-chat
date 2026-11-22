@@ -12,11 +12,11 @@
   transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
   outline: none;
 
-  &:active:not(:disabled) {
-    background-color: var(--dsw-alias-interactive-bg-hover);
+  &[data-pressed]:not(:disabled):not([aria-disabled='true']) {
+    background-color: var(--dsw-alias-button-ghost-active-fill);
   }
 
-  @media (hover: hover) {
+  @media (hover: hover) and (pointer: fine) {
     &:hover:not(:disabled) {
       background-color: var(--dsw-alias-interactive-bg-hover);
     }

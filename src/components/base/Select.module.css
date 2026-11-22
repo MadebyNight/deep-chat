@@ -22,8 +22,10 @@
     background-color var(--ds-transition-duration) var(--ds-ease-in-out),
     color var(--ds-transition-duration) var(--ds-ease-in-out);
 
-  &:hover:not(:disabled) {
-    background: var(--dsw-alias-interactive-bg-hover-accent);
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(:disabled) {
+      background: var(--dsw-alias-interactive-bg-hover-accent);
+    }
   }
 
   &:focus-visible {
@@ -83,6 +85,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  font: inherit;
   min-height: 40px;
   padding: 4px 10px;
   border-radius: 10px;
@@ -94,7 +101,9 @@
   user-select: none;
   transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out);
 
-  &:hover {
-    background: var(--dsw-alias-interactive-bg-hover);
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      background: var(--dsw-alias-interactive-bg-hover);
+    }
   }
 }

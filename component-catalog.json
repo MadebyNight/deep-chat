@@ -1,0 +1,464 @@
+[
+  {
+    "file": "src/app/App.tsx",
+    "group": "app",
+    "components": [
+      "App"
+    ]
+  },
+  {
+    "file": "src/components/base/Button.tsx",
+    "group": "shared",
+    "components": [
+      "Button"
+    ]
+  },
+  {
+    "file": "src/components/base/Control.tsx",
+    "group": "shared",
+    "components": [
+      "ActionButton",
+      "Input",
+      "Textarea"
+    ]
+  },
+  {
+    "file": "src/components/base/IconButton.tsx",
+    "group": "shared",
+    "components": [
+      "IconButton"
+    ]
+  },
+  {
+    "file": "src/components/base/Menu.tsx",
+    "group": "shared",
+    "components": [
+      "Menu"
+    ]
+  },
+  {
+    "file": "src/components/base/Modal.tsx",
+    "group": "shared",
+    "components": [
+      "Modal"
+    ]
+  },
+  {
+    "file": "src/components/base/Select.tsx",
+    "group": "shared",
+    "components": [
+      "Select"
+    ]
+  },
+  {
+    "file": "src/components/base/Switch.tsx",
+    "group": "shared",
+    "components": [
+      "Switch"
+    ]
+  },
+  {
+    "file": "src/components/base/Toast.tsx",
+    "group": "shared",
+    "components": [
+      "Toast"
+    ]
+  },
+  {
+    "file": "src/components/base/Tooltip.tsx",
+    "group": "shared",
+    "components": [
+      "Tooltip"
+    ]
+  },
+  {
+    "file": "src/components/base/icons.tsx",
+    "group": "shared",
+    "components": [
+      "IconBrowseOutline16",
+      "IconBrowseWarningOutline16",
+      "IconCheckOutline16",
+      "IconCheckedOutline14",
+      "IconChevronDownOutline14",
+      "IconChevronRightOutline14",
+      "IconCloseFill14",
+      "IconCloseOutline16",
+      "IconCopyOutline16",
+      "IconDarkOutline16",
+      "IconDataOutline16",
+      "IconDownloadOutline16",
+      "IconEditOutline16",
+      "IconEllipsisOutline16",
+      "IconFollowsystemOutline16",
+      "IconGlobeLanguageOutline14",
+      "IconLightOutline16",
+      "IconLinkOutline14",
+      "IconLinkOutline16",
+      "IconMenuOutline20",
+      "IconMicFill16",
+      "IconMicOutline16",
+      "IconNewChatOutline20",
+      "IconPanelLeftOutline16",
+      "IconPaperclipOutline16",
+      "IconPhotoErrorFill20",
+      "IconPlayMediaOutline16",
+      "IconRefreshOutline16",
+      "IconRightUpOutline14",
+      "IconSearchOutline16",
+      "IconSearchWarningOutline16",
+      "IconSendOutline16",
+      "IconSettingsOutline16",
+      "IconShareOutline16",
+      "IconStopFill16",
+      "IconThinkOutline14",
+      "IconThinkOutline16",
+      "IconToastError16",
+      "IconTrashOutline16",
+      "IconUploadOutline14",
+      "IconWarningOutline16",
+      "NewChatIcon"
+    ]
+  },
+  {
+    "file": "src/components/chatInput/ChatInput.tsx",
+    "group": "chat",
+    "components": [
+      "ChatInput",
+      "Composer"
+    ]
+  },
+  {
+    "file": "src/components/chatInput/DraftAttachments.tsx",
+    "group": "chat",
+    "components": [
+      "AttachmentItem",
+      "DraftAttachments"
+    ]
+  },
+  {
+    "file": "src/components/chatInput/DragMask.tsx",
+    "group": "chat",
+    "components": [
+      "DragMask",
+      "DragMaskContent",
+      "UploadIcon"
+    ]
+  },
+  {
+    "file": "src/components/chatInput/Spectrum.tsx",
+    "group": "chat",
+    "components": [
+      "Spectrum"
+    ]
+  },
+  {
+    "file": "src/components/chatInput/VoiceButton.tsx",
+    "group": "chat",
+    "components": [
+      "VoiceButton"
+    ]
+  },
+  {
+    "file": "src/components/files/FileCard.tsx",
+    "group": "chat",
+    "components": [
+      "FileCard"
+    ]
+  },
+  {
+    "file": "src/components/files/FileIcon.tsx",
+    "group": "chat",
+    "components": [
+      "FileIcon",
+      "FileIconFrame",
+      "ImageIcon",
+      "OtherFileIcon",
+      "PdfIcon",
+      "PptFileIcon",
+      "TableFileIcon"
+    ]
+  },
+  {
+    "file": "src/components/markdown/CodeBlock.tsx",
+    "group": "messages",
+    "components": [
+      "CodeBlock",
+      "CodeInfoRow"
+    ]
+  },
+  {
+    "file": "src/components/markdown/Link.tsx",
+    "group": "messages",
+    "components": [
+      "ImageAsLink",
+      "Link"
+    ]
+  },
+  {
+    "file": "src/components/markdown/Markdown.tsx",
+    "group": "messages",
+    "components": [
+      "Markdown"
+    ]
+  },
+  {
+    "file": "src/components/markdown/MarkdownAstRenderer.tsx",
+    "group": "messages",
+    "components": [
+      "Html",
+      "List",
+      "MarkdownAstRenderer",
+      "MarkdownBlockContentOrDefinitionContent",
+      "MarkdownPhrasingContent",
+      "MarkdownPhrasingContentItem",
+      "Table",
+      "TextContent"
+    ]
+  },
+  {
+    "file": "src/components/markdown/MathFormula.tsx",
+    "group": "messages",
+    "components": [
+      "InlineMath",
+      "MathBlock"
+    ]
+  },
+  {
+    "file": "src/components/markdown/MermaidDiagram.tsx",
+    "group": "messages",
+    "components": [
+      "MermaidDiagram"
+    ]
+  },
+  {
+    "file": "src/components/messages/AssistantMessage.tsx",
+    "group": "messages",
+    "components": [
+      "AssistantMessage"
+    ]
+  },
+  {
+    "file": "src/components/messages/BranchSwitcher.tsx",
+    "group": "messages",
+    "components": [
+      "BranchSwitcher"
+    ]
+  },
+  {
+    "file": "src/components/messages/CopyButton.tsx",
+    "group": "messages",
+    "components": [
+      "CopyButton"
+    ]
+  },
+  {
+    "file": "src/components/messages/MessageFile.tsx",
+    "group": "messages",
+    "components": [
+      "MessageFile"
+    ]
+  },
+  {
+    "file": "src/components/messages/MessageList.tsx",
+    "group": "messages",
+    "components": [
+      "MessageList"
+    ]
+  },
+  {
+    "file": "src/components/messages/ReadAloudButton.tsx",
+    "group": "messages",
+    "components": [
+      "ReadAloudButton"
+    ]
+  },
+  {
+    "file": "src/components/messages/ReadingBars.tsx",
+    "group": "messages",
+    "components": [
+      "ReadingBars"
+    ]
+  },
+  {
+    "file": "src/components/messages/ReplyArea.tsx",
+    "group": "messages",
+    "components": [
+      "ContentItem",
+      "FindRow",
+      "OpenRow",
+      "PageLink",
+      "ReadLinkRow",
+      "ReplyArea",
+      "SearchRow",
+      "StepItem",
+      "ToolRow"
+    ]
+  },
+  {
+    "file": "src/components/messages/UserMessage.tsx",
+    "group": "messages",
+    "components": [
+      "UserMessage"
+    ]
+  },
+  {
+    "file": "src/components/search/CitationLink.tsx",
+    "group": "search",
+    "components": [
+      "CitationLink"
+    ]
+  },
+  {
+    "file": "src/components/search/FallbackImage.tsx",
+    "group": "search",
+    "components": [
+      "FallbackImage"
+    ]
+  },
+  {
+    "file": "src/components/search/HoverCard.tsx",
+    "group": "search",
+    "components": [
+      "HoverCard"
+    ]
+  },
+  {
+    "file": "src/components/search/SearchPanel.tsx",
+    "group": "search",
+    "components": [
+      "SearchPanel"
+    ]
+  },
+  {
+    "file": "src/components/search/SiteLogo.tsx",
+    "group": "search",
+    "components": [
+      "SiteLogo",
+      "SiteThumbnails"
+    ]
+  },
+  {
+    "file": "src/components/search/SourceCard.tsx",
+    "group": "search",
+    "components": [
+      "SourceCard"
+    ]
+  },
+  {
+    "file": "src/components/session/MobileHeader.tsx",
+    "group": "sessions",
+    "components": [
+      "MobileHeader"
+    ]
+  },
+  {
+    "file": "src/components/session/PromptPicker.tsx",
+    "group": "sessions",
+    "components": [
+      "PromptPicker"
+    ]
+  },
+  {
+    "file": "src/components/session/SessionView.tsx",
+    "group": "sessions",
+    "components": [
+      "SessionView"
+    ]
+  },
+  {
+    "file": "src/components/session/Welcome.tsx",
+    "group": "sessions",
+    "components": [
+      "Welcome"
+    ]
+  },
+  {
+    "file": "src/components/settings/ApiKeyField.tsx",
+    "group": "settings",
+    "components": [
+      "ApiKeyConfirm",
+      "ApiKeyField"
+    ]
+  },
+  {
+    "file": "src/components/settings/ConnectionDialog.tsx",
+    "group": "settings",
+    "components": [
+      "BalanceSummary",
+      "ConnectionContent",
+      "ConnectionDialog",
+      "ConnectionSetting"
+    ]
+  },
+  {
+    "file": "src/components/settings/SettingsDialog.tsx",
+    "group": "settings",
+    "components": [
+      "AboutSettings",
+      "AutoReadSetting",
+      "ContextCompactionSetting",
+      "DataAction",
+      "DeleteAllConfirm",
+      "ExportHistory",
+      "FontSizeSetting",
+      "ImportConfirm",
+      "ImportHistory",
+      "LocaleSetting",
+      "MobilePreferences",
+      "SettingCell",
+      "SettingsContent",
+      "SettingsDialog",
+      "SettingsPageLink",
+      "ThemeSetting",
+      "ThinkingCollapseSetting",
+      "TtsVoiceSetting"
+    ]
+  },
+  {
+    "file": "src/components/settings/UpdateDialog.tsx",
+    "group": "settings",
+    "components": [
+      "UpdateDialog",
+      "VersionSetting"
+    ]
+  },
+  {
+    "file": "src/components/settings/UsageChart.tsx",
+    "group": "settings",
+    "components": [
+      "UsageChart"
+    ]
+  },
+  {
+    "file": "src/components/sider/CollapsedSider.tsx",
+    "group": "sessions",
+    "components": [
+      "CollapsedSider"
+    ]
+  },
+  {
+    "file": "src/components/sider/SessionItem.tsx",
+    "group": "sessions",
+    "components": [
+      "SessionItem"
+    ]
+  },
+  {
+    "file": "src/components/sider/Sider.tsx",
+    "group": "sessions",
+    "components": [
+      "AccountAvatar",
+      "MobileSider",
+      "Sider",
+      "SiderSettings"
+    ]
+  },
+  {
+    "file": "src/main.tsx",
+    "group": "app",
+    "components": [
+      "AppBoundary",
+      "StartedApp"
+    ]
+  }
+]

@@ -1,5 +1,6 @@
 import clsx from 'clsx'
 import type { ButtonHTMLAttributes } from 'react'
+import { ActionButton } from './Control.js'
 import styles from './Button.module.css'
 
 export const Button = ({
@@ -13,8 +14,7 @@ export const Button = ({
   size?: 'l' | 'm' | 's'
   block?: boolean
 } & ButtonHTMLAttributes<HTMLButtonElement>) => (
-  <button
-    type="button"
+  <ActionButton
     className={clsx(styles.button, styles[variant], styles[size], block && styles.block, className)}
     {...props}
   />

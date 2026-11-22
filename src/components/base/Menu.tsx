@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useAnchoredPosition, useDismiss } from './anchored.js'
+import { ActionButton } from './Control.js'
 import styles from './Menu.module.css'
 
 export type MenuOption = {
@@ -43,7 +44,7 @@ export const Menu = ({
               role="menu"
             >
               {options.map((option) => (
-                <div
+                <ActionButton
                   key={option.key}
                   role="menuitem"
                   className={clsx(styles.option, option.danger && styles.danger)}
@@ -54,7 +55,7 @@ export const Menu = ({
                 >
                   {option.icon ? <span className={styles.icon}>{option.icon}</span> : null}
                   {option.label}
-                </div>
+                </ActionButton>
               ))}
             </div>,
             document.body

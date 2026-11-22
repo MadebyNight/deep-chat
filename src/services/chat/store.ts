@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { showToast } from '../../components/base/toastState.js'
 import { createId } from '../../utils/id.js'
 import { ApiError, streamMessage, streamOfficialMessage } from '../api/client.js'
-import { useOfficialAccount } from '../officialAccount.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
 import {
   extractFileIds,
@@ -10,7 +9,10 @@ import {
   isInputContextOverflow,
   isRetryableApiError,
 } from '../api/errors.js'
-import { cancelUpload, describeUploadError, uploadAttachment, useUploads } from '../attachments.js'
+import {
+  attachmentTaskKey, cancelUpload, describeUploadError, getAttachmentConnection, LEGACY_KEY_FILE_SCOPE,
+  uploadAttachment, useUploads, type AttachmentConnection,
+} from '../attachments.js'
 import { getSelectedPrompt, useSettings } from '../settings.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 import * as db from './db.js'
@@ -622,7 +624,9 @@ export const sendMessage = (targetSessionId: string | null) => {
   if (get().importingHistory || !get().ready) {
     return false
   }
-  const prepared = prepareDraftMessage(getDraft(targetSessionId), useUploads.getState().tasks)
+  const connection = getAttachmentConnection()
+  if (!connection) {return false}
+  const prepared = prepareDraftMessage(getDraft(targetSessionId), useUploads.getState().tasks, connection.scope)
   if (!prepared) {
     return false
   }
@@ -663,7 +667,10 @@ export const sendMessage = (targetSessionId: string | null) => {
     content: text,
     files: files.map(({ id, serverId, name, size, isImage, mimeType }) => ({
       id,
-      serverId,
+      serverId: connection.apiKey === null ? null : serverId,
+      ...(connection.apiKey === null
+        ? { accountFile: { id: serverId, scope: connection.scope } }
+        : { serverIdScope: connection.scope }),
       name,
       size,
       isImage,
@@ -684,7 +691,7 @@ export const sendMessage = (targetSessionId: string | null) => {
   }
   persist(sessionId)
   clearSentDraft(targetSessionId)
-  void streamReply(sessionId, reply, { history, question })
+  void streamReply(sessionId, reply, { history, question }, connection)
   return true
 }
 
@@ -825,7 +832,7 @@ export const retryUpload = (sessionId: string, messageId: string) => {
 type Request = { history: Message[]; question: UserMessage; prefix?: AssistantMessage }
 
 /** 把补传得到的 serverId 写回会话里所有引用同一附件的消息（编辑、重新生成会共用附件） */
-const saveServerIds = (sessionId: string, serverIds: Map<string, string>) => {
+const saveServerIds = (sessionId: string, serverIds: Map<string, string | null>, connection: AttachmentConnection) => {
   if (serverIds.size === 0) {
     return
   }
@@ -835,9 +842,13 @@ const saveServerIds = (sessionId: string, serverIds: Map<string, string>) => {
       message.role === 'user' && message.files.some((file) => serverIds.has(file.id))
         ? {
             ...message,
-            files: message.files.map((file) =>
-              serverIds.has(file.id) ? { ...file, serverId: serverIds.get(file.id) ?? null } : file
-            ),
+            files: message.files.map((file) => {
+              const id = serverIds.get(file.id)
+              if (id === undefined) { return file }
+              return connection.apiKey === null
+                ? { ...file, accountFile: id ? { id, scope: connection.scope } : undefined }
+                : { ...file, serverId: id, serverIdScope: connection.scope }
+            }),
           }
         : message
     ),
@@ -849,11 +860,19 @@ const saveServerIds = (sessionId: string, serverIds: Map<string, string>) => {
  * 附件的服务端 id：已有直接用；正在上传的等待同一任务；否则读取本地原件补传。
  * 本地也没有原件（导入的文档附件只有元数据）时返回 null，该附件只展示、不进入请求。
  */
-const ensureServerId = async (apiKey: string, file: FileAttachment): Promise<string | null> => {
-  if (file.serverId) {
-    return file.serverId
+const serverIdFor = (file: FileAttachment, connection: AttachmentConnection) => {
+  if (connection.apiKey === null) {
+    return file.accountFile?.scope === connection.scope ? file.accountFile.id : null
   }
-  const task = useUploads.getState().tasks[file.id]
+  return (file.serverIdScope ?? LEGACY_KEY_FILE_SCOPE) === connection.scope ? file.serverId : null
+}
+
+const ensureServerId = async (connection: AttachmentConnection, file: FileAttachment): Promise<string | null> => {
+  const serverId = serverIdFor(file, connection)
+  if (serverId) {
+    return serverId
+  }
+  const task = useUploads.getState().tasks[attachmentTaskKey(file.id, connection.scope)]
   if (task?.status === 'done') {
     return task.serverId
   }
@@ -861,7 +880,7 @@ const ensureServerId = async (apiKey: string, file: FileAttachment): Promise<str
   if (!blob) {
     return null
   }
-  return uploadAttachment(apiKey, file.id, blob, file.name, file.isImage)
+  return uploadAttachment(connection, file.id, blob, file.name, file.isImage)
 }
 
 /** 用会话里的最新消息替换请求快照：重传前会重置附件的 serverId，快照必须跟着更新 */
@@ -889,29 +908,29 @@ const refreshRequest = (sessionId: string, request: Request): Request => {
 const prepareFiles = async (
   sessionId: string,
   request: Request,
-  apiKey: string,
+  connection: AttachmentConnection,
   signal: AbortSignal
 ) => {
   const epoch = historyEpoch
   // 服务端判定 file_id 失效时会清掉会话里的 serverId，先用最新消息替换请求快照，
   // 否则快照里仍是旧 id，补传会直接复用它。
   request = refreshRequest(sessionId, request)
-  const serverIds = new Map<string, string>()
+  const serverIds = new Map<string, string | null>()
   // 停止生成立即生效；上传本身不取消（输入框与其他消息可能共用同一任务），完成后照常写回 serverId
   const aborted = new Promise<never>((_, reject) => {
     signal.addEventListener('abort', () => reject(signal.reason), { once: true })
   })
   const uploads = Promise.allSettled(
     request.question.files.map(async (file) => {
-      const serverId = await ensureServerId(apiKey, file)
-      if (serverId) {
+      const serverId = await ensureServerId(connection, file)
+      if (serverId && serverId !== serverIdFor(file, connection)) {
         serverIds.set(file.id, serverId)
       }
     })
   )
   void uploads.then(() => {
     if (epoch === historyEpoch) {
-      saveServerIds(sessionId, serverIds)
+      saveServerIds(sessionId, serverIds, connection)
     }
   })
   const results = await Promise.race([uploads, aborted])
@@ -923,7 +942,7 @@ const prepareFiles = async (
   const pending = new Map<string, FileAttachment>()
   for (const [user] of getContextRounds(request.history).slice().reverse()) {
     for (const file of user.files) {
-      if (!file.serverId && !serverIds.has(file.id) && !pending.has(file.id)) {
+      if (!serverIdFor(file, connection) && !serverIds.has(file.id) && !pending.has(file.id)) {
         pending.set(file.id, file)
       }
     }
@@ -931,23 +950,27 @@ const prepareFiles = async (
   for (const file of pending.values()) {
     signal.throwIfAborted()
     try {
-      const serverId = await Promise.race([ensureServerId(apiKey, file), aborted])
+      const serverId = await Promise.race([ensureServerId(connection, file), aborted])
       if (serverId) {
         serverIds.set(file.id, serverId)
-        saveServerIds(sessionId, new Map([[file.id, serverId]]))
+        saveServerIds(sessionId, new Map([[file.id, serverId]]), connection)
       }
     } catch {
       signal.throwIfAborted()
     }
   }
 
-  // 用补齐后的会话重新取历史与提问，保证请求里都是 serverId
-  const session = getSession(sessionId)
-  const resolve = <T extends Message>(message: T): T =>
-    (session?.messages.find((m) => m.id === message.id) as T | undefined) ?? message
+  // 请求快照只引用当前凭据上传的文件。
+  const resolveUserFiles = (message: UserMessage): UserMessage => ({
+    ...message,
+    files: message.files.map((file) => ({
+      ...file,
+      serverId: serverIds.get(file.id) ?? serverIdFor(file, connection),
+    })),
+  })
   return {
-    history: request.history.map(resolve),
-    question: resolve(request.question),
+    history: request.history.map((message) => message.role === 'user' ? resolveUserFiles(message) : message),
+    question: resolveUserFiles(request.question),
     prefix: request.prefix,
   }
 }
@@ -974,7 +997,9 @@ const collectServerFileIds = (request: Request): Set<string> => {
  * 下一次补齐会重新读取本地原件上传。报错里点名了 file_id 就只重置这些，
  * 没点名（如 invalid file_id）则重置本次请求用到的全部附件。
  */
-const reuploadInvalidatedFiles = (sessionId: string, request: Request, error: unknown): boolean => {
+const reuploadInvalidatedFiles = (
+  sessionId: string, request: Request, error: unknown, connection: AttachmentConnection
+): boolean => {
   if (!(error instanceof ApiError) || !getFileErrorCode(error)) {
     return false
   }
@@ -987,30 +1012,21 @@ const reuploadInvalidatedFiles = (sessionId: string, request: Request, error: un
   if (targets.size === 0 || !session) {
     return false
   }
-  const localIds: string[] = []
-  const messages = session.messages.map((message) => {
+  const invalid = new Map<string, null>()
+  for (const message of session.messages) {
     if (message.role !== 'user') {
-      return message
+      continue
     }
-    let changed = false
-    const files = message.files.map((file) => {
-      if (!file.serverId || !targets.has(file.serverId)) {
-        return file
+    for (const file of message.files) {
+      const id = serverIdFor(file, connection)
+      if (id && targets.has(id)) {
+        invalid.set(file.id, null)
       }
-      localIds.push(file.id)
-      changed = true
-      return { ...file, serverId: null }
-    })
-    return changed ? { ...message, files } : message
-  })
-  if (localIds.length === 0) {
-    return false
+    }
   }
-  updateSession(sessionId, (current) => ({ ...current, messages }))
-  // 上传任务里可能还留着同一个失效的 serverId，清掉后 ensureServerId 才会重新上传
-  localIds.forEach(cancelUpload)
-  persist(sessionId)
-  return true
+  invalid.forEach((_, id) => cancelUpload(id, connection.scope))
+  saveServerIds(sessionId, invalid, connection)
+  return invalid.size > 0
 }
 
 /** 重传前的退避等待；停止生成时立即返回，由调用方按已停止收尾 */
@@ -1035,7 +1051,9 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
  * 补传失败时回复记为 upload 错误，可重试。
  * 服务端判定 file_id 失效时重新补传后重发，退避重试且次数有上限，超过则按原始报错收尾。
  */
-const streamReply = async (sessionId: string, initial: AssistantMessage, request: Request) => {
+const streamReply = async (
+  sessionId: string, initial: AssistantMessage, request: Request, connection = getAttachmentConnection()
+) => {
   const controller = new AbortController()
   if (!getSession(sessionId)?.title) {
     titleRequests.add(controller)
@@ -1051,11 +1069,10 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   streamFlushes.set(sessionId, flush)
 
   const settings = useSettings.getState()
-  const apiKey = settings.apiKey ?? ''
-  const official = useOfficialAccount.getState().active
+  const official = connection?.apiKey === null
   const stream = official
     ? streamOfficialMessage
-    : (body: CreateMessageRequest, signal: AbortSignal) => streamMessage(apiKey, body, signal)
+    : (body: CreateMessageRequest, signal: AbortSignal) => streamMessage(connection?.apiKey ?? '', body, signal)
   const budget = inputBudget(official)
   const latestReminder = request.prefix
     ? request.prefix.latestReminder
@@ -1088,6 +1105,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       let sent: Request | undefined
       let receivedContent = false
       try {
+        if (!connection) {throw new ApiError('http', { key: 'replyInvalidApiKey' }, 401)}
         const context = settings.autoCompactContext
           ? await selectContext(request.history, getSession(sessionId)?.contextCheckpoint)
           : undefined
@@ -1132,7 +1150,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         const prepared = await prepareFiles(
           sessionId,
           { ...request, history },
-          apiKey,
+          connection,
           controller.signal
         )
         preparing = false
@@ -1199,10 +1217,10 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         }
         // 附件失效：重新补传后重发。收到过内容块（含丢弃的客户端工具）后不自动重发。
         if (
-          sent &&
+          sent && connection &&
           fileRetries < FILE_RETRY_LIMIT &&
           !receivedContent &&
-          reuploadInvalidatedFiles(sessionId, sent, error)
+          reuploadInvalidatedFiles(sessionId, sent, error, connection)
         ) {
           await waitForRetry(fileRetries++, controller.signal)
           if (controller.signal.aborted) {

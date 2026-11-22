@@ -1,7 +1,6 @@
 import { useTranslate } from '../../i18n/index.js'
 import { useIsMobile } from '../../app/viewport.js'
-import { IconCloseOutline16 } from '../base/icons.js'
-import { IconButton } from '../base/IconButton.js'
+import { IconCloseOutline16, IconButton } from "../base/index.js"
 import { closeSearchPanel, useSearchPanel } from './searchPanelState.js'
 import { SourceCard } from './SourceCard.js'
 import clsx from 'clsx'

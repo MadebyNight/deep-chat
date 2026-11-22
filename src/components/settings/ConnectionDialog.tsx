@@ -1,3 +1,15 @@
+import {
+  Input,
+  Modal,
+  Button,
+  IconRefreshOutline16,
+  IconRightUpOutline14,
+  IconEditOutline16,
+  IconPanelLeftOutline16,
+  IconLinkOutline16,
+} from '../base/index.js'
+import { refreshChatUsage } from '../../services/chat/usage.js'
+import styles from './Settings.module.css'
 import { useEffect, useState } from 'react'
 import { Clipboard } from '@capacitor/clipboard'
 import { isNative } from '../../services/native.js'
@@ -16,8 +28,6 @@ import {
   useConnection,
   visitOfficial,
 } from '../../services/connection.js'
-import { Modal } from '../base/Modal.js'
-import { Button } from '../base/Button.js'
 import { UsageChart } from './UsageChart.js'
 
 export const ConnectionSetting = () => {
@@ -26,8 +36,23 @@ export const ConnectionSetting = () => {
   const { available, active, signedIn } = useOfficialAccount()
   const official = active && signedIn
   const connected = official || hasKey
-  const { balance, busy, error } = useConnection()
+  const { balance, busy, error, away } = useConnection()
   const [removing, setRemoving] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const refresh = async () => {
+    const { busy, away } = useConnection.getState()
+    if (busy || away === 'topup') {
+      return
+    }
+    setRefreshing(true)
+    try {
+      refreshChatUsage()
+      await refreshBalance(false, true)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+  const actionsLocked = busy || refreshing || away === 'topup'
   useEffect(() => {
     if (connected) {
       void refreshBalance()
@@ -47,44 +72,72 @@ export const ConnectionSetting = () => {
 
   const insufficient = balance?.is_available === false
   return (
-    <div className="connection-overview" aria-busy={busy}>
-      <div className="connection-setting">
-        <strong>{t('connectionTitle')}</strong>
-        <span role="status">
-          {t(insufficient ? 'connectionStatusInsufficient' : 'connectionStatusConnected')}
-        </span>
+    <div className="connection-overview" aria-busy={busy || refreshing}>
+      <div className={styles.connectionData} data-refreshing={refreshing}>
+        <div className="connection-setting">
+          <strong>{t('connectionTitle')}</strong>
+          <span role="status">
+            {t(insufficient ? 'connectionStatusInsufficient' : 'connectionStatusConnected')}
+          </span>
+        </div>
+        {balance?.balance_infos.length ? <BalanceSummary balance={balance} showGrant /> : null}
+        {!balance?.balance_infos.length && !error ? (
+          <p role="status">{t(busy ? 'connectionStatusQuerying' : 'connectionBalanceUnknown')}</p>
+        ) : null}
+        {error ? (
+          <p role="alert" className="connection-error">
+            {error}
+          </p>
+        ) : null}
+        <UsageChart />
       </div>
-      {balance?.balance_infos.length ? <BalanceSummary balance={balance} showGrant /> : null}
-      {!balance?.balance_infos.length && !error ? (
-        <p role="status">{t(busy ? 'connectionStatusQuerying' : 'connectionBalanceUnknown')}</p>
-      ) : null}
-      {error ? (
-        <p role="alert" className="connection-error">
-          {error}
-        </p>
-      ) : null}
-      <UsageChart />
-      <div className="connection-actions">
+      <div className={styles.connectionActions}>
         <Button
           size="m"
-          variant={insufficient ? 'primary' : 'outlined'}
-          disabled={busy}
-          onClick={() => void visitOfficial('topup', false)}
+          variant="outlined"
+          disabled={actionsLocked}
+          onClick={() => {
+            const state = useConnection.getState()
+            if (!state.busy && state.away !== 'topup') {
+              void visitOfficial('topup', false)
+            }
+          }}
         >
+          <IconRightUpOutline14 />
           {t('connectionTopupButton')}
         </Button>
-        <Button size="m" variant="outlined" disabled={busy} onClick={() => void refreshBalance()}>
-          {t(busy ? 'connectionRefreshBusy' : 'connectionRefresh')}
+        <Button
+          size="m"
+          variant="outlined"
+          aria-disabled={actionsLocked}
+          data-refreshing={refreshing}
+          onClick={() => void refresh()}
+        >
+          <IconRefreshOutline16 />
+          <span role="status">{t(refreshing ? 'connectionRefreshBusy' : 'connectionRefresh')}</span>
         </Button>
         {available && !official ? (
-          <Button size="m" variant="outlined" disabled={busy} onClick={() => void connectOfficial()}>
+          <Button
+            size="m"
+            variant="outlined"
+            disabled={actionsLocked}
+            onClick={() => void connectOfficial()}
+          >
+            <IconLinkOutline16 />
             {t('connectionAccountLogin')}
           </Button>
         ) : null}
-        <Button size="m" variant="outlined" disabled={busy} onClick={changeConnectionKey}>
+        <Button size="m" variant="outlined" disabled={actionsLocked} onClick={changeConnectionKey}>
+          <IconEditOutline16 />
           {t(official ? 'connectionUseKey' : 'connectionChangeKey')}
         </Button>
-        <Button size="m" variant="outlined" disabled={busy} onClick={() => setRemoving(true)}>
+        <Button
+          size="m"
+          variant="dangerOutlined"
+          disabled={actionsLocked}
+          onClick={() => setRemoving(true)}
+        >
+          <IconPanelLeftOutline16 />
           {t(official ? 'connectionAccountSignOut' : 'connectionRemove')}
         </Button>
       </div>
@@ -134,7 +187,13 @@ export const ConnectionSetting = () => {
   )
 }
 
-const BalanceSummary = ({ balance, showGrant = false }: { balance: Balance; showGrant?: boolean }) => {
+const BalanceSummary = ({
+  balance,
+  showGrant = false,
+}: {
+  balance: Balance
+  showGrant?: boolean
+}) => {
   const t = useTranslate()
   return (
     <div className="connection-balance">
@@ -204,8 +263,12 @@ const ConnectionContent = () => {
         {step === 'start' ? (
           authorizing ? (
             <>
-              <p role="status">{t(browserOpened ? 'connectionAccountWaiting' : 'connectionAccountStarting')}</p>
-              <Button variant="outlined" onClick={cancelOfficialSignIn}>{t('cancel')}</Button>
+              <p role="status">
+                {t(browserOpened ? 'connectionAccountWaiting' : 'connectionAccountStarting')}
+              </p>
+              <Button variant="outlined" onClick={cancelOfficialSignIn}>
+                {t('cancel')}
+              </Button>
             </>
           ) : (
             <>
@@ -225,7 +288,9 @@ const ConnectionContent = () => {
           )
         ) : step === 'paste' ? (
           <>
-            {isNative ? <p className="connection-key-hint">{t('connectionKeyReturnHint')}</p> : null}
+            {isNative ? (
+              <p className="connection-key-hint">{t('connectionKeyReturnHint')}</p>
+            ) : null}
             <form
               className="connection-form"
               onSubmit={(event) => {
@@ -235,7 +300,7 @@ const ConnectionContent = () => {
                 }
               }}
             >
-              <input
+              <Input
                 id="connection-secret"
                 type="password"
                 autoComplete="off"
@@ -258,7 +323,9 @@ const ConnectionContent = () => {
               )}
             </form>
             {pasteError && !value.trim() ? (
-              <p className="connection-error" role="alert">{t('connectionPasteUnavailable')}</p>
+              <p className="connection-error" role="alert">
+                {t('connectionPasteUnavailable')}
+              </p>
             ) : null}
             <Button variant="outlined" disabled={busy} onClick={() => void visitOfficial('keys')}>
               {t('connectionOpenKeysPage')}
@@ -283,12 +350,19 @@ const ConnectionContent = () => {
               <p>{t('connectionBalanceUnknown')}</p>
             ) : null}
             {insufficient ? (
-              <Button disabled={busy} onClick={() => void visitOfficial('topup')}>
+              <Button
+                variant="outlined"
+                onClick={() => {
+                  if (useConnection.getState().away !== 'topup') {
+                    void visitOfficial('topup')
+                  }
+                }}
+              >
                 {t('connectionTopupButton')}
               </Button>
             ) : null}
             <Button
-              disabled={busy || !connected}
+              disabled={!connected}
               variant="outlined"
               onClick={() => void refreshBalance(insufficient)}
             >

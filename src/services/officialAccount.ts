@@ -14,17 +14,10 @@ type Wallet = { currency: string; balance: string }
 export type AccountBalance =
   | { status: 'ready'; value: Wallet[]; bonusWallets: Wallet[] }
   | { status: 'error' }
-export type AccountChunk =
-  | { type: 'search-start'; query: string }
-  | { type: 'search-results'; sources: { url: string; title: string; snippet: string }[] }
-  | { type: 'block-start'; index: number; blockType: string }
-  | { type: 'text-delta' | 'reasoning-delta'; index: number; text: string }
-  | { type: 'block-end'; index: number }
-  | { type: 'usage'; usage: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number } }
-  | { type: 'finish'; reason: string }
+type AccountChunk = { type: 'bytes'; data: string }
 
 type AccountProfile = { name: string | null; avatarUrl: string | null }
-type AccountOperation = 'state' | 'signIn' | 'cancelSignIn' | 'signOut' | 'balance' | 'profile' | 'chat' | 'cancelChat' | 'transcribe'
+type AccountOperation = 'state' | 'signIn' | 'cancelSignIn' | 'signOut' | 'balance' | 'profile' | 'cancelChat' | 'transcribe' | 'upload' | 'messages' | 'synthesize'
 let profileRevision = 0
 const account = registerPlugin<{
   availability(): Promise<{ supported: boolean }>
@@ -36,6 +29,7 @@ export const useOfficialAccount = create(() => ({
   available: false,
   active: readPreference(preference) === 'true' && Capacitor.getPlatform() === 'android',
   signedIn: false,
+  fileScope: readPreference('deepchat:account-file-scope'),
   profile: null as AccountProfile | null,
   authorizing: false,
   browserOpened: false,
@@ -43,7 +37,7 @@ export const useOfficialAccount = create(() => ({
 
 export function selectOfficialAccount(active: boolean) {
   writePreference(preference, active ? 'true' : null)
-  if (!active) profileRevision++
+  if (!active) {profileRevision++}
   useOfficialAccount.setState(active ? { active } : { active, profile: null })
 }
 
@@ -63,10 +57,7 @@ async function refreshOfficialProfile() {
   }
 }
 
-export async function transcribeOfficialRecording(audio: Blob, signal: AbortSignal) {
-  const id = crypto.randomUUID()
-  const path = `deepchat-asr-${id}.wav`
-  const data = await new Promise<string>((resolve, reject) => {
+const encodeBlob = (blob: Blob) => new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
       if (typeof reader.result === 'string') {
@@ -76,8 +67,41 @@ export async function transcribeOfficialRecording(audio: Blob, signal: AbortSign
       }
     }
     reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(audio)
+    if (blob.size) {reader.readAsDataURL(blob)}
+    else {resolve('')}
   })
+
+export async function uploadOfficialFile(file: File, purpose: string | null, signal: AbortSignal) {
+  const id = crypto.randomUUID()
+  const path = `deepchat-upload-${id}`
+  const cancel = () => void officialAccountRequest('cancelChat', { id }).catch(() => undefined)
+  const chunkSize = 256 * 1024
+  try {
+    for (let offset = 0; offset < Math.max(1, file.size); offset += chunkSize) {
+      signal.throwIfAborted()
+      const data = await encodeBlob(file.slice(offset, offset + chunkSize))
+      signal.throwIfAborted()
+      const options = { path, directory: Directory.Cache, data }
+      if (offset === 0) {await Filesystem.writeFile(options)}
+      else {await Filesystem.appendFile(options)}
+    }
+    signal.throwIfAborted()
+    signal.addEventListener('abort', cancel, { once: true })
+    const result = await officialAccountRequest<{ id: string }>('upload', {
+      name: file.name, mimeType: file.type, purpose,
+    }, id)
+    signal.throwIfAborted()
+    return result
+  } finally {
+    signal.removeEventListener('abort', cancel)
+    await Filesystem.deleteFile({ path, directory: Directory.Cache }).catch(() => undefined)
+  }
+}
+
+export async function transcribeOfficialRecording(audio: Blob, signal: AbortSignal) {
+  const id = crypto.randomUUID()
+  const path = `deepchat-asr-${id}.wav`
+  const data = await encodeBlob(audio)
   signal.throwIfAborted()
   const cancel = () => {
     void officialAccountRequest('cancelChat', { id }).catch(() => undefined)
@@ -97,7 +121,12 @@ export async function transcribeOfficialRecording(audio: Blob, signal: AbortSign
 
 export function applyAccountState(state: AccountState) {
   const signedIn = state.status === 'credential-stored'
-  useOfficialAccount.setState({ signedIn })
+  const previous = useOfficialAccount.getState().fileScope
+  const fileScope = signedIn ? previous ?? `account-${crypto.randomUUID()}` : null
+  if (fileScope !== previous) {
+    writePreference('deepchat:account-file-scope', fileScope)
+  }
+  useOfficialAccount.setState({ signedIn, fileScope })
   if (!signedIn) {selectOfficialAccount(false)}
   return signedIn
 }
@@ -165,7 +194,7 @@ export function cancelOfficialSignIn() {
   pendingSignIn?.abort()
 }
 
-export async function* officialAccountChunks(body: object, signal: AbortSignal) {
+async function* officialAccountChunks(method: 'messages' | 'synthesize', body: object, signal: AbortSignal) {
   signal.throwIfAborted()
   const id = crypto.randomUUID()
   let queue: AccountChunk[] = []
@@ -185,7 +214,7 @@ export async function* officialAccountChunks(body: object, signal: AbortSignal) 
   try {
     signal.throwIfAborted()
     signal.addEventListener('abort', abort, { once: true })
-    void officialAccountRequest('chat', body, id)
+    void officialAccountRequest(method, body, id)
       .catch((error: unknown) => { failure = error })
       .finally(() => { done = true; wake?.() })
     while (!done || queue.length) {
@@ -207,4 +236,33 @@ export async function* officialAccountChunks(body: object, signal: AbortSignal) 
     if (!done && !signal.aborted) {abort()}
     await listener.remove()
   }
+}
+
+export function officialAccountStream(method: 'messages' | 'synthesize', body: object, signal: AbortSignal) {
+  const cancellation = new AbortController()
+  const abort = () => cancellation.abort(signal.reason)
+  signal.throwIfAborted()
+  signal.addEventListener('abort', abort, { once: true })
+  const chunks = officialAccountChunks(method, body, cancellation.signal)
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const next = await chunks.next()
+        if (next.done) {
+          signal.removeEventListener('abort', abort)
+          controller.close()
+        } else if (next.value.type === 'bytes') {
+          controller.enqueue(Uint8Array.from(atob(next.value.data), (byte) => byte.charCodeAt(0)))
+        }
+      } catch (error) {
+        signal.removeEventListener('abort', abort)
+        controller.error(error)
+      }
+    },
+    async cancel() {
+      signal.removeEventListener('abort', abort)
+      cancellation.abort()
+      await chunks.return(undefined)
+    },
+  })
 }

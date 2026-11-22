@@ -56,7 +56,13 @@
   color: var(--dsw-alias-label-primary-foreground);
   background-color: var(--dsw-alias-button-primary-fill);
 
-  &:hover:not(:disabled) {
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(:disabled) {
+      background-color: var(--dsw-alias-button-primary-hover);
+    }
+  }
+
+  &[data-pressed]:not(:disabled) {
     background-color: var(--dsw-alias-button-primary-hover);
   }
 }
@@ -67,8 +73,15 @@
   border-color: var(--dsw-alias-border-l2);
   font-weight: 400;
 
-  &:hover:not(:disabled) {
-    background-color: var(--dsw-alias-interactive-bg-hover);
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(:disabled) {
+      background-color: var(--dsw-alias-interactive-bg-hover);
+    }
+  }
+
+  &[data-pressed]:not(:disabled):not([aria-disabled='true']) {
+    background-color: var(--dsw-alias-button-ghost-active-fill);
+    color: var(--dsw-alias-brand-text);
   }
 }
 
@@ -76,7 +89,13 @@
   color: var(--dsw-static-neutral-bluish-00);
   background-color: var(--dsw-alias-state-error-primary);
 
-  &:hover:not(:disabled) {
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(:disabled) {
+      background-color: var(--dsw-alias-state-error-secondary);
+    }
+  }
+
+  &[data-pressed]:not(:disabled) {
     background-color: var(--dsw-alias-state-error-secondary);
   }
 }
@@ -87,7 +106,13 @@
   border-color: var(--dsw-alias-state-error-primary);
   font-weight: 400;
 
-  &:hover:not(:disabled) {
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(:disabled) {
+      background-color: var(--dsw-alias-interactive-bg-hover-danger);
+    }
+  }
+
+  &[data-pressed]:not(:disabled) {
     background-color: var(--dsw-alias-interactive-bg-hover-danger);
   }
 

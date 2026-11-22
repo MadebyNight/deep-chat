@@ -75,7 +75,8 @@ public final class DeepSeekAccountPlugin extends Plugin {
         String id = call.getString("id", "");
         String method = call.getString("method", "");
         if (!id.matches("[a-zA-Z0-9-]{1,64}") || !Arrays.asList("state", "signIn",
-                "cancelSignIn", "signOut", "balance", "profile", "chat", "cancelChat", "transcribe").contains(method)) {
+                "cancelSignIn", "signOut", "balance", "profile", "cancelChat", "transcribe",
+                "upload", "messages", "synthesize").contains(method)) {
             call.reject("Invalid account operation");
             return;
         }
@@ -122,7 +123,10 @@ public final class DeepSeekAccountPlugin extends Plugin {
         }
 
         private static boolean isCancellable(String method) {
-            return method.equals("chat") || method.equals("transcribe");
+            return switch (method) {
+                case "messages", "transcribe", "upload", "synthesize" -> true;
+                default -> false;
+            };
         }
 
         private void cancelRequest(String id) {
@@ -146,7 +150,7 @@ public final class DeepSeekAccountPlugin extends Plugin {
                     plugin.deliver(() -> call.reject("Account operation timed out", "ACCOUNT_TIMEOUT"));
                     if (isCancellable(method)) cancelRequest(id);
                 }
-            }, method.equals("chat") ? 10 : 2, TimeUnit.MINUTES);
+            }, method.equals("messages") || method.equals("synthesize") ? 10 : 2, TimeUnit.MINUTES);
             if (plugin.destroyed) remove(id, request);
             if (pending.get(id) != request) {
                 request.deadline.cancel(false);

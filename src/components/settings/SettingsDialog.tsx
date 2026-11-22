@@ -1,19 +1,8 @@
+import { ActionButton, Input, IconChevronRightOutline14, IconDarkOutline16, IconDataOutline16, IconDownloadOutline16, IconFollowsystemOutline16, IconLightOutline16, IconLinkOutline16, IconSettingsOutline16, IconTrashOutline16, IconUploadOutline14, Button, Modal, Select, Switch } from "../base/index.js"
 import clsx from 'clsx'
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { useIsMobile } from '../../app/viewport.js'
 import whaleLogo from '../../assets/whale.png'
-import {
-  IconChevronRightOutline14,
-  IconDarkOutline16,
-  IconDataOutline16,
-  IconDownloadOutline16,
-  IconFollowsystemOutline16,
-  IconLightOutline16,
-  IconLinkOutline16,
-  IconSettingsOutline16,
-  IconTrashOutline16,
-  IconUploadOutline14,
-} from '../base/icons.js'
 import {
   BackupError,
   clearHistory,
@@ -38,10 +27,6 @@ import {
   type ThemePreference,
 } from '../../services/settings.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
-import { Button } from '../base/Button.js'
-import { Modal } from '../base/Modal.js'
-import { Select } from '../base/Select.js'
-import { Switch } from '../base/Switch.js'
 import { showToast } from '../base/toastState.js'
 import { ConnectionSetting } from './ConnectionDialog.js'
 import { VersionSetting } from './UpdateDialog.js'
@@ -193,7 +178,7 @@ const SettingsContent = () => {
       >
         <div role="tablist" className={styles.navigation}>
           {sections.map((item) => (
-            <button
+            <ActionButton
               key={item.value}
               type="button"
               role="tab"
@@ -203,7 +188,7 @@ const SettingsContent = () => {
             >
               {item.icon}
               {t(item.label)}
-            </button>
+            </ActionButton>
           ))}
         </div>
         <div role="tabpanel" className={styles.content}>
@@ -232,10 +217,10 @@ const SettingsContent = () => {
 }
 
 const SettingsPageLink = ({ label, onClick }: { label: string; onClick: () => void }) => (
-  <button type="button" className={styles.settingsLink} onClick={onClick}>
+  <ActionButton type="button" className={styles.settingsLink} onClick={onClick}>
     {label}
     <IconChevronRightOutline14 />
-  </button>
+  </ActionButton>
 )
 
 const MobilePreferences = ({ onFont }: { onFont: () => void }) => {
@@ -267,7 +252,7 @@ const MobilePreferences = ({ onFont }: { onFont: () => void }) => {
         }))
   return (
     <>
-      <button
+      <ActionButton
         type="button"
         className={styles.settingsLink}
         onClick={() => {
@@ -283,8 +268,8 @@ const MobilePreferences = ({ onFont }: { onFont: () => void }) => {
           )}
         </span>
         <IconChevronRightOutline14 />
-      </button>
-      <button
+      </ActionButton>
+      <ActionButton
         type="button"
         className={styles.settingsLink}
         onClick={() => {
@@ -295,11 +280,11 @@ const MobilePreferences = ({ onFont }: { onFont: () => void }) => {
         {localeLabel}
         <span>{t(locale === 'zh-CN' ? 'settingsLocaleZhCN' : 'settingsLocaleEnUS')}</span>
         <IconChevronRightOutline14 />
-      </button>
-      <button type="button" className={styles.settingsLink} onClick={onFont}>
+      </ActionButton>
+      <ActionButton type="button" className={styles.settingsLink} onClick={onFont}>
         {t('chatFontSize')}
         <IconChevronRightOutline14 />
-      </button>
+      </ActionButton>
       {choice ? (
         <Modal
           title={choice === 'theme' ? themeLabel : localeLabel}
@@ -326,7 +311,7 @@ const MobilePreferences = ({ onFont }: { onFont: () => void }) => {
         >
           {options.map((option) => (
             <label key={option.value} className={styles.settingsLink}>
-              <input
+              <Input
                 type="radio"
                 name="settings-preference"
                 checked={option.checked}
@@ -357,9 +342,9 @@ const AboutSettings = () => {
         <div className={styles.settingsValue}>
           <span>{t('settingsDeveloper')}</span><strong>MadebyNight</strong>
         </div>
-        <button type="button" className={styles.settingsLink} onClick={() => setPanel('app')}>
+        <ActionButton type="button" className={styles.settingsLink} onClick={() => setPanel('app')}>
           {t('settingsAppLicense')}<span>MIT</span><IconChevronRightOutline14 />
-        </button>
+        </ActionButton>
         <SettingsPageLink label={t('settingsOpenSource')} onClick={() => setPanel('thirdParty')} />
       </section>
       <section className={styles.settingsGroup}><VersionSetting showAction /></section>
@@ -412,7 +397,7 @@ const FontSizeSetting = () => {
         {size !== null && (
           <label className={styles.fontSlider}>
             {t('chatFontSize')} <output>{size}</output>
-            <input
+            <Input
               type="range"
               min={14}
               max={22}
@@ -533,16 +518,16 @@ const TtsVoiceSetting = ({ mobile = false }: { mobile?: boolean }) => {
   if (mobile) {
     return (
       <>
-        <button type="button" className={styles.settingsLink} onClick={() => setChoosing(true)}>
+        <ActionButton type="button" className={styles.settingsLink} onClick={() => setChoosing(true)}>
           {t('settingsTtsVoice')}
           <span>{options[ttsVoice === 'tide' ? 1 : 0].label}</span>
           <IconChevronRightOutline14 />
-        </button>
+        </ActionButton>
         {choosing && (
           <Modal title={t('settingsTtsVoice')} closable onClose={() => setChoosing(false)}>
             {options.map(({ value, label }) => (
               <label key={value} className={styles.settingsLink}>
-                <input type="radio" name="settings-tts-voice" checked={ttsVoice === value} onChange={() => {
+                <Input type="radio" name="settings-tts-voice" checked={ttsVoice === value} onChange={() => {
                   setTtsVoice(value)
                   setChoosing(false)
                 }} />
@@ -697,7 +682,7 @@ const ImportConfirm = ({
           <div className="import-preview">
             {preview.map((item) => (
               <label key={item.id}>
-                <input
+                <Input
                   type="checkbox"
                   disabled={busy || item.duplicate}
                   checked={selected.has(item.id)}
@@ -748,7 +733,7 @@ const ThemeSetting = () => {
       {label}
       <div role="radiogroup" aria-label={label} className={styles.themeOptions}>
         {themeOptions.map((option) => (
-          <button
+          <ActionButton
             key={option.value}
             type="button"
             role="radio"
@@ -761,7 +746,7 @@ const ThemeSetting = () => {
           >
             {option.icon}
             {t(option.label)}
-          </button>
+          </ActionButton>
         ))}
       </div>
     </div>
@@ -969,11 +954,11 @@ const DataAction = ({ label, icon, danger, disabled, onClick }: {
   disabled?: boolean
   onClick: () => void
 }) => (
-  <button type="button" className={clsx(styles.settingsLink, styles.dataAction)} data-danger={danger} disabled={disabled} onClick={onClick}>
+  <ActionButton type="button" className={clsx(styles.settingsLink, styles.dataAction)} data-danger={danger} disabled={disabled} onClick={onClick}>
     <span className={styles.dataActionIcon} aria-hidden="true">{icon}</span>
     <span className={styles.dataActionLabel}>{label}</span>
     <span className={styles.dataActionArrow} aria-hidden="true"><IconChevronRightOutline14 /></span>
-  </button>
+  </ActionButton>
 )
 
 const ImportHistory = ({ historyImport, disabled, fileRef }: {
@@ -996,7 +981,7 @@ const ImportHistory = ({ historyImport, disabled, fileRef }: {
       {historyImport.status && (
         <p className={styles.dataStatus} role="status">{t(historyImport.status.key, historyImport.status.params)}</p>
       )}
-      <input ref={fileRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden
+      <Input ref={fileRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden
         onChange={(event) => {
           const file = event.target.files?.[0]
           event.target.value = ''
@@ -1024,7 +1009,7 @@ const ImportHistory = ({ historyImport, disabled, fileRef }: {
                 void historyImport.select(url)
               }
             }}>
-              <input value={link} onChange={(event) => setLink(event.target.value)} type="text"
+              <Input value={link} onChange={(event) => setLink(event.target.value)} type="text"
                 aria-label={t('historyLinkLabel')} placeholder={t('historyLinkLabel')}
                 inputMode="url" spellCheck={false} autoCapitalize="none" autoComplete="off" />
               <Button size="m" type="submit" disabled={!link.trim() || disabled}>{t('historyLinkDownload')}</Button>

@@ -26,16 +26,6 @@
   min-width: 0;
   padding: 16px 0;
 }
-.connection-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-@container connection (min-width: 22rem) {
-  .connection-actions {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
 .connection-overview p {
   margin: 0;
 }
@@ -53,28 +43,6 @@
 .connection-setting [role='status'] {
   min-width: 0;
   text-align: end;
-}
-.connection-actions button {
-  width: 100%;
-  min-width: 0;
-  min-height: 44px;
-  height: auto;
-  padding: 8px 4px;
-  border-color: transparent;
-  border-radius: 10px;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 0.75rem;
-  line-height: 1.5;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-.connection-actions button:first-child {
-  border-color: transparent;
-  background: var(--dsw-alias-button-ghost-active-fill);
-  color: var(--dsw-alias-brand-text);
-}
-.connection-actions button:last-child {
-  color: var(--dsw-alias-label-secondary);
 }
 .connection-body p {
   margin: 0;
