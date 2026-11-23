@@ -1,11 +1,13 @@
-import { ActionButton } from "../base/index.js"
 import { useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { useSettings } from '../../services/settings.js'
 import { monthlyChatUsage, useChatUsage } from '../../services/chat/usage.js'
+import { NANOS_PER_YUAN } from '../../services/api/tokenPricing.js'
 import { formatDate } from '../../utils/format.js'
+import { ActionButton, IconChevronRightOutline14 } from '../base/index.js'
+import styles from './Settings.module.css'
 
-export const UsageChart = () => {
+export const UsageChart = ({ onDetails }: { onDetails?: () => void }) => {
   const t = useTranslate()
   const locale = useSettings((state) => state.locale)
   const days = useChatUsage((state) => state.days)
@@ -23,7 +25,12 @@ export const UsageChart = () => {
   const totalCalls = elapsed.reduce((sum, day) => sum + day.calls, 0)
   const totalReported = elapsed.reduce((sum, day) => sum + day.reported, 0)
   const totalTokens = elapsed.reduce((sum, day) => sum + day.tokens, 0)
-  const peak = Math.max(1, ...elapsed.map((day) => day[metric]))
+  const cost = elapsed.reduce((sum, day) => sum + day.costNanos, 0) / NANOS_PER_YUAN
+  const costLabel = `¥${new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cost)}`
+  // Logarithmic bands keep smaller days visible when a few days dominate the month.
+  const values = elapsed.map((day) => day[metric]).filter((value) => value > 0)
+  const floor = Math.log(Math.min(...values))
+  const range = Math.log(Math.max(...values)) - floor
   const firstWeekday = (month[0].date.getDay() + 6) % 7
   const dayDetail = (day: (typeof month)[number]) =>
     t('connectionUsageDay', {
@@ -32,6 +39,32 @@ export const UsageChart = () => {
       tokens: day.reported ? number.format(day.tokens) : '—',
     })
 
+  const compactNumber = new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 })
+  const compactCost = new Intl.NumberFormat(locale, {
+    style: 'currency', currency: 'CNY', currencyDisplay: 'narrowSymbol',
+    notation: 'compact', maximumFractionDigits: 1,
+  })
+  const tokenLabel = totalReported ? number.format(totalTokens) : '—'
+  const callsLabel = number.format(totalCalls)
+
+  if (onDetails) {
+    return (
+      <ActionButton className={styles.usageSummary} onClick={onDetails}>
+        <span className={styles.usageSummaryText}>
+          <strong>{t('settingsConnectionDetails')}</strong>
+          <span className={styles.usageSummaryTotal}>
+            <span>
+              <b>{totalReported ? number.format(totalTokens) : '—'}</b> Token
+            </span>
+            <span aria-hidden="true">·</span>
+            <b>{costLabel}</b>
+          </span>
+        </span>
+        <IconChevronRightOutline14 aria-hidden="true" />
+      </ActionButton>
+    )
+  }
+
   return (
     <section className="connection-usage" aria-label={t('connectionLocalUsage')}>
       <div className="connection-usage-heading">
@@ -39,13 +72,25 @@ export const UsageChart = () => {
         <span>{monthLabel.format(now)}</span>
       </div>
       <div className="connection-usage-metrics">
-        <ActionButton type="button" aria-pressed={metric === 'calls'} onClick={() => setMetric('calls')}>
-          <span>{t('connectionUsageCalls')}</span>
-          <strong>{number.format(totalCalls)}</strong>
-        </ActionButton>
-        <ActionButton type="button" aria-pressed={metric === 'tokens'} onClick={() => setMetric('tokens')}>
+        <div className="connection-usage-amount">
+          <span>{t('connectionUsageAmount')}</span>
+          <strong title={costLabel} aria-label={costLabel}>{costLabel.length > 7 ? compactCost.format(cost) : costLabel}</strong>
+        </div>
+        <ActionButton
+          type="button"
+          aria-pressed={metric === 'tokens'}
+          onClick={() => setMetric('tokens')}
+        >
           <span>{t('connectionUsageTokens')}</span>
-          <strong>{totalReported ? number.format(totalTokens) : '—'}</strong>
+          <strong title={tokenLabel} aria-label={tokenLabel}>{tokenLabel.length > 7 ? compactNumber.format(totalTokens) : tokenLabel}</strong>
+        </ActionButton>
+        <ActionButton
+          type="button"
+          aria-pressed={metric === 'calls'}
+          onClick={() => setMetric('calls')}
+        >
+          <span>{t('connectionUsageCalls')}</span>
+          <strong title={callsLabel} aria-label={callsLabel}>{callsLabel.length > 7 ? compactNumber.format(totalCalls) : callsLabel}</strong>
         </ActionButton>
       </div>
       <div className="connection-usage-weekdays" aria-hidden>
@@ -56,7 +101,10 @@ export const UsageChart = () => {
       <div className="connection-usage-chart">
         {month.map((day, index) => {
           const future = index >= today
-          const level = !future && day[metric] > 0 ? Math.ceil((day[metric] / peak) * 4) : 0
+          const value = day[metric]
+          const level = future || value === 0 ? 0 : range > 0
+            ? 1 + Math.round(3 * (Math.log(value) - floor) / range)
+            : 2
           return (
             <ActionButton
               key={day.date.getTime()}
@@ -75,7 +123,9 @@ export const UsageChart = () => {
           )
         })}
       </div>
-      <p className="connection-usage-detail" aria-live="polite">{dayDetail(selected)}</p>
+      <p className="connection-usage-detail" aria-live="polite">
+        {dayDetail(selected)}
+      </p>
     </section>
   )
 }

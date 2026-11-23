@@ -391,6 +391,14 @@
     ]
   },
   {
+    "file": "src/components/settings/CustomProviderSetting.tsx",
+    "group": "settings",
+    "components": [
+      "CustomProviderSetting",
+      "ProviderEditor"
+    ]
+  },
+  {
     "file": "src/components/settings/SettingsDialog.tsx",
     "group": "settings",
     "components": [

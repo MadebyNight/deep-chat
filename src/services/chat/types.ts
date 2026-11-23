@@ -123,6 +123,7 @@ export type Session = {
   /** 包含所有分支的消息，按创建顺序存储。 */
   messages: Message[]
   contextCheckpoint?: ContextCheckpoint
+  customProviderId?: string
   /** undefined 表示线性消息列表；null 表示空会话。 */
   rootMessageId?: string | null
 }

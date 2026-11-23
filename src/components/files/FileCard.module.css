@@ -13,11 +13,6 @@
   cursor: default;
   transition: background-color 0.2s ease-in-out;
 
-  @media (hover: hover) and (pointer: fine) {
-    &:hover .remove {
-      opacity: 1;
-    }
-  }
 }
 
 .clickable {
@@ -116,8 +111,11 @@
   color: var(--dsw-alias-label-primary-inverted);
   background-color: var(--dsw-alias-button-contrast-fill);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.2s ease-in-out;
+  @media (hover: hover) and (pointer: fine) {
+    .card:not(:hover):not(:focus-within) &:not(.invalidRemove) {
+      opacity: 0;
+    }
+  }
 }
 
 .invalidRemove {

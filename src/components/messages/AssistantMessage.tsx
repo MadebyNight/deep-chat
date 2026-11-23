@@ -10,6 +10,7 @@ import { stopReadAloud } from '../../services/speech/readAloud.js'
 import { shareText } from '../../services/native.js'
 import type { AssistantMessage as AssistantMessageType } from '../../services/chat/types.js'
 import { openConnection, visitOfficial } from '../../services/connection.js'
+import { openSettings } from '../settings/settingsDialogState.js'
 
 
 import { Markdown } from '../markdown/Markdown.js'
@@ -106,6 +107,14 @@ export const AssistantMessage = memo(function AssistantMessage({
                   onClick={openConnection}
                 >
                   {t(notice.action === 'signIn' ? 'connectionAccountLogin' : 'changeApiKey')}
+                </ActionButton>
+              </>
+            ) : null}
+            {notice.action === 'customProvider' ? (
+              <>
+                {' '}
+                <ActionButton type="button" className={styles.noticeAction} onClick={() => openSettings('provider')}>
+                  {t('customProviderTitle')}
                 </ActionButton>
               </>
             ) : null}

@@ -29,6 +29,8 @@ import {
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { showToast } from '../base/toastState.js'
 import { ConnectionSetting } from './ConnectionDialog.js'
+import { CustomProviderSetting } from './CustomProviderSetting.js'
+import { UsageChart } from './UsageChart.js'
 import { VersionSetting } from './UpdateDialog.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import styles from './Settings.module.css'
@@ -45,11 +47,14 @@ const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode
     label: 'settingDialogAsideGeneralOptionLabel',
     icon: <IconSettingsOutline16 />,
   },
+  { value: 'provider', label: 'customProviderTitle', icon: <IconLinkOutline16 /> },
   { value: 'data', label: 'settingDialogAsideDataOptionLabel', icon: <IconDataOutline16 /> },
 ]
 
 const mobilePageTitles = {
   home: 'settings',
+  connection: 'settingsConnectionDetails',
+  provider: 'customProviderTitle',
   font: 'chatFontSize',
   personalization: 'settingsPersonalization',
   voice: 'settingsVoice',
@@ -68,7 +73,7 @@ const SettingsContent = () => {
   const historyBusy = historyImport.busy || historyDelete.busy || replacingHistory
   const isMobile = useIsMobile()
   const [page, setPage] = useState<keyof typeof mobilePageTitles>(() =>
-    section === 'data' ? 'data' : 'home'
+    section === 'general' ? 'home' : section
   )
   const importFileRef = useRef<HTMLInputElement>(null)
   const chooseImportFile = () => importFileRef.current?.click()
@@ -108,8 +113,9 @@ const SettingsContent = () => {
     const pages = {
       home: (
         <>
-          <section className={styles.settingsGroup} aria-label={t('connectionTitle')}>
-            <ConnectionSetting />
+          <section className={styles.settingsGroup} aria-label={t('settingsConnectionDetails')}>
+            <UsageChart onDetails={() => setPage('connection')} />
+            <SettingsPageLink label={t('customProviderTitle')} onClick={() => setPage('provider')} />
           </section>
           <section
             className={styles.settingsGroup}
@@ -131,6 +137,16 @@ const SettingsContent = () => {
             <VersionSetting />
           </section>
         </>
+      ),
+      connection: (
+        <section className={styles.settingsGroup}>
+          <ConnectionSetting detailPage />
+        </section>
+      ),
+      provider: (
+        <section className={styles.settingsGroup}>
+          <CustomProviderSetting />
+        </section>
       ),
       font: <FontSizeSetting />,
       personalization: (
@@ -202,6 +218,8 @@ const SettingsContent = () => {
               <AutoReadSetting />
               <VersionSetting />
             </>
+          ) : section === 'provider' ? (
+            <CustomProviderSetting />
           ) : (
             <>
               <ConnectionSetting />

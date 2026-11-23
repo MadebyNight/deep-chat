@@ -64,11 +64,11 @@ export const ReplyArea = memo(function ReplyArea({
       setOpen(false)
     }
   }, [autoCollapse, streaming, message.thinking])
-  if (view.steps.length === 0 && !(message.thinking && streaming)) {
+  if (view.steps.length === 0 && !(message.thinking && streaming && !hasResponse)) {
     return null
   }
   // 未记录请求开关时，按是否有思考内容显示标题。
-  const thinking = message.thinking ?? view.steps.some((step) => step.type === 'thinking')
+  const thinking = message.thinking || view.steps.some((step) => step.type === 'thinking')
   const title = thinking ? getAreaTitle(view, streaming, Date.now(), hasResponse) : null
   const stopped = !streaming && !hasResponse
   return (

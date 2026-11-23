@@ -7,8 +7,12 @@ import {
   IconEditOutline16,
   IconPanelLeftOutline16,
   IconLinkOutline16,
+  IconEllipsisOutline16,
+  IconButton,
+  Menu,
 } from '../base/index.js'
 import { refreshChatUsage } from '../../services/chat/usage.js'
+import { refreshProviderPricing } from '../../services/customProvider.js'
 import styles from './Settings.module.css'
 import { useEffect, useState } from 'react'
 import { Clipboard } from '@capacitor/clipboard'
@@ -30,7 +34,7 @@ import {
 } from '../../services/connection.js'
 import { UsageChart } from './UsageChart.js'
 
-export const ConnectionSetting = () => {
+export const ConnectionSetting = ({ detailPage = false }: { detailPage?: boolean }) => {
   const t = useTranslate()
   const hasKey = useSettings((state) => !!state.apiKey)
   const { available, active, signedIn } = useOfficialAccount()
@@ -47,6 +51,7 @@ export const ConnectionSetting = () => {
     setRefreshing(true)
     try {
       refreshChatUsage()
+      void refreshProviderPricing()
       await refreshBalance(false, true)
     } finally {
       setRefreshing(false)
@@ -61,21 +66,97 @@ export const ConnectionSetting = () => {
 
   if (!connected) {
     return (
-      <div className="connection-setting">
-        <strong>{t('connectionTitle')}</strong>
-        <Button variant="outlined" onClick={openConnection}>
-          {t('connectionConnect')}
-        </Button>
-      </div>
+      <>
+        <div className="connection-setting">
+          <strong>{t('connectionTitle')}</strong>
+          <Button variant="outlined" onClick={openConnection}>
+            {t('connectionConnect')}
+          </Button>
+        </div>
+        {detailPage ? <UsageChart /> : null}
+      </>
     )
   }
 
   const insufficient = balance?.is_available === false
+  const actions = (
+    <div className={styles.connectionActions}>
+      <Button
+        size="m"
+        variant="outlined"
+        disabled={actionsLocked}
+        onClick={() => {
+          const state = useConnection.getState()
+          if (!state.busy && state.away !== 'topup') {
+            void visitOfficial('topup', false)
+          }
+        }}
+      >
+        <span className={styles.topupIcon} aria-hidden="true">
+          <IconRightUpOutline14 />
+        </span>
+        <span>{t('connectionTopupButton')}</span>
+      </Button>
+      <Button
+        size="m"
+        variant="outlined"
+        aria-disabled={actionsLocked}
+        data-refreshing={refreshing}
+        onClick={() => void refresh()}
+      >
+        <IconRefreshOutline16 />
+        <span role="status">{t(refreshing ? 'connectionRefreshBusy' : 'connectionRefresh')}</span>
+      </Button>
+    </div>
+  )
   return (
     <div className="connection-overview" aria-busy={busy || refreshing}>
       <div className={styles.connectionData} data-refreshing={refreshing}>
         <div className="connection-setting">
-          <strong>{t('connectionTitle')}</strong>
+          <div className={styles.connectionTitleActions}>
+            <strong>{t('connectionTitle')}</strong>
+            <Menu
+              className={styles.settingsMenu}
+              key={String(actionsLocked)}
+              options={[
+                ...(available && !official
+                  ? [
+                      {
+                        key: 'login',
+                        label: t('connectionAccountLogin'),
+                        icon: <IconLinkOutline16 />,
+                        onSelect: () => void connectOfficial(),
+                      },
+                    ]
+                  : []),
+                {
+                  key: 'api',
+                  label: t(official ? 'connectionUseKey' : 'connectionChangeKey'),
+                  icon: <IconEditOutline16 />,
+                  onSelect: changeConnectionKey,
+                },
+                {
+                  key: 'remove',
+                  label: t(official ? 'connectionAccountSignOut' : 'connectionRemove'),
+                  icon: <IconPanelLeftOutline16 />,
+                  danger: true,
+                  onSelect: () => setRemoving(true),
+                },
+              ]}
+            >
+              {({ open, toggle }) => (
+                <IconButton
+                  className={styles.connectionMore}
+                  icon={<IconEllipsisOutline16 />}
+                  aria-label={t('more')}
+                  aria-haspopup="menu"
+                  aria-expanded={open}
+                  disabled={actionsLocked}
+                  onClick={toggle}
+                />
+              )}
+            </Menu>
+          </div>
           <span role="status">
             {t(insufficient ? 'connectionStatusInsufficient' : 'connectionStatusConnected')}
           </span>
@@ -89,58 +170,10 @@ export const ConnectionSetting = () => {
             {error}
           </p>
         ) : null}
+        {detailPage ? actions : null}
         <UsageChart />
       </div>
-      <div className={styles.connectionActions}>
-        <Button
-          size="m"
-          variant="outlined"
-          disabled={actionsLocked}
-          onClick={() => {
-            const state = useConnection.getState()
-            if (!state.busy && state.away !== 'topup') {
-              void visitOfficial('topup', false)
-            }
-          }}
-        >
-          <IconRightUpOutline14 />
-          {t('connectionTopupButton')}
-        </Button>
-        <Button
-          size="m"
-          variant="outlined"
-          aria-disabled={actionsLocked}
-          data-refreshing={refreshing}
-          onClick={() => void refresh()}
-        >
-          <IconRefreshOutline16 />
-          <span role="status">{t(refreshing ? 'connectionRefreshBusy' : 'connectionRefresh')}</span>
-        </Button>
-        {available && !official ? (
-          <Button
-            size="m"
-            variant="outlined"
-            disabled={actionsLocked}
-            onClick={() => void connectOfficial()}
-          >
-            <IconLinkOutline16 />
-            {t('connectionAccountLogin')}
-          </Button>
-        ) : null}
-        <Button size="m" variant="outlined" disabled={actionsLocked} onClick={changeConnectionKey}>
-          <IconEditOutline16 />
-          {t(official ? 'connectionUseKey' : 'connectionChangeKey')}
-        </Button>
-        <Button
-          size="m"
-          variant="dangerOutlined"
-          disabled={actionsLocked}
-          onClick={() => setRemoving(true)}
-        >
-          <IconPanelLeftOutline16 />
-          {t(official ? 'connectionAccountSignOut' : 'connectionRemove')}
-        </Button>
-      </div>
+      {!detailPage ? actions : null}
       {removing ? (
         <Modal
           title={t(official ? 'connectionAccountSignOutTitle' : 'connectionRemoveConfirmTitle')}

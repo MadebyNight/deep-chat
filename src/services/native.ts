@@ -5,8 +5,8 @@ import { Share } from '@capacitor/share'
 
 export const isNative = Capacitor.isNativePlatform()
 export const credentials = registerPlugin<{
-  read(): Promise<{ value: string | null }>
-  write(options: { value: string | null }): Promise<void>
+  read(options?: { slot: 'customProvider' }): Promise<{ value: string | null }>
+  write(options: { value: string | null; slot?: 'customProvider' }): Promise<void>
 }>('SecureCredentials')
 
 const officialBrowser = registerPlugin<{ open(options: { url: string }): Promise<void> }>(

@@ -21,8 +21,15 @@ import javax.crypto.spec.GCMParameterSpec;
 public class SecureCredentialsPlugin extends Plugin {
     private static final String ALIAS = "deepchat.credentials.v1";
 
-    private SharedPreferences preferences() {
-        return getContext().getSharedPreferences("secure_credentials", Context.MODE_PRIVATE);
+    private SharedPreferences preferences(PluginCall call) {
+        String slot = call.getString("slot", "deepseek");
+        if ("deepseek".equals(slot)) {
+            return getContext().getSharedPreferences("secure_credentials", Context.MODE_PRIVATE);
+        }
+        if ("customProvider".equals(slot)) {
+            return getContext().getSharedPreferences("secure_custom_provider", Context.MODE_PRIVATE);
+        }
+        throw new IllegalArgumentException("Unknown credential slot");
     }
 
     private SecretKey key() throws Exception {
@@ -43,12 +50,13 @@ public class SecureCredentialsPlugin extends Plugin {
     @PluginMethod
     public void read(PluginCall call) {
         try {
-            String value = preferences().getString("ciphertext", null);
+            SharedPreferences preferences = preferences(call);
+            String value = preferences.getString("ciphertext", null);
             JSObject result = new JSObject();
             if (value == null) {
                 result.put("value", JSObject.NULL);
             } else {
-                String iv = preferences().getString("iv", "");
+                String iv = preferences.getString("iv", "");
                 Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
                 cipher.init(Cipher.DECRYPT_MODE, key(), new GCMParameterSpec(128, Base64.decode(iv, Base64.NO_WRAP)));
                 result.put("value", new String(cipher.doFinal(Base64.decode(value, Base64.NO_WRAP)), StandardCharsets.UTF_8));
@@ -63,9 +71,9 @@ public class SecureCredentialsPlugin extends Plugin {
     public void write(PluginCall call) {
         String value = call.getString("value");
         try {
-            SharedPreferences.Editor editor = preferences().edit();
+            SharedPreferences.Editor editor = preferences(call).edit();
             if (value == null) {
-                editor.clear();
+                editor.remove("iv").remove("ciphertext");
             } else {
                 Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
                 cipher.init(Cipher.ENCRYPT_MODE, key());

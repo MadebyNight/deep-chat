@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useCustomProvider } from '../customProvider.js'
 import { openDB, type IDBPDatabase } from 'idb'
 import type { TranslationMessage } from '../../i18n/index.js'
 import { createId } from '../../utils/id.js'
@@ -188,7 +189,7 @@ export const initializeDrafts = async () => {
     upgrade(database) { database.createObjectStore('drafts') },
   })
   const saved = await db.get('drafts', 'all') as [string | null, Draft][] | undefined
-  const connection = getAttachmentConnection()
+  const connection = useCustomProvider.getState().enabled ? undefined : getAttachmentConnection()
   const drafts = new Map(saved ?? [])
   for (const draft of drafts.values()) {
     for (const attachment of draft.attachments) {

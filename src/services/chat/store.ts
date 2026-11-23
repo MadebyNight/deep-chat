@@ -1,8 +1,11 @@
 import { create } from 'zustand'
 import { showToast } from '../../components/base/toastState.js'
 import { createId } from '../../utils/id.js'
-import { ApiError, streamMessage, streamOfficialMessage } from '../api/client.js'
-import type { ChatModel, CreateMessageRequest } from '../api/types.js'
+import { ApiError, streamCustomMessage, streamMessage, streamOfficialMessage } from '../api/client.js'
+import type { ChatModel, CreateMessageRequest, MessageStreamEvent } from '../api/types.js'
+import type { TokenRates } from '../api/tokenPricing.js'
+import { matchesChatProvider, useCustomProvider, type CustomProvider } from '../customProvider.js'
+import { ensureChatConnection } from '../../components/settings/settingsDialogState.js'
 import {
   extractFileIds,
   getFileErrorCode,
@@ -35,6 +38,7 @@ import {
   applyEvent,
   canContinueReply,
   getContextRounds,
+  getReplyText,
   settleReply,
   toRequestMessages,
 } from './reply.js'
@@ -273,16 +277,16 @@ export const bindChatPersistence = () => {
 }
 
 /** 按当前开关创建回复：深度思考对应 thinking，智能搜索控制 deepseek_web_search。 */
-const createReply = (): AssistantMessage => {
+const createReply = (connection: ChatConnection): AssistantMessage => {
   const { thinking, search } = useSettings.getState()
   return {
     id: createId(),
     role: 'assistant',
     createdAt: Date.now(),
-    model: MODEL,
+    model: connection.kind === 'deepseek' ? MODEL : null,
     thinking,
-    search,
-    prefix: true,
+    search: connection.kind === 'deepseek' && search,
+    prefix: connection.kind === 'deepseek',
     status: 'pending',
     blocks: [],
   }
@@ -616,6 +620,25 @@ const removeSessionData = async (id: string): Promise<boolean> => {
 
 export const stopReply = (sessionId: string) => getStreamController(sessionId)?.abort()
 
+type ChatConnection =
+  | { kind: 'deepseek'; attachment: AttachmentConnection | undefined }
+  | { kind: 'custom'; provider: CustomProvider; rates?: TokenRates }
+
+const chatConnectionFor = (session?: Session): ChatConnection | undefined => {
+  const { enabled, provider, rates } = useCustomProvider.getState()
+  if (enabled && !provider) {
+    ensureChatConnection()
+    return
+  }
+  if (session && !matchesChatProvider(session.customProviderId, enabled, provider?.id)) {
+    showToast({ key: 'customProviderSessionMismatch' })
+    return
+  }
+  return enabled && provider
+    ? { kind: 'custom', provider, rates }
+    : { kind: 'deepseek', attachment: getAttachmentConnection() }
+}
+
 /**
  * 提交指定会话的最新草稿；null 表示新建会话。
  * 同步接收成功才清空草稿，附件原件由会话接管；保存失败仍通过保存入口重试。
@@ -624,9 +647,16 @@ export const sendMessage = (targetSessionId: string | null) => {
   if (get().importingHistory || !get().ready) {
     return false
   }
-  const connection = getAttachmentConnection()
-  if (!connection) {return false}
-  const prepared = prepareDraftMessage(getDraft(targetSessionId), useUploads.getState().tasks, connection.scope)
+  const chatConnection = chatConnectionFor(targetSessionId === null ? undefined : getSession(targetSessionId))
+  if (!chatConnection) {return false}
+  const connection = chatConnection.kind === 'deepseek' ? chatConnection.attachment : undefined
+  if (chatConnection.kind === 'deepseek' && !connection) {return false}
+  const draft = getDraft(targetSessionId)
+  if (chatConnection.kind === 'custom' && draft.attachments.length > 0) {
+    showToast({ key: 'customProviderTextOnly' })
+    return false
+  }
+  const prepared = prepareDraftMessage(draft, useUploads.getState().tasks, connection?.scope)
   if (!prepared) {
     return false
   }
@@ -647,6 +677,7 @@ export const sendMessage = (targetSessionId: string | null) => {
       updatedAt: now,
       messages: [],
       rootMessageId: null,
+      ...(chatConnection.kind === 'custom' ? { customProviderId: chatConnection.provider.id } : {}),
     }
     sessionId = session.id
     touchSession(session.id)
@@ -665,7 +696,7 @@ export const sendMessage = (targetSessionId: string | null) => {
     id: createId(),
     role: 'user',
     content: text,
-    files: files.map(({ id, serverId, name, size, isImage, mimeType }) => ({
+    files: connection ? files.map(({ id, serverId, name, size, isImage, mimeType }) => ({
       id,
       serverId: connection.apiKey === null ? null : serverId,
       ...(connection.apiKey === null
@@ -675,10 +706,10 @@ export const sendMessage = (targetSessionId: string | null) => {
       size,
       isImage,
       mimeType,
-    })),
+    })) : [],
     createdAt: now,
   }
-  const reply = createReply()
+  const reply = createReply(chatConnection)
   updateSession(sessionId, (session) => ({
     ...appendBranch(session, history.at(-1)?.id ?? null, [question, reply]),
     updatedAt: now,
@@ -691,7 +722,7 @@ export const sendMessage = (targetSessionId: string | null) => {
   }
   persist(sessionId)
   clearSentDraft(targetSessionId)
-  void streamReply(sessionId, reply, { history, question }, connection)
+  void streamReply(sessionId, reply, { history, question }, chatConnection)
   return true
 }
 
@@ -704,6 +735,8 @@ export const regenerateReply = (sessionId: string, messageId?: string) => {
   if (!session || getStreamController(sessionId)) {
     return
   }
+  const chatConnection = chatConnectionFor(session)
+  if (!chatConnection) {return}
   const path = getVisibleMessages(session)
   const index =
     messageId === undefined ? path.length - 1 : path.findIndex((m) => m.id === messageId)
@@ -712,13 +745,13 @@ export const regenerateReply = (sessionId: string, messageId?: string) => {
     return
   }
   const history = path.slice(0, index - 1)
-  const reply = createReply()
+  const reply = createReply(chatConnection)
   updateSession(sessionId, (s) => ({
     ...appendBranch(s, question.id, [reply]),
     updatedAt: Date.now(),
   }))
   persist(sessionId)
-  void streamReply(sessionId, reply, { history, question })
+  void streamReply(sessionId, reply, { history, question }, chatConnection)
 }
 
 /** 编辑提问后新增同父版本，保留原文件；旧问题的所有回答与后续对话仍可切回。 */
@@ -730,6 +763,8 @@ export const editMessage = (sessionId: string, messageId: string, content: strin
   if (!session || getStreamController(sessionId)) {
     return false
   }
+  const chatConnection = chatConnectionFor(session)
+  if (!chatConnection) {return false}
   const path = getVisibleMessages(session)
   const index = path.findIndex((message) => message.id === messageId)
   const previous = path[index]
@@ -744,13 +779,13 @@ export const editMessage = (sessionId: string, messageId: string, content: strin
     files: previous.files,
     createdAt: Date.now(),
   }
-  const reply = createReply()
+  const reply = createReply(chatConnection)
   updateSession(sessionId, (s) => ({
     ...appendBranch(s, path[index - 1]?.id ?? null, [question, reply]),
     updatedAt: Date.now(),
   }))
   persist(sessionId)
-  void streamReply(sessionId, reply, { history: path.slice(0, index), question })
+  void streamReply(sessionId, reply, { history: path.slice(0, index), question }, chatConnection)
   return true
 }
 
@@ -774,6 +809,8 @@ export const continueReply = (sessionId: string, messageId: string) => {
   if (!session || getStreamController(sessionId)) {
     return
   }
+  const chatConnection = chatConnectionFor(session)
+  if (chatConnection?.kind !== 'deepseek') {return}
   const path = getVisibleMessages(session)
   const question = path.at(-2)
   const previous = path.at(-1)
@@ -800,7 +837,7 @@ export const continueReply = (sessionId: string, messageId: string) => {
   updateReply(sessionId, reply)
   updateSession(sessionId, (s) => ({ ...s, updatedAt: Date.now() }))
   persist(sessionId)
-  void streamReply(sessionId, reply, { history: path.slice(0, -2), question, prefix: previous })
+  void streamReply(sessionId, reply, { history: path.slice(0, -2), question, prefix: previous }, chatConnection)
 }
 
 /** 附件补传失败后重试：保留原回答位置，重新补传并请求 */
@@ -812,6 +849,8 @@ export const retryUpload = (sessionId: string, messageId: string) => {
   if (!session || getStreamController(sessionId)) {
     return
   }
+  const chatConnection = chatConnectionFor(session)
+  if (chatConnection?.kind !== 'deepseek') {return}
   const path = getVisibleMessages(session)
   const index = path.findIndex((message) => message.id === messageId)
   const question = path[index - 1]
@@ -826,7 +865,7 @@ export const retryUpload = (sessionId: string, messageId: string) => {
   const reply: AssistantMessage = { ...previous, status: 'pending', error: undefined }
   updateReply(sessionId, reply)
   persist(sessionId)
-  void streamReply(sessionId, reply, { history: path.slice(0, index - 1), question })
+  void streamReply(sessionId, reply, { history: path.slice(0, index - 1), question }, chatConnection)
 }
 
 type Request = { history: Message[]; question: UserMessage; prefix?: AssistantMessage }
@@ -1052,10 +1091,11 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
  * 服务端判定 file_id 失效时重新补传后重发，退避重试且次数有上限，超过则按原始报错收尾。
  */
 const streamReply = async (
-  sessionId: string, initial: AssistantMessage, request: Request, connection = getAttachmentConnection()
+  sessionId: string, initial: AssistantMessage, request: Request, chatConnection: ChatConnection
 ) => {
   const controller = new AbortController()
-  if (!getSession(sessionId)?.title) {
+  const connection = chatConnection.kind === 'deepseek' ? chatConnection.attachment : undefined
+  if (chatConnection.kind === 'deepseek' && !getSession(sessionId)?.title) {
     titleRequests.add(controller)
   }
   set((state) => ({ streaming: { ...state.streaming, [sessionId]: controller } }))
@@ -1067,6 +1107,15 @@ const streamReply = async (
     updateReply(sessionId, reply)
   }
   streamFlushes.set(sessionId, flush)
+  const blockIndexes = new Map<number, number>()
+  const apply = (event: MessageStreamEvent) => {
+    reply = applyEvent(reply, event, Date.now(), blockIndexes)
+    if (document.visibilityState === 'hidden') {
+      flush()
+    } else {
+      frame ||= requestAnimationFrame(flush)
+    }
+  }
 
   const settings = useSettings.getState()
   const official = connection?.apiKey === null
@@ -1105,6 +1154,24 @@ const streamReply = async (
       let sent: Request | undefined
       let receivedContent = false
       try {
+        if (chatConnection.kind === 'custom') {
+          const messages = getContextRounds(request.history).flatMap(([user, assistant]) => [
+            { role: 'user' as const, content: user.content },
+            { role: 'assistant' as const, content: getReplyText(assistant) },
+          ])
+          messages.push({ role: 'user', content: request.question.content })
+          for await (const event of streamCustomMessage(
+            chatConnection.provider,
+            messages,
+            controller.signal,
+            chatConnection.rates,
+            { thinking: !!initial.thinking }
+          )) {
+            apply(event)
+          }
+          reply = settleReply(reply, 'done', Date.now())
+          break
+        }
         if (!connection) {throw new ApiError('http', { key: 'replyInvalidApiKey' }, 401)}
         const context = settings.autoCompactContext
           ? await selectContext(request.history, getSession(sessionId)?.contextCheckpoint)
@@ -1172,7 +1239,7 @@ const streamReply = async (
         }
         sent = prepared
         const events = stream(messageBody, controller.signal)
-        const blockIndexes = new Map<number, number>()
+        blockIndexes.clear()
         for await (const event of events) {
           receivedContent ||= event.type === 'content_block_start'
           if (
@@ -1187,12 +1254,7 @@ const streamReply = async (
             updateSession(sessionId, (session) => (session.title ? session : { ...session, title }))
             titleRequests.delete(controller)
           }
-          reply = applyEvent(reply, event, Date.now(), blockIndexes)
-          if (document.visibilityState === 'hidden') {
-            flush()
-          } else {
-            frame ||= requestAnimationFrame(flush)
-          }
+          apply(event)
         }
         reply = settleReply(reply, 'done', Date.now())
         break

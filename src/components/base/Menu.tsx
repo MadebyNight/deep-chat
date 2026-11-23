@@ -17,8 +17,10 @@ export type MenuOption = {
 export const Menu = ({
   options,
   children,
+  className,
 }: {
   options: MenuOption[]
+  className?: string
   children: (props: { open: boolean; toggle: () => void }) => ReactNode
 }) => {
   const [open, setOpen] = useState(false)
@@ -26,7 +28,7 @@ export const Menu = ({
   // Align to the action at the trailing edge of the chat row.
   const { anchorRef, floatingRef, position } = useAnchoredPosition<HTMLSpanElement, HTMLDivElement>(
     open,
-    { align: 'end', offset: 4 }
+    { align: 'end', offset: 4, maxHeight: 320 }
   )
   useDismiss(open, [anchorRef, floatingRef], close, { captureEscape: true })
 
@@ -39,7 +41,7 @@ export const Menu = ({
         ? createPortal(
             <div
               ref={floatingRef}
-              className={styles.menu}
+              className={clsx(styles.menu, className)}
               style={position ?? undefined}
               role="menu"
             >

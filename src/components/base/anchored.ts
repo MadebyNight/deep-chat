@@ -49,17 +49,10 @@ export type AnchoredOptions = {
   measureKey?: unknown
 }
 
-const clampLeft = (left: number, width: number) =>
-  Math.max(VIEWPORT_PADDING, Math.min(left, window.innerWidth - width - VIEWPORT_PADDING))
-
 const alignLeft = (anchor: DOMRect, width: number, align: Align, alignOffset: number) => {
-  if (align === 'center') {
-    return clampLeft(anchor.left + anchor.width / 2 - width / 2 + alignOffset, width)
-  }
-  if (align === 'end') {
-    return Math.max(VIEWPORT_PADDING, anchor.right - width + alignOffset)
-  }
-  return clampLeft(anchor.left + alignOffset, width)
+  const left = align === 'center' ? anchor.left + (anchor.width - width) / 2
+    : align === 'end' ? anchor.right - width : anchor.left
+  return left + alignOffset
 }
 
 /** 只有一侧放得下时用那一侧；两侧都放得下用优先侧；都放不下时退到空间更大的一侧 */
@@ -129,30 +122,25 @@ export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement
       return
     }
     const rect = anchor.getBoundingClientRect()
-    const spaceAbove = rect.top - offset - VIEWPORT_PADDING
-    const spaceBelow = window.innerHeight - rect.bottom - offset - VIEWPORT_PADDING
-
-    if (maxHeight === undefined) {
-      const { width, height } = floating.getBoundingClientRect()
-      const resolved = resolveSide(spaceAbove, spaceBelow, side, height)
-      applyPosition({
-        top: resolved === 'top' ? rect.top - offset - height : rect.bottom + offset,
-        left: alignLeft(rect, width, align, alignOffset),
-      })
-      return
-    }
-
-    const resolved = resolveSide(spaceAbove, spaceBelow, side, minSpace)
-    const available = Math.max(0, resolved === 'top' ? spaceAbove : spaceBelow)
-    // 内容比可用空间小时按内容收口，避免浮层留出多余空白
-    const height = Math.max(40, Math.min(maxHeight, available, floating.scrollHeight + 2))
+    const viewport = window.visualViewport
+    const left = (viewport?.offsetLeft ?? 0) + VIEWPORT_PADDING
+    const top = (viewport?.offsetTop ?? 0) + VIEWPORT_PADDING
+    const right = left + (viewport?.width ?? window.innerWidth) - 2 * VIEWPORT_PADDING
+    const bottom = top + (viewport?.height ?? window.innerHeight) - 2 * VIEWPORT_PADDING
+    const spaceAbove = rect.top - offset - top
+    const spaceBelow = bottom - rect.bottom - offset
+    const bounds = floating.getBoundingClientRect()
+    const needed = maxHeight === undefined ? bounds.height : Math.min(minSpace, floating.scrollHeight + 2)
+    const resolved = resolveSide(spaceAbove, spaceBelow, side, needed)
+    const available = resolved === 'top' ? spaceAbove : spaceBelow
+    const height = maxHeight === undefined ? bounds.height
+      : Math.max(0, Math.min(maxHeight, Math.max(40, available), bottom - top, floating.scrollHeight + 2))
+    const preferredTop = resolved === 'top' ? rect.top - offset - height : rect.bottom + offset
+    const preferredLeft = alignLeft(rect, bounds.width, align, alignOffset)
     applyPosition({
-      top:
-        resolved === 'top'
-          ? Math.max(VIEWPORT_PADDING, rect.top - offset - height)
-          : rect.bottom + offset,
-      right: Math.max(VIEWPORT_PADDING, window.innerWidth - rect.right),
-      maxHeight: height,
+      top: Math.max(top, Math.min(preferredTop, bottom - height)),
+      left: Math.max(left, Math.min(preferredLeft, right - bounds.width)),
+      maxHeight: maxHeight === undefined ? undefined : height,
     })
   }, [align, alignOffset, applyPosition, floatingRef, getAnchor, maxHeight, minSpace, offset, side])
 
@@ -183,7 +171,12 @@ export const useAnchoredPosition = <T extends HTMLElement, F extends HTMLElement
     }
     window.addEventListener('scroll', update, { capture: true, passive: true })
     window.addEventListener('resize', update, { passive: true })
+    const viewport = window.visualViewport
+    viewport?.addEventListener('resize', update)
+    viewport?.addEventListener('scroll', update)
     return () => {
+      viewport?.removeEventListener('resize', update)
+      viewport?.removeEventListener('scroll', update)
       observer.disconnect()
       window.removeEventListener('scroll', update, { capture: true })
       window.removeEventListener('resize', update)

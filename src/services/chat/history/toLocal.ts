@@ -287,6 +287,7 @@ export const toLocalSession = (file: SessionFile): LocalSession => {
     title: file.title ?? '',
     createdAt: time(file.inserted_at),
     updatedAt: time(file.updated_at),
+    ...(file.deepchat_custom_provider_id ? { customProviderId: file.deepchat_custom_provider_id } : {}),
     ...buildTree(file),
   }
   const images = new Map<string, string>()

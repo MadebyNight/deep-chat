@@ -7,7 +7,7 @@ export type Notice = {
   /** 模板答复使用正文样式；其余统一为红色错误提示。 */
   presentation?: 'response'
   /** 需要用户处理的问题附带的操作 */
-  action?: 'apiKey' | 'signIn' | 'topUp'
+  action?: 'apiKey' | 'signIn' | 'topUp' | 'customProvider'
 }
 
 const getTemplateText = (reply: AssistantMessage) =>
@@ -26,6 +26,9 @@ export const describeReply = (reply: AssistantMessage): Notice | null => {
         : reply.error.message
     if (localMessage?.key === 'connectionAccountSignInAgain') {
       return { text: message, action: 'signIn' }
+    }
+    if (localMessage?.key === 'customProviderRequestFailed') {
+      return { text: message, action: 'customProvider' }
     }
     // 历史补传错误刷新后仍需说明原因，恢复沿用附件卡片或重新生成。
     if (kind === 'upload') {

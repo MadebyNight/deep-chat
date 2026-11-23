@@ -7,6 +7,9 @@
   z-index: 900;
   box-sizing: border-box;
   min-width: 124px;
+  max-width: calc(100vw - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 4px;
   border-radius: 12px;
   background-color: var(--dsw-specific-menu);

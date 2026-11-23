@@ -1,6 +1,6 @@
-import { ActionButton } from "./Control.js"
+import { ActionButton } from './Control.js'
 import clsx from 'clsx'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useAnchoredPosition, useDismiss } from './anchored.js'
 import { IconCheckOutline16, IconChevronDownOutline14 } from './icons.js'
@@ -20,6 +20,7 @@ export const Select = <T extends string>({
   ariaLabel,
   className,
   disabled = false,
+  inline,
 }: {
   value: T
   options: SelectOption<T>[]
@@ -28,39 +29,60 @@ export const Select = <T extends string>({
   ariaLabel?: string
   className?: string
   disabled?: boolean
+  inline?: {
+    open: boolean
+    onClose: () => void
+    field: ReactNode
+    className?: string
+  }
 }) => {
-  const [open, setOpen] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const open = !disabled && (inline?.open ?? expanded)
+  const close = inline?.onClose ?? (() => setExpanded(false))
   const current = options.find((option) => option.value === value)
   // 菜单贴右侧展开，最多 320px 高，超出在菜单内滚动
-  const { anchorRef, floatingRef, position } = useAnchoredPosition<
-    HTMLButtonElement,
-    HTMLDivElement
-  >(open, { align: 'end', maxHeight: 320, minSpace: 160 })
+  const { anchorRef, floatingRef, position } = useAnchoredPosition<HTMLElement, HTMLDivElement>(
+    open,
+    { align: inline ? 'center' : 'end', maxHeight: 320, minSpace: 160, measureKey: options.length }
+  )
   // Esc 只关菜单，不让外层弹窗一起关闭
-  useDismiss(open, [anchorRef, floatingRef], () => setOpen(false), { captureEscape: true })
+  useDismiss(open, [anchorRef, floatingRef], close, { captureEscape: true })
 
   return (
     <>
-      <ActionButton
-        ref={anchorRef}
-        type="button"
-        className={clsx(styles.trigger, open && styles.open, className)}
-        aria-label={ariaLabel}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        disabled={disabled}
-        onClick={() => setOpen((value) => !value)}
-      >
-        {current ? (
-          <span lang={current.lang}>{current.label}</span>
-        ) : (
-          <span className={styles.placeholder}>{placeholder}</span>
-        )}
-        <span className={styles.arrow}>
-          <IconChevronDownOutline14 />
-        </span>
-      </ActionButton>
-      {open && !disabled
+      {inline ? (
+        <div
+          ref={(element) => {
+            anchorRef.current = element
+          }}
+          className={inline.className}
+        >
+          {inline.field}
+        </div>
+      ) : (
+        <ActionButton
+          ref={(element) => {
+            anchorRef.current = element
+          }}
+          type="button"
+          className={clsx(styles.trigger, open && styles.open, className)}
+          aria-label={ariaLabel}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          disabled={disabled}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {current ? (
+            <span lang={current.lang}>{current.label}</span>
+          ) : (
+            <span className={styles.placeholder}>{placeholder}</span>
+          )}
+          <span className={styles.arrow}>
+            <IconChevronDownOutline14 />
+          </span>
+        </ActionButton>
+      )}
+      {open
         ? createPortal(
             <div
               ref={floatingRef}
@@ -77,7 +99,7 @@ export const Select = <T extends string>({
                   aria-selected={option.value === value}
                   className={styles.option}
                   onClick={() => {
-                    setOpen(false)
+                    close()
                     onChange(option.value)
                   }}
                 >

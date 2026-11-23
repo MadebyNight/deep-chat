@@ -4,6 +4,7 @@ import { App } from './app/App.js'
 import { setupTheme } from './app/theme.js'
 import { ensureKatex } from './services/markdown/katex.js'
 import { initializeCredentials } from './services/settings.js'
+import { initializeCustomProvider } from './services/customProvider.js'
 import { initializeDrafts } from './services/chat/drafts.js'
 import { initializeNative } from './app/nativeLifecycle.js'
 import { showToast } from './components/base/toastState.js'
@@ -51,7 +52,8 @@ const start = async () => {
   setupTheme()
   let storageError = false
   startup.startupStage = 'CREDENTIAL_STORAGE'
-  try { await initializeCredentials() } catch { storageError = true }
+  const credentials = await Promise.allSettled([initializeCredentials(), initializeCustomProvider()])
+  storageError = credentials.some((result) => result.status === 'rejected')
   startup.startupStage = 'DRAFT_STORAGE'
   try { await initializeDrafts() } catch { storageError = true }
   startup.startupStage = 'REACT_RENDER'

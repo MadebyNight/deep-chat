@@ -1,5 +1,7 @@
 import { translate, type TranslationMessage } from '../../i18n/index.js'
 import { recordChatRequest } from '../chat/usage.js'
+import { providerRequest, type CustomProvider } from '../customProvider.js'
+import { deepSeekRates, type TokenRates } from './tokenPricing.js'
 import { readMessageEvent } from './parseEvent.js'
 import { readServerSentEvents } from './sse.js'
 import { applyAccountState, officialAccountRequest, officialAccountStream, type AccountState } from '../officialAccount.js'
@@ -10,6 +12,7 @@ import type {
   FilePurpose,
   MessageStreamEvent,
   MessageUsage,
+  StopReason,
 } from './types.js'
 
 /** 构建期 API 地址，默认 https://api.deepseek.com；本地开发支持开发服务器代理 */
@@ -188,13 +191,198 @@ export async function* streamMessage(
   signal.throwIfAborted()
   const startedAt = new Date()
   const pending = request(`${ANTHROPIC_BASE_URL}/messages`, init)
-  const reportUsage = recordChatRequest(startedAt)
+  const reportUsage = recordChatRequest(startedAt, deepSeekRates(API_ORIGIN, body.model, startedAt))
   const response = await pending
   const contentType = response.headers.get('Content-Type') ?? ''
   if (!response.body || !contentType.includes('text/event-stream')) {
     throw await readErrorResponse(response, 'protocol', '')
   }
   yield* readMessageStream(response.body, signal, reportUsage)
+}
+
+type CustomMessage = { role: 'user' | 'assistant'; content: string }
+type CustomChunk = {
+  model?: string
+  error?: unknown
+  choices?: {
+    delta?: { content?: unknown; reasoning_content?: unknown; reasoning?: unknown }
+    finish_reason?: string | null
+  }[]
+  usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } }
+}
+
+function customUsage(value: CustomChunk['usage']): MessageUsage | undefined {
+  const input = value?.prompt_tokens
+  const output = value?.completion_tokens
+  const cached = value?.prompt_tokens_details?.cached_tokens ?? 0
+  if (typeof input !== 'number' || typeof output !== 'number' ||
+      ![input, output, cached].every((count) => Number.isSafeInteger(count) && count >= 0) || cached > input) {return}
+  return { input_tokens: input - cached, output_tokens: output, cache_read_input_tokens: cached, cache_creation_input_tokens: 0 }
+}
+
+type RejectionError = { param?: string | null; code?: string | null; message?: string }
+
+function rejectsParameter(target: 'stream_options' | 'reasoning_effort', rejection?: RejectionError) {
+  const { param, code, message } = rejection ?? {}
+  const matchesTarget =
+    param === target ||
+    (target === 'stream_options' && param === 'stream_options.include_usage') ||
+    (typeof message === 'string' && message.toLowerCase().includes(target))
+  if (!matchesTarget) {
+    return false
+  }
+  return (
+    !code ||
+    code === 'unsupported_parameter' ||
+    code === 'unknown_parameter' ||
+    code === 'unsupported_value' ||
+    code === 'invalid_value' ||
+    code === 'invalid_request_error'
+  )
+}
+
+export async function* streamCustomMessage(
+  provider: CustomProvider,
+  messages: CustomMessage[],
+  signal: AbortSignal,
+  rates?: TokenRates,
+  options?: { thinking?: boolean }
+): AsyncGenerator<MessageStreamEvent> {
+  signal.throwIfAborted()
+  const failure = { key: 'customProviderRequestFailed' } as const
+  let report: ReturnType<typeof recordChatRequest>
+  let includeUsage = true
+  let includeReasoning = options?.thinking !== undefined
+  const reasoningEffort = options?.thinking ? 'high' : 'none'
+  const send = () => {
+    report = recordChatRequest(new Date(), rates)
+    return providerRequest(provider, 'chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: JSON.stringify({
+        model: provider.model,
+        messages,
+        stream: true,
+        ...(includeUsage ? { stream_options: { include_usage: true } } : {}),
+        ...(includeReasoning ? { reasoning_effort: reasoningEffort } : {}),
+      }),
+      signal,
+    })
+  }
+  let response: Response
+  try {
+    response = await send()
+    for (let attempt = 0; attempt < 2 && (response.status === 400 || response.status === 422); attempt++) {
+      const rejection = (await response.json().catch(() => undefined)) as
+        | { error?: RejectionError }
+        | undefined
+      if (includeUsage && rejectsParameter('stream_options', rejection?.error)) {
+        includeUsage = false
+      } else if (includeReasoning && rejectsParameter('reasoning_effort', rejection?.error)) {
+        includeReasoning = false
+      } else {
+        break
+      }
+      signal.throwIfAborted()
+      response = await send()
+    }
+  } catch {
+    signal.throwIfAborted()
+    throw new ApiError('protocol', failure)
+  }
+  if (!response.ok || !response.body || !response.headers.get('content-type')?.includes('text/event-stream')) {
+    void response.body?.cancel().catch(() => undefined)
+    throw new ApiError('protocol', failure)
+  }
+  let started = false
+  let blockIndex = 0
+  let openBlock: 'thinking' | 'text' | null = null
+  let finished = false
+  let stop: StopReason | undefined
+  let usage: MessageUsage | undefined
+  let matchingModel = true
+  try {
+    for await (const { event, data } of readServerSentEvents(response.body, signal)) {
+      signal.throwIfAborted()
+      if (data.trim() === '[DONE]') {
+        finished = true
+        break
+      }
+      if (event === 'error') {throw new ApiError('stream', failure)}
+      const chunk = JSON.parse(data) as CustomChunk | null
+      if (chunk?.error) {throw new ApiError('stream', failure)}
+      if (chunk?.model && chunk.model !== provider.model) {matchingModel = false}
+      usage = customUsage(chunk?.usage) ?? usage
+      const choice = Array.isArray(chunk?.choices) ? chunk.choices[0] : undefined
+      const reasoning =
+        typeof choice?.delta?.reasoning_content === 'string'
+          ? choice.delta.reasoning_content
+          : typeof choice?.delta?.reasoning === 'string'
+            ? choice.delta.reasoning
+            : ''
+      if (reasoning) {
+        if (openBlock === 'text') {
+          yield { type: 'content_block_stop', index: blockIndex++ }
+          openBlock = null
+        }
+        if (openBlock === null) {
+          started = true
+          openBlock = 'thinking'
+          yield {
+            type: 'content_block_start',
+            index: blockIndex,
+            content_block: { type: 'thinking', thinking: '', signature: '' },
+          }
+        }
+        yield { type: 'content_block_delta', index: blockIndex, delta: { type: 'thinking_delta', thinking: reasoning } }
+      }
+      const text = choice?.delta?.content
+      if (typeof text === 'string' && text) {
+        if (openBlock === 'thinking') {
+          yield { type: 'content_block_stop', index: blockIndex++ }
+          openBlock = null
+        }
+        if (openBlock === null) {
+          started = true
+          openBlock = 'text'
+          yield { type: 'content_block_start', index: blockIndex, content_block: { type: 'text', text: '' } }
+        }
+        yield { type: 'content_block_delta', index: blockIndex, delta: { type: 'text_delta', text } }
+      }
+      switch (choice?.finish_reason) {
+        case 'length':
+          stop = 'max_tokens'
+          break
+        case 'content_filter':
+          stop = 'refusal'
+          break
+        case 'function_call':
+        case 'tool_calls':
+          stop = 'tool_use'
+          break
+        case 'stop':
+          stop = 'end_turn'
+          break
+      }
+    }
+    signal.throwIfAborted()
+    if (!finished && !stop) {
+      throw new ApiError('interrupted', failure)
+    }
+    if (stop === 'tool_use' || (!started && stop !== 'refusal')) {
+      throw new ApiError('protocol', failure)
+    }
+    if (openBlock !== null) {
+      yield { type: 'content_block_stop', index: blockIndex }
+    }
+    yield { type: 'message_delta', delta: { stop_reason: stop ?? 'end_turn', stop_sequence: null }, usage }
+    yield { type: 'message_stop' }
+  } catch (error) {
+    signal.throwIfAborted()
+    throw error instanceof ApiError ? error : new ApiError('protocol', failure)
+  } finally {
+    if (usage) {report?.(usage, matchingModel)}
+  }
 }
 
 async function* readMessageStream(

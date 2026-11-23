@@ -89,8 +89,7 @@
   border-radius: 0;
   background: transparent;
 }
-.connection-overview .connection-balance dl,
-.connection-usage-metrics {
+.connection-overview .connection-balance dl {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
@@ -101,9 +100,19 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.connection-overview .connection-balance dl > div + div {
-  padding-inline-start: 16px;
-  border-inline-start: 1px solid var(--dsw-alias-border-l2);
+.connection-overview .connection-balance dl:has(> div + div) {
+  position: relative;
+  column-gap: 32px;
+}
+.connection-overview .connection-balance dl:has(> div + div)::after {
+  position: absolute;
+  inset-block: 4px;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--dsw-alias-border-l2);
+  content: '';
+  pointer-events: none;
 }
 .connection-overview .connection-balance dl > div:first-child dd {
   color: var(--dsw-alias-brand-text);
@@ -160,18 +169,32 @@
   outline: 2px solid var(--dsw-alias-brand-text);
   outline-offset: 2px;
 }
-.connection-usage-metrics button {
+.connection-usage-metrics {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.connection-usage-metrics button,
+.connection-usage-metrics .connection-usage-amount {
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: center;
   gap: 5px;
+  box-sizing: border-box;
   min-width: 0;
   min-height: 52px;
-  padding: 9px 10px;
+  padding: 8px clamp(4px, 2cqi, 10px);
   border: 1px solid transparent;
   border-radius: 10px;
   background: var(--dsw-alias-bg-skeleton);
-  font-size: 0.75rem;
-  overflow-wrap: anywhere;
+  color: var(--dsw-alias-label-secondary);
+  font-size: min(0.75rem, 4cqi);
   text-align: start;
+}
+.connection-usage-metrics :is(span, strong) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .connection-usage-metrics button[aria-pressed='true'] {
   border-color: color-mix(in srgb, var(--dsw-alias-brand-text) 45%, transparent);
@@ -179,7 +202,7 @@
 }
 .connection-usage-metrics strong {
   color: var(--dsw-alias-label-primary);
-  font-size: 1.125rem;
+  font-size: min(1.125rem, 5.5cqi);
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
@@ -220,7 +243,7 @@
 }
 .connection-usage-chart button[data-level='3'] {
   background: #6997eb;
-  color: #ffffff;
+  color: #102447;
 }
 .connection-usage-chart button[data-level='4'] {
   background: #3267ca;

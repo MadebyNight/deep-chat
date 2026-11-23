@@ -2,6 +2,7 @@ import { ActionButton, Input, Textarea, IconCloseOutline16, IconGlobeLanguageOut
 import clsx from 'clsx'
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { setSearch, setThinking, useSettings } from '../../services/settings.js'
+import { useCustomProvider } from '../../services/customProvider.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { sendMessage, stopReply, useChatStore } from '../../services/chat/store.js'
 import {
@@ -40,14 +41,16 @@ export const ChatInput = memo(function ChatInput({ sessionId }: { sessionId: str
 
 const Composer = ({ sessionId }: { sessionId: string | null }) => {
   const t = useTranslate()
-  const scope = useAttachmentScope()
+  const attachmentScope = useAttachmentScope()
+  const custom = useCustomProvider((state) => state.enabled)
+  const scope = custom ? undefined : attachmentScope
   const draft = useDrafts((state) => state.drafts.get(sessionId) ?? EMPTY_DRAFT)
   const { text, attachments } = draft
   const setText = (value: string) => setDraftText(sessionId, value)
   const draftReady = useUploads((state) => prepareDraftMessage(draft, state.tasks, scope) !== null)
   useEffect(() => {
     const connection = getAttachmentConnection()
-    if (connection?.scope === scope && connection) {
+    if (!useCustomProvider.getState().enabled && connection?.scope === scope && connection) {
       prepareDraftUploads(attachments, connection)
     }
   }, [attachments, scope])
@@ -59,7 +62,7 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
   const isMobile = useIsMobile()
   const search = useSettings((state) => state.search)
   const [attachmentPicker, setAttachmentPicker] = useState(false)
-  const showAttachmentPicker = isMobile && attachmentPicker && !importingHistory
+  const showAttachmentPicker = isMobile && attachmentPicker && !importingHistory && !custom
   const attachmentPanelId = useId()
   const composerRef = useRef<HTMLDivElement>(null)
   const attachmentPanelRef = useRef<HTMLDivElement>(null)
@@ -116,6 +119,10 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
     if (files.length === 0 || useChatStore.getState().importingHistory) {
       return
     }
+    if (useCustomProvider.getState().enabled) {
+      showToast({ key: 'customProviderTextOnly' })
+      return
+    }
     if (!ensureChatConnection()) {
       return
     }
@@ -132,7 +139,7 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
   }
   const retryFile = useCallback(
     (id: string) => {
-      if (useChatStore.getState().importingHistory || !ensureChatConnection()) {
+      if (useChatStore.getState().importingHistory || useCustomProvider.getState().enabled || !ensureChatConnection()) {
         return
       }
       const connection = getAttachmentConnection()
@@ -291,13 +298,19 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
                 <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
               </ActionButton>
             </Tooltip>
-            <Tooltip content={t('deactivatedSearchTooltip')}>
+            <Tooltip content={t(custom ? 'customProviderSearchUnavailable' : 'deactivatedSearchTooltip')}>
               <ActionButton
                 type="button"
-                className={clsx(styles.toggle, search && styles.selected)}
+                className={clsx(styles.toggle, !custom && search && styles.selected)}
                 aria-label={t('search')}
-                aria-pressed={search}
-                onClick={() => setSearch(!search)}
+                aria-pressed={!custom && search}
+                onClick={() => {
+                  if (useCustomProvider.getState().enabled) {
+                    showToast({ key: 'customProviderSearchUnavailable' })
+                    return
+                  }
+                  setSearch(!search)
+                }}
               >
                 <IconGlobeLanguageOutline14 />
                 <span className={styles.toggleLabel}>{t('search')}</span>
@@ -320,7 +333,7 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
                 }}
               />
             ) : null}
-            <IconButton
+            {!custom ? <IconButton
               size="m"
               tone="primary"
               className={clsx(isMobile && styles.addButton)}
@@ -362,7 +375,7 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
                   fileInputRef.current?.click()
                 }
               }}
-            />
+            /> : null}
             <Input
               ref={fileInputRef}
               type="file"
