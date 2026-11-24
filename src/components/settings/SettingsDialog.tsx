@@ -442,6 +442,7 @@ const DeleteAllConfirm = ({
   const t = useTranslate()
   return (
     <Modal
+      layout="confirm"
       title={t('deleteAllSessionsModalTitle')}
       className={styles.deleteConfirm}
       onClose={historyDelete.cancel}
@@ -588,7 +589,10 @@ const AutoReadSetting = () => {
         <Switch
           aria-label={t('autoReadAloud')}
           checked={enabled}
-          onClick={() => setAutoReadAloud(!enabled)}
+          onClick={() => {
+            triggerHaptic('light')
+            setAutoReadAloud(!enabled)
+          }}
         />
       }
     />
@@ -608,7 +612,10 @@ const ThinkingCollapseSetting = () => {
         <Switch
           checked={autoCollapseThinking}
           aria-label={t('settingsAutoCollapseThinking')}
-          onClick={() => setAutoCollapseThinking(!autoCollapseThinking)}
+          onClick={() => {
+            triggerHaptic('light')
+            setAutoCollapseThinking(!autoCollapseThinking)
+          }}
         />
       }
     />
@@ -627,7 +634,10 @@ const ContextCompactionSetting = () => {
         <Switch
           checked={enabled}
           aria-label={t('settingsAutoCompactContext')}
-          onClick={() => setAutoCompactContext(!enabled)}
+          onClick={() => {
+            triggerHaptic('light')
+            setAutoCompactContext(!enabled)
+          }}
         />
       }
     />

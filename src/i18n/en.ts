@@ -366,6 +366,7 @@ export const en = {
   deleteTurnsConfirmTitle: 'Delete selected rounds?',
   deleteTurnsConfirmDescription: 'Delete {count} selected rounds, their regenerated replies, and unreferenced attachments. Following messages will reconnect automatically.',
   turnDeleted: 'Deleted {count} rounds',
+  sessionDeleted: 'Chat deleted',
   settingsHaptics: 'Haptic feedback',
   settingsHapticsDescription: 'Subtle vibration when sending messages, toggling modes, or long-pressing to select',
 } satisfies Record<keyof typeof zh, string>

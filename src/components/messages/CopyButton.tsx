@@ -3,6 +3,7 @@ import { useTranslate } from '../../i18n/index.js'
 import { IconCheckOutline16, IconCopyOutline16, IconButton } from "../base/index.js"
 
 import { showToast } from '../base/toastState.js'
+import { triggerHaptic } from '../../services/haptics.js'
 import { copyText } from '../../utils/clipboard.js'
 
 /** 复制成功后图标换成对勾 1 秒，期间再次点击不重复复制 */
@@ -25,6 +26,7 @@ export const CopyButton = ({ text }: { text: string }) => {
           showToast({ key: 'copyFailed' })
           return
         }
+        triggerHaptic('light')
         setCopied(true)
         timerRef.current = setTimeout(() => setCopied(false), 1000)
       }}

@@ -20,6 +20,7 @@ export const Modal = ({
   className,
   mainClassName,
   fitViewport = false,
+  layout = 'default',
   onClose,
 }: {
   title: ReactNode
@@ -32,6 +33,7 @@ export const Modal = ({
   /** 内容区的 class */
   mainClassName?: string
   fitViewport?: boolean
+  layout?: 'default' | 'confirm'
   onClose: () => void
 }) => {
   const t = useTranslate()
@@ -62,7 +64,7 @@ export const Modal = ({
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
       <div
-        className={clsx(styles.content, className)}
+        className={clsx(styles.content, layout === 'confirm' && styles.confirm, className)}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

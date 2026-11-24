@@ -9,7 +9,7 @@ import { buildReplyView } from '../../services/chat/view.js'
 import { triggerHaptic } from '../../services/haptics.js'
 import { useSettings } from '../../services/settings.js'
 import { describeReadAloudError, stopReadAloud, toggleReadAloud } from '../../services/speech/readAloud.js'
-import { Button, Modal } from '../base/index.js'
+import { ActionButton, Button, IconTrashOutline16, Modal } from '../base/index.js'
 import { showToast } from '../base/toastState.js'
 import { ChatInput } from '../chatInput/ChatInput.js'
 import { MessageList } from '../messages/MessageList.js'
@@ -91,38 +91,43 @@ export const SessionView = ({
           <div className={styles.footer}>
             {selectionActive ? (
               <div className={styles.selectionBar}>
-                <Button
-                  variant="outlined"
-                  size={isMobile ? 's' : 'm'}
-                  className={styles.selectionButton}
-                  onClick={clearTurnSelection}
+                <ActionButton
+                  type="button"
+                  className={styles.selectionCancel}
+                  onClick={() => {
+                    triggerHaptic('light')
+                    clearTurnSelection()
+                  }}
                 >
                   {t('cancel')}
-                </Button>
+                </ActionButton>
                 <span className={styles.selectionCount}>
                   {t('selectedTurnsCount', { count: activeSelectedIds.length })}
                 </span>
                 <div className={styles.selectionActions}>
-                  <Button
-                    variant="outlined"
-                    size={isMobile ? 's' : 'm'}
-                    className={styles.selectionButton}
+                  <ActionButton
+                    type="button"
+                    className={styles.selectionToggleAll}
                     disabled={allTurnIds.length === 0}
-                    onClick={() =>
+                    onClick={() => {
+                      triggerHaptic('light')
                       selectAllTurns(session.id, allSelected ? [] : allTurnIds)
-                    }
+                    }}
                   >
                     {t(allSelected ? 'deselectAll' : 'selectAll')}
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size={isMobile ? 's' : 'm'}
-                    className={styles.selectionButton}
+                  </ActionButton>
+                  <ActionButton
+                    type="button"
+                    className={styles.selectionDelete}
                     disabled={activeSelectedIds.length === 0}
-                    onClick={() => setConfirmDeleteOpen(true)}
+                    onClick={() => {
+                      triggerHaptic('light')
+                      setConfirmDeleteOpen(true)
+                    }}
                   >
-                    {t('delete')}
-                  </Button>
+                    <IconTrashOutline16 />
+                    <span>{t('delete')}</span>
+                  </ActionButton>
                 </div>
               </div>
             ) : (
@@ -138,6 +143,7 @@ export const SessionView = ({
       />
       {confirmDeleteOpen ? (
         <Modal
+          layout="confirm"
           title={t('deleteTurnsConfirmTitle')}
           onClose={() => setConfirmDeleteOpen(false)}
           footer={

@@ -1,6 +1,7 @@
 import { IconMenuOutline20, IconNewChatOutline20, IconPlayMediaOutline16, IconButton } from "../base/index.js"
 import { useTranslate } from '../../i18n/index.js'
 import { newChat } from '../../services/chat/store.js'
+import { triggerHaptic } from '../../services/haptics.js'
 import { useSettings, setAutoReadAloud } from '../../services/settings.js'
 import { openMobileSider } from '../sider/mobileSiderState.js'
 import styles from './MobileHeader.module.css'
@@ -19,7 +20,10 @@ export const MobileHeader = ({ title }: { title?: string }) => {
         tone="primary"
         icon={<IconMenuOutline20 />}
         aria-label={t('expandSiderbarButton')}
-        onClick={openMobileSider}
+        onClick={() => {
+          triggerHaptic('light')
+          openMobileSider()
+        }}
       />
       {title !== undefined ? (
         <div className={styles.title}>{title}</div>
@@ -33,14 +37,20 @@ export const MobileHeader = ({ title }: { title?: string }) => {
         aria-label={t('autoReadAloud')}
         aria-pressed={autoReadAloud}
         className={autoReadAloud ? styles.autoReadOn : undefined}
-        onClick={() => setAutoReadAloud(!autoReadAloud)}
+        onClick={() => {
+          triggerHaptic('light')
+          setAutoReadAloud(!autoReadAloud)
+        }}
       />
       <IconButton
         size="xl"
         tone="primary"
         icon={<IconNewChatOutline20 />}
         aria-label={t('newChat')}
-        onClick={newChat}
+        onClick={() => {
+          triggerHaptic('light')
+          newChat()
+        }}
       />
     </div>
   )

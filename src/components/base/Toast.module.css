@@ -1,50 +1,71 @@
 .toast {
   position: fixed;
-  top: calc(40px + var(--app-safe-top));
+  top: calc(62px + var(--app-safe-top));
   right: 0;
   left: 0;
   z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   box-sizing: border-box;
   width: fit-content;
-  max-width: min(calc(100vw - 28px), 480px);
+  max-width: min(calc(100vw - 32px), 440px);
   margin: 0 auto;
-  padding: 12px 18px;
-  border-radius: 12px;
-  border: 1px solid var(--dsw-alias-border-inverted);
-  font-size: 14px;
-  line-height: 22px;
-  text-align: center;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  text-align: left;
   word-break: break-word;
   white-space: pre-wrap;
-  color: var(--dsw-static-neutral-100);
-  background-color: var(--dsw-alias-toast-bg);
+  color: var(--dsw-alias-label-primary);
+  background-color: var(--dsw-alias-bg-layer-2);
   box-shadow:
-    0 0 4px 2px rgba(0, 0, 0, 0.04),
-    0 4px 16px 0 rgba(0, 0, 0, 0.1);
-  animation: enter 0.2s var(--ds-ease-in-out);
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.12);
+  animation: enter 0.22s cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
+
+  [data-ds-dark-theme] & {
+    background-color: var(--dsw-alias-bg-layer-3);
+    box-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.24),
+      0 10px 28px rgba(0, 0, 0, 0.42);
+  }
 }
 
-/* 带图标时图标在左、文字左对齐，整体仍居中 */
 .error {
-  display: flex;
-  text-align: left;
+  border-color: var(--dsw-alias-state-error-secondary);
 }
 
 .icon {
   display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   width: 16px;
   height: 16px;
-  margin-right: 7px;
-  /* 与首行文字居中：(22 - 16) / 2 */
-  margin-top: 3px;
   color: var(--dsw-alias-state-error-primary);
+}
+
+.successIcon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: var(--dsw-alias-button-ghost-active-fill);
+  color: var(--dsw-alias-brand-primary);
+}
+
+.content {
+  min-width: 0;
 }
 
 /* 整条提示不拦截点击，只有链接可点 */
 .link {
-  color: var(--dsw-static-blue-400);
+  margin-left: 4px;
+  color: var(--dsw-alias-brand-text);
   text-decoration: none;
   pointer-events: auto;
 
@@ -56,6 +77,6 @@
 @keyframes enter {
   from {
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translateY(-14px) scale(0.95);
   }
 }

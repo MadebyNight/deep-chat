@@ -1,11 +1,16 @@
 package app.deepchat.mobile;
 
+import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.VibrationAttributes;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
@@ -199,23 +204,61 @@ public class MainActivity extends BridgeActivity {
         @PluginMethod
         public void triggerHaptic(PluginCall call) {
             String style = call.getString("style", "light");
-            final int constant;
+            final long durationMs;
+            final int amplitude;
+            final int fallbackConstant;
             if ("longPress".equals(style)) {
-                constant = HapticFeedbackConstants.LONG_PRESS;
+                durationMs = 42L;
+                amplitude = 255;
+                fallbackConstant = HapticFeedbackConstants.LONG_PRESS;
             } else if ("confirm".equals(style)) {
-                constant = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                durationMs = 32L;
+                amplitude = 225;
+                fallbackConstant = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
                         ? HapticFeedbackConstants.CONFIRM
                         : HapticFeedbackConstants.KEYBOARD_TAP;
             } else if ("medium".equals(style)) {
-                constant = HapticFeedbackConstants.CONTEXT_CLICK;
+                durationMs = 26L;
+                amplitude = 200;
+                fallbackConstant = HapticFeedbackConstants.CONTEXT_CLICK;
             } else {
-                constant = HapticFeedbackConstants.KEYBOARD_TAP;
+                durationMs = 18L;
+                amplitude = 175;
+                fallbackConstant = HapticFeedbackConstants.KEYBOARD_TAP;
             }
             MainActivity activity = (MainActivity) getActivity();
             activity.runOnUiThread(() -> {
-                View view = activity.getWindow() != null ? activity.getWindow().getDecorView() : null;
-                if (view != null) {
-                    view.performHapticFeedback(constant);
+                Vibrator vibrator = null;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    VibratorManager manager = (VibratorManager) activity.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+                    if (manager != null) {
+                        vibrator = manager.getDefaultVibrator();
+                    }
+                } else {
+                    vibrator = (Vibrator) activity.getSystemService(Context.VIBRATOR_SERVICE);
+                }
+                if (vibrator != null && vibrator.hasVibrator()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        int scaledAmplitude = vibrator.hasAmplitudeControl()
+                                ? amplitude
+                                : VibrationEffect.DEFAULT_AMPLITUDE;
+                        VibrationAttributes attrs = new VibrationAttributes.Builder()
+                                .setUsage(VibrationAttributes.USAGE_MEDIA)
+                                .build();
+                        vibrator.vibrate(VibrationEffect.createOneShot(durationMs, scaledAmplitude), attrs);
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        int scaledAmplitude = vibrator.hasAmplitudeControl()
+                                ? amplitude
+                                : VibrationEffect.DEFAULT_AMPLITUDE;
+                        vibrator.vibrate(VibrationEffect.createOneShot(durationMs, scaledAmplitude));
+                    } else {
+                        vibrator.vibrate(durationMs);
+                    }
+                } else {
+                    View view = activity.getWindow() != null ? activity.getWindow().getDecorView() : null;
+                    if (view != null) {
+                        view.performHapticFeedback(fallbackConstant | HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING);
+                    }
                 }
                 call.resolve();
             });

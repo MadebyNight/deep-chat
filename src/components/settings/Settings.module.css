@@ -347,6 +347,14 @@
   border-radius: 0;
   background: var(--dsw-alias-bg-base);
   box-shadow: none;
+  animation: mobile-page-in 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes mobile-page-in {
+  from {
+    opacity: 0;
+    transform: translateX(32px);
+  }
 }
 
 .mobilePageMain {

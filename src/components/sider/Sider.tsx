@@ -163,6 +163,8 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
       }
       if (failed.length) {
         showToast({ key: 'sessionDeleteFailed', type: 'error' })
+      } else if (deleting.length) {
+        showToast({ key: 'sessionDeleted' })
       }
     } finally {
       setDeletePending(false)
@@ -285,6 +287,7 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
       )}
       {deleting.length ? (
         <Modal
+          layout="confirm"
           title={t(selecting ? 'deleteSelectedChats' : 'deleteSessionModalContentTitle')}
           onClose={() => {
             if (!deletePending) {

@@ -131,9 +131,18 @@
   background-color: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary-foreground);
   pointer-events: none;
+  animation: turn-check-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
   transition:
     background-color var(--ds-transition-duration) ease,
-    border-color var(--ds-transition-duration) ease;
+    border-color var(--ds-transition-duration) ease,
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes turn-check-in {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
 }
 
 .turnFirst .turnCheck {
@@ -149,4 +158,5 @@
 .turnCheckSelected {
   border-color: var(--dsw-alias-brand-primary);
   background-color: var(--dsw-alias-brand-primary);
+  transform: scale(1.06);
 }
