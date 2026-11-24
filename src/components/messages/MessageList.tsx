@@ -10,6 +10,7 @@ import {
   type MessageVersions,
 } from '../../services/chat/branches.js'
 import { selectMessageVersion } from '../../services/chat/store.js'
+import { triggerHaptic } from '../../services/haptics.js'
 import type { Session } from '../../services/chat/types.js'
 import { closeSearchPanel } from '../search/searchPanelState.js'
 import { AssistantMessage } from './AssistantMessage.js'
@@ -168,6 +169,7 @@ export const MessageList = ({
         } catch {
           // ignore selection clear errors
         }
+        triggerHaptic('longPress')
         startTurnSelection(session.id, userId)
       }, 450)
     },
@@ -241,6 +243,7 @@ export const MessageList = ({
   const startTurnDeletion = useCallback(
     (userId: string) => {
       if (!streaming) {
+        triggerHaptic('light')
         startTurnSelection(session.id, userId)
       }
     },

@@ -101,6 +101,8 @@
 .selectionCount {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: center;
   font-size: 13px;
   font-weight: 500;
@@ -117,8 +119,23 @@
 
 @media not all and (min-width: 768px) {
   .selectionBar {
+    gap: 6px;
     max-width: calc(100% - 16px);
     margin: 4px auto 8px;
     padding: 8px 10px;
+  }
+
+  .selectionCount {
+    font-size: 12px;
+  }
+
+  .selectionActions {
+    gap: 6px;
+  }
+
+  .selectionButton {
+    min-width: 48px;
+    padding: 0 10px;
+    font-size: 13px;
   }
 }

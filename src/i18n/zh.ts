@@ -357,4 +357,6 @@ export const zh = {
   deleteTurnsConfirmTitle: '确认删除对话？',
   deleteTurnsConfirmDescription: '将删除所选的 {count} 轮对话、对应重新生成的回复版本及不再被引用的附件，后续对话会自动接上。',
   turnDeleted: '已删除 {count} 轮对话',
+  settingsHaptics: '触感反馈',
+  settingsHapticsDescription: '发送消息、切换开关和长按多选时提供轻微震动反馈',
 } as const

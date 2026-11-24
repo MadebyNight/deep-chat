@@ -15,11 +15,13 @@ import { canDownloadHistoryExport, downloadHistoryExport } from '../../services/
 import { useChatStore } from '../../services/chat/store.js'
 import { useUpdates } from '../../services/updates.js'
 import { isNative, saveArchive } from '../../services/native.js'
+import { triggerHaptic } from '../../services/haptics.js'
 import {
   setAutoCollapseThinking,
   setAutoCompactContext,
   setAutoReadAloud,
   setChatFontSize,
+  setHapticsEnabled,
   setLocale,
   setThemePreference,
   setTtsVoice,
@@ -153,6 +155,7 @@ const SettingsContent = () => {
         <section className={styles.settingsGroup}>
           <ThinkingCollapseSetting />
           <ContextCompactionSetting />
+          {isNative ? <HapticsSetting /> : null}
         </section>
       ),
       voice: (
@@ -215,6 +218,7 @@ const SettingsContent = () => {
               <TtsVoiceSetting />
               <ThinkingCollapseSetting />
               <ContextCompactionSetting />
+              {isNative ? <HapticsSetting /> : null}
               <AutoReadSetting />
               <VersionSetting />
             </>
@@ -624,6 +628,31 @@ const ContextCompactionSetting = () => {
           checked={enabled}
           aria-label={t('settingsAutoCompactContext')}
           onClick={() => setAutoCompactContext(!enabled)}
+        />
+      }
+    />
+  )
+}
+
+const HapticsSetting = () => {
+  const t = useTranslate()
+  const enabled = useSettings((state) => state.hapticsEnabled)
+  return (
+    <SettingCell
+      label={t('settingsHaptics')}
+      description={t('settingsHapticsDescription')}
+      status={null}
+      action={
+        <Switch
+          checked={enabled}
+          aria-label={t('settingsHaptics')}
+          onClick={() => {
+            const next = !enabled
+            setHapticsEnabled(next)
+            if (next) {
+              triggerHaptic('light')
+            }
+          }}
         />
       }
     />

@@ -280,8 +280,14 @@
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
-  transition-property: border, background;
-  transition-duration: 0.2s;
+  transition:
+    border 0.2s,
+    background 0.2s,
+    transform 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+
+  &[data-pressed]:not(:disabled) {
+    transform: scale(0.97);
+  }
 
   @media (hover: hover) and (pointer: fine) {
     &:hover:not(:disabled) {

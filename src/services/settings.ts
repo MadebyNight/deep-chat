@@ -21,6 +21,7 @@ type Settings = {
   /** 思考内容自动折叠：生成结束后收起思考过程，只留标题行 */
   autoCollapseThinking: boolean
   autoCompactContext: boolean
+  hapticsEnabled: boolean
   thinking: boolean
   search: boolean
   prompts: PromptPreferences
@@ -36,6 +37,7 @@ const KEYS = {
   autoReadAloud: 'chat-demo:auto-read-aloud',
   autoCollapseThinking: 'chat-demo:auto-collapse-thinking',
   autoCompactContext: 'deepchat:auto-compact-context',
+  hapticsEnabled: 'deepchat:haptics-enabled',
   thinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
   systemPrompt: 'deepchat:system-prompt',
@@ -132,6 +134,7 @@ export const useSettings = create<Settings>(() => ({
   // 未保存过时默认开启，与官方「思考内容自动折叠」初始状态一致
   autoCollapseThinking: readPreference(KEYS.autoCollapseThinking) !== 'false',
   autoCompactContext: readPreference(KEYS.autoCompactContext) !== 'false',
+  hapticsEnabled: readPreference(KEYS.hapticsEnabled) !== 'false',
   thinking: readPreference(KEYS.thinking) === 'true',
   search: readPreference(KEYS.search) === 'true',
   prompts: initialPrompts(),
@@ -171,6 +174,11 @@ export const setAutoCollapseThinking = (autoCollapseThinking: boolean) => {
 export const setAutoCompactContext = (autoCompactContext: boolean) => {
   writePreference(KEYS.autoCompactContext, String(autoCompactContext))
   useSettings.setState({ autoCompactContext })
+}
+
+export const setHapticsEnabled = (hapticsEnabled: boolean) => {
+  writePreference(KEYS.hapticsEnabled, String(hapticsEnabled))
+  useSettings.setState({ hapticsEnabled })
 }
 
 export const initializeCredentials = async () => {

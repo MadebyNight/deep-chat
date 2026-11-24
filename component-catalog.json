@@ -409,6 +409,7 @@
       "DeleteAllConfirm",
       "ExportHistory",
       "FontSizeSetting",
+      "HapticsSetting",
       "ImportConfirm",
       "ImportHistory",
       "LocaleSetting",

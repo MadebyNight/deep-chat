@@ -4,7 +4,9 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.RenderProcessGoneDetail;
@@ -190,6 +192,31 @@ public class MainActivity extends BridgeActivity {
             MainActivity activity = (MainActivity) getActivity();
             activity.runOnUiThread(() -> {
                 activity.setSystemBarAppearance(dark, background);
+                call.resolve();
+            });
+        }
+
+        @PluginMethod
+        public void triggerHaptic(PluginCall call) {
+            String style = call.getString("style", "light");
+            final int constant;
+            if ("longPress".equals(style)) {
+                constant = HapticFeedbackConstants.LONG_PRESS;
+            } else if ("confirm".equals(style)) {
+                constant = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                        ? HapticFeedbackConstants.CONFIRM
+                        : HapticFeedbackConstants.KEYBOARD_TAP;
+            } else if ("medium".equals(style)) {
+                constant = HapticFeedbackConstants.CONTEXT_CLICK;
+            } else {
+                constant = HapticFeedbackConstants.KEYBOARD_TAP;
+            }
+            MainActivity activity = (MainActivity) getActivity();
+            activity.runOnUiThread(() -> {
+                View view = activity.getWindow() != null ? activity.getWindow().getDecorView() : null;
+                if (view != null) {
+                    view.performHapticFeedback(constant);
+                }
                 call.resolve();
             });
         }

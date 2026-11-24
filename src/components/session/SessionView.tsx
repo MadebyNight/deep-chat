@@ -6,6 +6,7 @@ import type { Session } from '../../services/chat/types.js'
 import { getVisibleMessages, getVisibleTurns } from '../../services/chat/branches.js'
 import { removeTurns } from '../../services/chat/store.js'
 import { buildReplyView } from '../../services/chat/view.js'
+import { triggerHaptic } from '../../services/haptics.js'
 import { useSettings } from '../../services/settings.js'
 import { describeReadAloudError, stopReadAloud, toggleReadAloud } from '../../services/speech/readAloud.js'
 import { Button, Modal } from '../base/index.js'
@@ -90,7 +91,12 @@ export const SessionView = ({
           <div className={styles.footer}>
             {selectionActive ? (
               <div className={styles.selectionBar}>
-                <Button variant="outlined" size="m" onClick={clearTurnSelection}>
+                <Button
+                  variant="outlined"
+                  size={isMobile ? 's' : 'm'}
+                  className={styles.selectionButton}
+                  onClick={clearTurnSelection}
+                >
                   {t('cancel')}
                 </Button>
                 <span className={styles.selectionCount}>
@@ -99,7 +105,8 @@ export const SessionView = ({
                 <div className={styles.selectionActions}>
                   <Button
                     variant="outlined"
-                    size="m"
+                    size={isMobile ? 's' : 'm'}
+                    className={styles.selectionButton}
                     disabled={allTurnIds.length === 0}
                     onClick={() =>
                       selectAllTurns(session.id, allSelected ? [] : allTurnIds)
@@ -109,7 +116,8 @@ export const SessionView = ({
                   </Button>
                   <Button
                     variant="danger"
-                    size="m"
+                    size={isMobile ? 's' : 'm'}
+                    className={styles.selectionButton}
                     disabled={activeSelectedIds.length === 0}
                     onClick={() => setConfirmDeleteOpen(true)}
                   >
@@ -141,6 +149,7 @@ export const SessionView = ({
                 variant="danger"
                 onClick={() => {
                   const count = activeSelectedIds.length
+                  triggerHaptic('confirm')
                   stopReadAloud()
                   const deleted = removeTurns(session.id, activeSelectedIds)
                   setConfirmDeleteOpen(false)

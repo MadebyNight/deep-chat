@@ -8,6 +8,7 @@
   justify-content: center;
   background-color: rgba(0, 0, 0, var(--overlay-opacity));
   backdrop-filter: blur(2px);
+  animation: modal-fade-in 0.16s ease-out;
 
   [data-ds-dark-theme] & {
     --overlay-opacity: 0.6;
@@ -34,6 +35,27 @@
     0 0 1px 0 rgba(0, 0, 0, 0.2),
     0 0 4px 0 rgba(0, 0, 0, 0.02),
     0 12px 32px 0 rgba(0, 0, 0, 0.08);
+  animation: modal-card-in 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .content {
+    animation: none;
+  }
 }
 
 .fitViewport {

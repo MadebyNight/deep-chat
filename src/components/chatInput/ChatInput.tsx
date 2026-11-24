@@ -2,6 +2,7 @@ import { ActionButton, Input, Textarea, IconCloseOutline16, IconGlobeLanguageOut
 import clsx from 'clsx'
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { setSearch, setThinking, useSettings } from '../../services/settings.js'
+import { triggerHaptic } from '../../services/haptics.js'
 import { useCustomProvider } from '../../services/customProvider.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { sendMessage, stopReply, useChatStore } from '../../services/chat/store.js'
@@ -198,6 +199,7 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
     if (!ensureChatConnection() || !sendMessage(sessionId)) {
       return
     }
+    triggerHaptic('medium')
     stopReadAloud()
     setAttachmentPicker(false)
     if (isMobile) {
@@ -292,7 +294,10 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
                 className={clsx(styles.toggle, thinking && styles.selected)}
                 aria-label={t('thinkingSwitch')}
                 aria-pressed={thinking}
-                onClick={() => setThinking(!thinking)}
+                onClick={() => {
+                  triggerHaptic('light')
+                  setThinking(!thinking)
+                }}
               >
                 <IconThinkOutline14 />
                 <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
@@ -309,6 +314,7 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
                     showToast({ key: 'customProviderSearchUnavailable' })
                     return
                   }
+                  triggerHaptic('light')
                   setSearch(!search)
                 }}
               >
