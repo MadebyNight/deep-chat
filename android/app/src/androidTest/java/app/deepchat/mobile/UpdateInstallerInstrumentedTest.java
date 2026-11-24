@@ -143,5 +143,6 @@ public class UpdateInstallerInstrumentedTest {
         assertEquals(java.util.Collections.singletonList(a), UpdateInstallerPlugin.chooseAssets(a, null));
         assertTrue(UpdateInstallerPlugin.chooseAssets(a, mismatch).isEmpty());
         assertFalse(gh.acceptsRedirect(HttpUrl.get("https://github.com.invalid/app-debug.apk"), "v1.0.5", "app-debug.apk"));
+        assertTrue(gh.acceptsRedirect(HttpUrl.get("https://github.com/MadebyNight/deep-chat/releases/download/v1.0.6/DeepChat-1.0.6.apk"), "v1.0.6", "DeepChat-1.0.6.apk"));
     }
 }

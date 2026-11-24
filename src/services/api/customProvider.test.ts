@@ -11,7 +11,7 @@ import {
   refreshProviderPricing,
   useCustomProvider,
 } from '../customProvider.js'
-import { deepSeekRates, readModelRates, tokenCost } from './tokenPricing.js'
+import { deepSeekRates, formatCostLabel, OFFICIAL_API_ORIGIN, readModelRates, tokenCost } from './tokenPricing.js'
 
 const provider = {
   id: 'provider-v1',
@@ -112,8 +112,41 @@ test('interprets only model-specific prices with a known CNY unit', () => {
   assert.equal(tokenCost(usage, { input: 0, output: 0, cacheRead: 0 }), 0)
   assert.equal(tokenCost(usage, { input: 0, output: 0 }), undefined)
   const offPeak = new Date('2026-11-22T12:00:00.000Z')
-  assert.ok(deepSeekRates('https://api.deepseek.com', 'deepseek-flash', offPeak))
+  assert.deepEqual(deepSeekRates(OFFICIAL_API_ORIGIN, 'deepseek-flash', offPeak), {
+    input: 1e-6,
+    output: 4e-6,
+    cacheRead: 0.02e-6,
+  })
+  assert.deepEqual(deepSeekRates(OFFICIAL_API_ORIGIN, 'deepseek-v4-pro', offPeak), {
+    input: 4.5e-6,
+    output: 13.5e-6,
+    cacheRead: 0.15e-6,
+  })
+  // Beijing weekday peak windows: Mon-Fri 09:00-12:00 & 14:00-18:00 CST.
+  const morningPeak = new Date('2026-11-23T01:30:00.000Z') // Mon 09:30 CST
+  const afternoonPeak = new Date('2026-11-23T07:00:00.000Z') // Mon 15:00 CST
+  const lunchOffPeak = new Date('2026-11-23T04:30:00.000Z') // Mon 12:30 CST
+  assert.deepEqual(deepSeekRates(OFFICIAL_API_ORIGIN, 'deepseek-flash', morningPeak), {
+    input: 2e-6,
+    output: 8e-6,
+    cacheRead: 0.04e-6,
+  })
+  assert.deepEqual(deepSeekRates(OFFICIAL_API_ORIGIN, 'deepseek-v4-pro', afternoonPeak), {
+    input: 9e-6,
+    output: 27e-6,
+    cacheRead: 0.3e-6,
+  })
+  assert.deepEqual(deepSeekRates(OFFICIAL_API_ORIGIN, 'deepseek-flash', lunchOffPeak), {
+    input: 1e-6,
+    output: 4e-6,
+    cacheRead: 0.02e-6,
+  })
   assert.equal(deepSeekRates('https://example.test', 'deepseek-flash', offPeak), undefined)
+  assert.equal(formatCostLabel(0, 'zh-CN'), '¥0.00')
+  assert.equal(formatCostLabel(50_000, 'zh-CN'), '<¥0.0001')
+  assert.equal(formatCostLabel(2_200_000, 'zh-CN'), '¥0.0022')
+  assert.equal(formatCostLabel(31_000_000, 'zh-CN'), '¥0.03')
+  assert.equal(formatCostLabel(1_234_560_000_000, 'en-US'), '¥1,234.56')
 })
 
 test('loads prices from the configured endpoint, clearing unavailable metadata', async (t) => {
@@ -331,5 +364,62 @@ test('loads legacy usage with a zero cost and retains known amounts when request
     tokens: 37,
     priced: 1,
     costNanos: 31_000_000,
+  })
+})
+
+test('records official DeepSeek API costs during both peak and off-peak windows', async (t) => {
+  Object.assign(globalThis, { __API_ORIGIN__: OFFICIAL_API_ORIGIN })
+  const { streamMessage } = await import('./client.js')
+  const { useChatUsage } = await import('../chat/usage.js')
+  useChatUsage.setState({ days: {} })
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: { setItem: () => undefined },
+  })
+  t.after(() => {
+    Reflect.deleteProperty(globalThis, 'localStorage')
+  })
+  t.mock.method(globalThis, 'fetch', async () =>
+    sse(
+      {
+        type: 'message_delta',
+        delta: { stop_reason: 'end_turn', stop_sequence: null },
+        usage: {
+          input_tokens: 1000,
+          output_tokens: 500,
+          cache_read_input_tokens: 1000,
+          cache_creation_input_tokens: 0,
+        },
+      },
+      { type: 'message_stop' }
+    )
+  )
+  const body = {
+    model: 'deepseek-flash' as const,
+    system: '',
+    messages: [{ role: 'user' as const, content: 'hi' }],
+    thinking: { type: 'disabled' as const },
+    tools: [],
+    safety_check: { level: 'high' as const },
+  }
+  let currentTime = new Date('2026-11-23T01:30:00.000Z').getTime()
+  const RealDate = Date
+  const FakeDate = new Proxy(RealDate, {
+    construct(target, args) {
+      return args.length ? Reflect.construct(target, args) : new target(currentTime)
+    },
+  })
+  Object.defineProperty(globalThis, 'Date', { configurable: true, value: FakeDate })
+  t.after(() => Object.defineProperty(globalThis, 'Date', { configurable: true, value: RealDate }))
+  await Array.fromAsync(streamMessage('sk-test', body, new AbortController().signal))
+  currentTime = new Date('2026-11-23T12:00:00.000Z').getTime()
+  await Array.fromAsync(streamMessage('sk-test', body, new AbortController().signal))
+  const day = useChatUsage.getState().days['2026-11-23']
+  assert.deepEqual(day, {
+    calls: 2,
+    reported: 2,
+    tokens: 5000,
+    priced: 2,
+    costNanos: 6_040_000 + 3_020_000,
   })
 })

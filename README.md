@@ -25,7 +25,7 @@ pnpm install             # 锁文件 pnpm-lock.yaml，版本锁定
 pnpm build               # rspack 生产构建，输出 dist/
 pnpm exec cap sync android   # 同步 Web 资源与 Capacitor 插件到 android/
 cd android
-./gradlew assembleDebug  # 输出 android/app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleDebug  # 输出 android/app/build/outputs/apk/debug/DeepChat-<version>.apk
 ```
 
 调试签名：默认使用 AGP 标准调试密钥（`~/.android/debug.keystore`，缺失时自动生成）。也可用标准参数自行生成后放到 `.toolchain/debug.keystore`（storepass/keypass 均为 `android`，别名 `androiddebugkey`）：
@@ -41,7 +41,7 @@ keytool -genkeypair -alias androiddebugkey -keypass android -storepass android \
 ## 安装
 
 ```bash
-adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb install -r android/app/build/outputs/apk/debug/DeepChat-<version>.apk
 ```
 
 ## 首次连接 DeepSeek

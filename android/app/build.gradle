@@ -66,15 +66,23 @@ android {
             }
         }
     }
+    def isolatedTest = providers.gradleProperty('deepChatIsolatedTest').isPresent()
     buildTypes {
         debug {
-            if (providers.gradleProperty('deepChatIsolatedTest').isPresent()) {
+            if (isolatedTest) {
                 applicationIdSuffix '.isolatedtest'
             }
         }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    applicationVariants.all { variant ->
+        if (!isolatedTest) {
+            variant.outputs.all {
+                outputFileName = "DeepChat-${variant.versionName}.apk"
+            }
         }
     }
 }

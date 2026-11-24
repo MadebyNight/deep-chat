@@ -49,7 +49,7 @@ import okhttp3.ResponseBody;
 
 @CapacitorPlugin(name = "UpdateInstaller")
 public final class UpdateInstallerPlugin extends Plugin {
-    private static final String APK = "app-debug.apk";
+    private static final String LEGACY_APK = "app-debug.apk";
     private static final String MANIFEST = "app-update.json";
     private static final long MAX_BYTES = 300L * 1024 * 1024;
     private static final String APK_MIME = "application/vnd.android.package-archive";
@@ -94,7 +94,11 @@ public final class UpdateInstallerPlugin extends Plugin {
         }
     }
 
-    record Asset(Source source, String tag, String version, HttpUrl url, long size, String sha256) { }
+    record Asset(Source source, String tag, String version, String name, HttpUrl url, long size, String sha256) {
+        Asset(Source source, String tag, String version, HttpUrl url, long size, String sha256) {
+            this(source, tag, version, LEGACY_APK, url, size, sha256);
+        }
+    }
     private record Lookup(Asset asset, String failure, long finishedAt) { }
     private static final class Transfer {
         volatile Call request;
@@ -171,12 +175,14 @@ public final class UpdateInstallerPlugin extends Plugin {
         if (release == null || release.optBoolean("draft") || release.optBoolean("prerelease")) return null;
         String tag = release.optString("tag_name");
         if (!isVersion(tag)) throw new Failure("INVALID");
+        String version = tag.replaceFirst("^v", "");
         JSONArray assets = release.optJSONArray("assets");
         if (assets == null) throw new Failure("INVALID");
-        JSONObject apk = findAsset(assets, APK);
+        JSONObject apk = findApkAsset(assets, version);
         if (apk == null || (source == Source.GITHUB && !"uploaded".equals(apk.optString("state")))) return null;
+        String apkName = apk.optString("name");
         HttpUrl url = HttpUrl.parse(apk.optString("browser_download_url"));
-        if (!source.isReleaseAsset(url, tag, APK)) throw new Failure("INVALID");
+        if (!source.isReleaseAsset(url, tag, apkName)) throw new Failure("INVALID");
         long size = apk.optLong("size", -1);
         String digest = apk.optString("digest");
         if (source == Source.GITEE) {
@@ -185,7 +191,7 @@ public final class UpdateInstallerPlugin extends Plugin {
             HttpUrl manifestUrl = HttpUrl.parse(manifest.optString("browser_download_url"));
             try (Response response = openAsset(source, tag, MANIFEST, manifestUrl, null, System.nanoTime() + TimeUnit.SECONDS.toNanos(6))) {
                 JSONObject data = new JSONObject(new String(readSmall(response.body(), 4096), StandardCharsets.UTF_8));
-                if (!tag.equals(data.optString("tag")) || !APK.equals(data.optString("file"))) throw new Failure("INVALID");
+                if (!tag.equals(data.optString("tag")) || !apkName.equals(data.optString("file"))) throw new Failure("INVALID");
                 long manifestSize = data.optLong("size", -1);
                 if (size > 0 && size != manifestSize) throw new Failure("INVALID");
                 size = manifestSize;
@@ -193,7 +199,15 @@ public final class UpdateInstallerPlugin extends Plugin {
             }
         }
         if (size <= 0 || size > MAX_BYTES || !digest.matches("sha256:[0-9a-fA-F]{64}")) throw new Failure("INVALID");
-        return new Asset(source, tag, tag.replaceFirst("^v", ""), url, size, digest.substring(7).toLowerCase(Locale.ROOT));
+        return new Asset(source, tag, version, apkName, url, size, digest.substring(7).toLowerCase(Locale.ROOT));
+    }
+
+    private static JSONObject findApkAsset(JSONArray assets, String version) throws Failure {
+        for (String candidate : new String[] { "DeepChat-" + version + ".apk", "DeepChat-v" + version + ".apk", LEGACY_APK }) {
+            JSONObject found = findAsset(assets, candidate);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private static JSONObject findAsset(JSONArray assets, String name) throws Failure {
@@ -355,7 +369,7 @@ public final class UpdateInstallerPlugin extends Plugin {
         MessageDigest digest = sha256();
         long bytes = 0;
         long notified = 0;
-        try (Response response = openAsset(asset.source, asset.tag, APK, asset.url, transfer, System.nanoTime() + TimeUnit.MINUTES.toNanos(20))) {
+        try (Response response = openAsset(asset.source, asset.tag, asset.name, asset.url, transfer, System.nanoTime() + TimeUnit.MINUTES.toNanos(20))) {
             ResponseBody body = response.body();
             if (body == null || (body.contentLength() >= 0 && body.contentLength() != asset.size)) throw new Failure("INTEGRITY");
             try (InputStream input = body.byteStream(); FileOutputStream output = new FileOutputStream(partial)) {

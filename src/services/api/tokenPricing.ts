@@ -2,6 +2,27 @@ import type { ChatModel, MessageUsage } from './types.js'
 
 export type TokenRates = { input: number; output: number; cacheRead?: number; cacheWrite?: number }
 export const NANOS_PER_YUAN = 1_000_000_000
+export const OFFICIAL_API_ORIGIN = 'https://api.deepseek.com'
+
+const DEEPSEEK_RATES: Record<ChatModel, { offPeak: TokenRates; peak: TokenRates }> = {
+  'deepseek-flash': {
+    offPeak: { input: 1e-6, output: 4e-6, cacheRead: 0.02e-6 },
+    peak: { input: 2e-6, output: 8e-6, cacheRead: 0.04e-6 },
+  },
+  'deepseek-v4-pro': {
+    offPeak: { input: 4.5e-6, output: 13.5e-6, cacheRead: 0.15e-6 },
+    peak: { input: 9e-6, output: 27e-6, cacheRead: 0.3e-6 },
+  },
+}
+
+export const formatCostLabel = (costNanos: number, locale: string): string => {
+  const cost = costNanos / NANOS_PER_YUAN
+  if (cost > 0 && cost < 0.0001) {
+    return '<¥0.0001'
+  }
+  const maximumFractionDigits = cost > 0 && cost < 0.01 ? 4 : 2
+  return `¥${new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits }).format(cost)}`
+}
 
 export const tokenCost = (usage: MessageUsage, rates?: TokenRates) => {
   if (!rates) {
@@ -31,23 +52,19 @@ export const deepSeekRates = (
   model: ChatModel,
   now: Date
 ): TokenRates | undefined => {
-  if (origin !== 'https://api.deepseek.com') {
+  if (origin !== OFFICIAL_API_ORIGIN) {
+    return undefined
+  }
+  const table = Object.hasOwn(DEEPSEEK_RATES, model) ? DEEPSEEK_RATES[model] : undefined
+  if (!table) {
     return undefined
   }
   const beijing = new Date(now.getTime() + 8 * 3600_000)
   const day = beijing.getUTCDay(),
     hour = beijing.getUTCHours()
-  // A weekday in a peak window may be a public holiday; there is no billing calendar in the app.
-  if (day >= 1 && day <= 5 && ((hour >= 9 && hour < 12) || (hour >= 14 && hour < 18))) {
-    return undefined
-  }
-  if (model === 'deepseek-flash') {
-    return { input: 1e-6, output: 4e-6, cacheRead: 0.02e-6 }
-  }
-  if (model === 'deepseek-v4-pro') {
-    return { input: 4.5e-6, output: 13.5e-6, cacheRead: 0.15e-6 }
-  }
-  return undefined
+  // Peak windows on weekdays (CST); without a holiday calendar, apply peak rates rather than dropping to 0.
+  const peak = day >= 1 && day <= 5 && ((hour >= 9 && hour < 12) || (hour >= 14 && hour < 18))
+  return peak ? table.peak : table.offPeak
 }
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>

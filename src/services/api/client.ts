@@ -1,7 +1,7 @@
 import { translate, type TranslationMessage } from '../../i18n/index.js'
 import { recordChatRequest } from '../chat/usage.js'
 import { providerRequest, type CustomProvider } from '../customProvider.js'
-import { deepSeekRates, type TokenRates } from './tokenPricing.js'
+import { deepSeekRates, OFFICIAL_API_ORIGIN, type TokenRates } from './tokenPricing.js'
 import { readMessageEvent } from './parseEvent.js'
 import { readServerSentEvents } from './sse.js'
 import { applyAccountState, officialAccountRequest, officialAccountStream, type AccountState } from '../officialAccount.js'
@@ -150,9 +150,15 @@ export const accountRequestError = (error: unknown) => {
 }
 
 export async function* streamOfficialMessage(body: CreateMessageRequest, signal: AbortSignal) {
+  signal.throwIfAborted()
+  const startedAt = new Date()
   const stream = officialAccountStream('messages', { ...body, stream: true }, signal)
   try {
-    yield* readMessageStream(stream, signal, recordChatRequest(new Date()))
+    const reportUsage = recordChatRequest(
+      startedAt,
+      deepSeekRates(OFFICIAL_API_ORIGIN, body.model, startedAt)
+    )
+    yield* readMessageStream(stream, signal, reportUsage)
   } catch (error) {
     if (signal.aborted || error instanceof ApiError) {throw error}
     throw accountRequestError(error)

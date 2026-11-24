@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { useSettings } from '../../services/settings.js'
 import { monthlyChatUsage, useChatUsage } from '../../services/chat/usage.js'
-import { NANOS_PER_YUAN } from '../../services/api/tokenPricing.js'
+import { formatCostLabel, NANOS_PER_YUAN } from '../../services/api/tokenPricing.js'
 import { formatDate } from '../../utils/format.js'
 import { ActionButton, IconChevronRightOutline14 } from '../base/index.js'
 import styles from './Settings.module.css'
@@ -25,8 +25,9 @@ export const UsageChart = ({ onDetails }: { onDetails?: () => void }) => {
   const totalCalls = elapsed.reduce((sum, day) => sum + day.calls, 0)
   const totalReported = elapsed.reduce((sum, day) => sum + day.reported, 0)
   const totalTokens = elapsed.reduce((sum, day) => sum + day.tokens, 0)
-  const cost = elapsed.reduce((sum, day) => sum + day.costNanos, 0) / NANOS_PER_YUAN
-  const costLabel = `¥${new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cost)}`
+  const totalCostNanos = elapsed.reduce((sum, day) => sum + day.costNanos, 0)
+  const cost = totalCostNanos / NANOS_PER_YUAN
+  const costLabel = formatCostLabel(totalCostNanos, locale)
   // Logarithmic bands keep smaller days visible when a few days dominate the month.
   const values = elapsed.map((day) => day[metric]).filter((value) => value > 0)
   const floor = Math.log(Math.min(...values))
@@ -74,7 +75,7 @@ export const UsageChart = ({ onDetails }: { onDetails?: () => void }) => {
       <div className="connection-usage-metrics">
         <div className="connection-usage-amount">
           <span>{t('connectionUsageAmount')}</span>
-          <strong title={costLabel} aria-label={costLabel}>{costLabel.length > 7 ? compactCost.format(cost) : costLabel}</strong>
+          <strong title={costLabel} aria-label={costLabel}>{cost >= 1000 && costLabel.length > 7 ? compactCost.format(cost) : costLabel}</strong>
         </div>
         <ActionButton
           type="button"
