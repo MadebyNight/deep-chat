@@ -6,18 +6,32 @@
   background-color: var(--dsw-alias-bg-base);
 }
 
+.frameDrawerOpen {
+  --drawer-progress: 1;
+}
+
+.frame[data-drawer-dragging='true'] .main {
+  transition: none !important;
+}
+
 .main {
   position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  transition: transform 0.22s ease-out;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* 移动端抽屉打开时主内容向右位移，与官方露边效果一致 */
+/* 移动端抽屉打开或跟手拖拽时主内容实时向右位移 */
+@media not all and (min-width: 768px) {
+  .main {
+    transform: translate3d(calc(var(--drawer-progress, 0) * min(80vw, 100vw - 48px)), 0, 0);
+  }
+}
+
 .mainShifted {
-  transform: translateX(min(80vw, 100vw - 48px));
+  transform: translate3d(min(80vw, 100vw - 48px), 0, 0);
 }
 
 .content {

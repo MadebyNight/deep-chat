@@ -317,13 +317,21 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
 export const MobileSider = () => {
   const open = useMobileSider((state) => state.open)
   const mode = useMobileSider((state) => state.mode)
-  if (!open) {
-    return null
-  }
   return (
     <>
-      <div className={styles.drawerMask} onClick={closeMobileSider} />
-      <aside className={clsx(styles.drawer, mode === 'search' && styles.historySearch)}>
+      <div
+        className={clsx(styles.drawerMask, open && styles.drawerMaskOpen)}
+        aria-hidden={!open || undefined}
+        onClick={closeMobileSider}
+      />
+      <aside
+        className={clsx(
+          styles.drawer,
+          open && styles.drawerOpen,
+          mode === 'search' && styles.historySearch
+        )}
+        aria-hidden={!open || undefined}
+      >
         <Sider mobile />
       </aside>
     </>

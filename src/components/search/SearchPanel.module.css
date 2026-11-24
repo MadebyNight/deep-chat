@@ -12,6 +12,7 @@
 }
 
 .header {
+  position: relative;
   display: flex;
   align-items: center;
   flex-shrink: 0;
@@ -19,6 +20,18 @@
   height: 60px;
   padding: 0 14px 0 20px;
   border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.grabber {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background-color: var(--dsw-alias-border-l3);
+  pointer-events: none;
 }
 
 .title {
@@ -80,6 +93,7 @@
     padding: 0 var(--app-safe-right) var(--app-safe-bottom) var(--app-safe-left);
     border-radius: 16px 16px 0 0;
     background: var(--dsw-alias-bg-layer-2);
+    transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
     animation: sheet-in 0.22s ease-out;
   }
 
@@ -94,4 +108,5 @@
   inset: 0;
   z-index: 699;
   background: rgba(0, 0, 0, 0.4);
+  transition: opacity 0.2s ease-out;
 }
