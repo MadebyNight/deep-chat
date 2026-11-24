@@ -17,7 +17,13 @@ import {
   uploadAttachment, useUploads, type AttachmentConnection,
 } from '../attachments.js'
 import { getSelectedPrompt, useSettings } from '../settings.js'
-import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
+import {
+  appendBranch,
+  getVisibleMessages,
+  normalizeSession,
+  removeTurns as removeSessionTurns,
+  selectVersion,
+} from './branches.js'
 import * as db from './db.js'
 import {
   compactContext,
@@ -798,6 +804,24 @@ export const selectMessageVersion = (sessionId: string, messageId: string) => {
   }
   updateSession(sessionId, (session) => selectVersion(session, messageId))
   persist(sessionId)
+}
+
+/** 按轮删除对话（含其重新生成的回复版本），后文自动接上；流式生成与导入/整段删除期间禁止操作。 */
+export const removeTurns = (sessionId: string, userIds: readonly string[]): boolean => {
+  if (get().importingHistory || deletingSessions.has(sessionId) || userIds.length === 0) {
+    return false
+  }
+  const session = getSession(sessionId)
+  if (!session || getStreamController(sessionId)) {
+    return false
+  }
+  const next = removeSessionTurns(session, new Set(userIds))
+  if (next === session) {
+    return false
+  }
+  updateSession(sessionId, () => ({ ...next, updatedAt: Date.now() }))
+  persist(sessionId)
+  return true
 }
 
 /** 继续最后一条未完成的回答：保留原消息与开关，仅将新流的内容追加到原块之后。 */

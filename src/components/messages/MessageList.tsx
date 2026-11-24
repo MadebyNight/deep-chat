@@ -1,10 +1,12 @@
-import { ActionButton, IconChevronDownOutline14 } from "../base/index.js"
+import { ActionButton, IconCheckedOutline14, IconChevronDownOutline14 } from "../base/index.js"
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import clsx from 'clsx'
 import { useIsMobile } from '../../app/viewport.js'
 import { useTranslate } from '../../i18n/index.js'
 import {
   buildMessageVersions,
   getVisibleMessages,
+  getVisibleTurns,
   type MessageVersions,
 } from '../../services/chat/branches.js'
 import { selectMessageVersion } from '../../services/chat/store.js'
@@ -12,6 +14,12 @@ import type { Session } from '../../services/chat/types.js'
 import { closeSearchPanel } from '../search/searchPanelState.js'
 import { AssistantMessage } from './AssistantMessage.js'
 import { ScrollToBottomContext } from './scrollContext.js'
+import {
+  clearTurnSelection,
+  startTurnSelection,
+  toggleTurnSelection,
+  useTurnSelection,
+} from './turnSelectionState.js'
 import { UserMessage } from './UserMessage.js'
 import type { Message } from '../../services/chat/types.js'
 
@@ -105,6 +113,80 @@ export const MessageList = ({
 
   useEffect(closeSearchPanel, [session.id, lastMessageId])
 
+  const selectionSessionId = useTurnSelection((state) => state.sessionId)
+  const selectedUserIds = useTurnSelection((state) => state.selectedUserIds)
+  const selectionActive = selectionSessionId === session.id && !streaming
+
+  useEffect(() => {
+    if (streaming && useTurnSelection.getState().sessionId === session.id) {
+      clearTurnSelection()
+    }
+  }, [session.id, streaming])
+
+  useEffect(() => {
+    return () => {
+      if (useTurnSelection.getState().sessionId === session.id) {
+        clearTurnSelection()
+      }
+    }
+  }, [session.id])
+
+  const longPressTimerRef = useRef<number | null>(null)
+  const longPressStartRef = useRef<{ x: number; y: number } | null>(null)
+  const suppressUntilRef = useRef(0)
+
+  const cancelLongPress = useCallback(() => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+    longPressStartRef.current = null
+  }, [])
+
+  useEffect(() => cancelLongPress, [cancelLongPress, selectionActive, streaming])
+
+  const beginLongPress = useCallback(
+    (userId: string, event: React.PointerEvent<HTMLDivElement>) => {
+      if (selectionActive || streaming) {
+        return
+      }
+      if (event.pointerType === 'mouse' && event.button !== 0) {
+        return
+      }
+      const target = event.target as HTMLElement | null
+      if (target?.closest('button, a, input, textarea, [role="button"], [role="menuitem"]')) {
+        return
+      }
+      cancelLongPress()
+      longPressStartRef.current = { x: event.clientX, y: event.clientY }
+      longPressTimerRef.current = window.setTimeout(() => {
+        longPressTimerRef.current = null
+        longPressStartRef.current = null
+        suppressUntilRef.current = Date.now() + 450
+        try {
+          window.getSelection()?.removeAllRanges()
+        } catch {
+          // ignore selection clear errors
+        }
+        startTurnSelection(session.id, userId)
+      }, 450)
+    },
+    [cancelLongPress, selectionActive, session.id, streaming]
+  )
+
+  const moveLongPress = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const start = longPressStartRef.current
+      if (!start || longPressTimerRef.current === null) {
+        return
+      }
+      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10) {
+        cancelLongPress()
+      }
+    },
+    [cancelLongPress]
+  )
+
   const selectVersion = useCallback(
     (messageId: string, anchorTop: number) => {
       if (streaming) {
@@ -146,37 +228,126 @@ export const MessageList = ({
 
   const lastIndex = messages.length - 1
   const uploadRetryId = getUploadRetryId(messages, streaming)
+  const turns = useMemo(() => getVisibleTurns(messages), [messages])
+  const firstTurnUserId = turns[0]?.userId
+  const leadingMessages = useMemo(() => {
+    const firstUserIndex = messages.findIndex((message) => message.role === 'user')
+    return firstUserIndex === -1 ? messages : messages.slice(0, firstUserIndex)
+  }, [messages])
+  const messageIndexById = useMemo(
+    () => new Map(messages.map((message, index) => [message.id, index])),
+    [messages]
+  )
+  const startTurnDeletion = useCallback(
+    (userId: string) => {
+      if (!streaming) {
+        startTurnSelection(session.id, userId)
+      }
+    },
+    [session.id, streaming]
+  )
   return (
     <ScrollToBottomContext.Provider value={scrollToBottom}>
       <div ref={isMobile ? undefined : scrollRef} className={styles.container}>
         <div ref={isMobile ? scrollRef : undefined} className={styles.scroll}>
-          <div ref={contentRef} className={styles.column}>
-            {messages.map((message, index) =>
-              message.role === 'user' ? (
-                <UserMessage
-                  key={message.id}
-                  sessionId={session.id}
-                  message={message}
-                  retryUploadId={uploadRetryId}
-                  isFirst={index === 0}
-                  isLast={index === lastIndex || index === lastIndex - 1}
-                  busy={streaming}
-                  versions={versions.get(message.id) ?? EMPTY_VERSIONS}
-                  onSelectVersion={selectVersion}
-                />
-              ) : (
+          <div
+            ref={contentRef}
+            className={styles.column}
+            onClickCapture={(event) => {
+              if (Date.now() < suppressUntilRef.current) {
+                event.preventDefault()
+                event.stopPropagation()
+              }
+            }}
+            onContextMenuCapture={(event) => {
+              if (Date.now() < suppressUntilRef.current) {
+                event.preventDefault()
+              }
+            }}
+          >
+            {leadingMessages.map((message) => {
+              const index = messageIndexById.get(message.id) ?? 0
+              return message.role === 'assistant' ? (
                 <AssistantMessage
                   key={message.id}
                   sessionId={session.id}
                   message={message}
                   isLast={index === lastIndex}
                   streaming={streaming && index === lastIndex}
-                  busy={streaming}
+                  busy={streaming || selectionActive}
                   versions={versions.get(message.id) ?? EMPTY_VERSIONS}
                   onSelectVersion={selectVersion}
                 />
+              ) : null
+            })}
+            {turns.map((turn) => {
+              const selected = selectionActive && selectedUserIds.includes(turn.userId)
+              const isFirstTurn = turn.userId === firstTurnUserId && leadingMessages.length === 0
+              return (
+                <div
+                  key={turn.userId}
+                  className={clsx(
+                    styles.turn,
+                    selectionActive && styles.turnSelecting,
+                    selectionActive && isFirstTurn && styles.turnFirst,
+                    selected && styles.turnSelected
+                  )}
+                  onPointerDown={(event) => beginLongPress(turn.userId, event)}
+                  onPointerMove={moveLongPress}
+                  onPointerUp={cancelLongPress}
+                  onPointerCancel={cancelLongPress}
+                >
+                  {selectionActive ? (
+                    <>
+                      <span
+                        className={clsx(styles.turnCheck, selected && styles.turnCheckSelected)}
+                        aria-hidden="true"
+                      >
+                        {selected ? <IconCheckedOutline14 /> : null}
+                      </span>
+                      <ActionButton
+                        type="button"
+                        className={styles.turnSelectOverlay}
+                        aria-pressed={selected}
+                        aria-label={t('deleteTurn')}
+                        onClick={() => toggleTurnSelection(session.id, turn.userId)}
+                      />
+                    </>
+                  ) : null}
+                  <div className={clsx(selectionActive && styles.turnContentSelecting)}>
+                    {turn.messages.map((message) => {
+                      const index = messageIndexById.get(message.id) ?? 0
+                      return message.role === 'user' ? (
+                        <UserMessage
+                          key={message.id}
+                          sessionId={session.id}
+                          message={message}
+                          retryUploadId={uploadRetryId}
+                          isFirst={index === 0}
+                          isLast={index === lastIndex || index === lastIndex - 1}
+                          busy={streaming || selectionActive}
+                          selecting={selectionActive}
+                          onStartTurnDeletion={startTurnDeletion}
+                          versions={versions.get(message.id) ?? EMPTY_VERSIONS}
+                          onSelectVersion={selectVersion}
+                        />
+                      ) : (
+                        <AssistantMessage
+                          key={message.id}
+                          sessionId={session.id}
+                          message={message}
+                          isLast={index === lastIndex}
+                          streaming={streaming && index === lastIndex}
+                          busy={streaming || selectionActive}
+                          versions={versions.get(message.id) ?? EMPTY_VERSIONS}
+                          onSelectVersion={selectVersion}
+                        />
+                      )
+                    })}
+                  </div>
+                </div>
               )
-            )}
+            })}
           </div>
         </div>
         {isMobile && aboveBottom ? (

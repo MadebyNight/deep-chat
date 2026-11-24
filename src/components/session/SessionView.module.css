@@ -81,3 +81,44 @@
     padding-left: var(--app-safe-left);
   }
 }
+
+.selectionBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  box-sizing: border-box;
+  width: calc(var(--message-list-max-width) - 64px);
+  max-width: calc(100% - 24px);
+  margin: 6px auto 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 20px;
+  background-color: var(--dsw-specific-input-major);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.selectionCount {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+}
+
+.selectionActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media not all and (min-width: 768px) {
+  .selectionBar {
+    max-width: calc(100% - 16px);
+    margin: 4px auto 8px;
+    padding: 8px 10px;
+  }
+}

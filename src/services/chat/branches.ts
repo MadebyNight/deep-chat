@@ -36,6 +36,26 @@ export const getVisibleMessages = (session: Session): Message[] => {
 
 export type MessageVersions = { ids: string[]; index: number }
 
+export type VisibleTurn = {
+  userId: string
+  messages: Message[]
+}
+
+/** 将当前可见消息序列按用户提问拆分为对话轮次。 */
+export const getVisibleTurns = (messages: readonly Message[]): VisibleTurn[] => {
+  const turns: VisibleTurn[] = []
+  let current: VisibleTurn | null = null
+  for (const message of messages) {
+    if (message.role === 'user') {
+      current = { userId: message.id, messages: [message] }
+      turns.push(current)
+    } else if (current) {
+      current.messages.push(message)
+    }
+  }
+  return turns
+}
+
 /** 一次遍历收集兄弟版本；版本列表未变化时复用旧对象与索引，避免流式正文更新重绘历史消息。 */
 export const buildMessageVersions = (
   session: Session,
@@ -113,5 +133,102 @@ export const selectVersion = (original: Session, messageId: string): Session => 
     messages: session.messages.map((item) =>
       item.id === message.parentId ? { ...item, selectedChildId: message.id } : item
     ),
+  }
+}
+
+/**
+ * 整轮删除当前路径上的指定轮次（包含其回答与重新生成的各版本），并将后续可见轮次接回前驱节点；
+ * 若删除覆盖了上下文摘要检查点范围内的消息，则一并清除失效检查点。
+ */
+export const removeTurns = (original: Session, userIds: ReadonlySet<string>): Session => {
+  if (userIds.size === 0) {
+    return original
+  }
+  const session = normalizeSession(original)
+  const path = getVisibleMessages(session)
+  const turns = getVisibleTurns(path)
+  const removedTurns = turns.filter((turn) => userIds.has(turn.userId))
+  if (removedTurns.length === 0) {
+    return original
+  }
+
+  const deletedSpanIds = new Set(
+    removedTurns.flatMap((turn) => turn.messages.map((message) => message.id))
+  )
+  const survivingPath = path.filter((message) => !deletedSpanIds.has(message.id))
+
+  const reparented = new Map<string, string | null>()
+  const reselected = new Map<string, string | undefined>()
+  for (let i = 0; i < survivingPath.length; i++) {
+    const curr = survivingPath[i]
+    const prev = i === 0 ? null : survivingPath[i - 1]
+    const expectedParentId = prev?.id ?? null
+    if ((curr.parentId ?? null) !== expectedParentId) {
+      reparented.set(curr.id, expectedParentId)
+      if (prev) {
+        reselected.set(prev.id, curr.id)
+      }
+    }
+  }
+
+  const originalById = new Map(session.messages.map((message) => [message.id, message]))
+  const stitchedIds = new Set(reparented.keys())
+  const shouldKeep = (message: Message): boolean => {
+    if (deletedSpanIds.has(message.id)) {
+      return false
+    }
+    let cursor: Message | undefined = message
+    const seen = new Set<string>()
+    while (cursor) {
+      if (stitchedIds.has(cursor.id)) {
+        return true
+      }
+      if (deletedSpanIds.has(cursor.id)) {
+        return false
+      }
+      if (!cursor.parentId || seen.has(cursor.parentId)) {
+        return true
+      }
+      seen.add(cursor.parentId)
+      cursor = originalById.get(cursor.parentId)
+    }
+    return true
+  }
+
+  const kept = session.messages.filter(shouldKeep)
+  const effectiveParent = (message: Message) =>
+    reparented.has(message.id) ? (reparented.get(message.id) ?? null) : (message.parentId ?? null)
+  const keptIds = new Set(kept.map((message) => message.id))
+
+  const messages = kept.map((message) => {
+    const nextParentId = reparented.has(message.id) ? reparented.get(message.id) : message.parentId
+    let nextSelectedChildId = message.selectedChildId
+    if (reselected.has(message.id)) {
+      nextSelectedChildId = reselected.get(message.id)
+    } else if (message.selectedChildId && !keptIds.has(message.selectedChildId)) {
+      nextSelectedChildId = kept.find((item) => effectiveParent(item) === message.id)?.id
+    }
+    if (nextParentId === message.parentId && nextSelectedChildId === message.selectedChildId) {
+      return message
+    }
+    return { ...message, parentId: nextParentId, selectedChildId: nextSelectedChildId }
+  })
+
+  const rootMessageId =
+    survivingPath[0]?.id ?? kept.find((message) => effectiveParent(message) === null)?.id ?? null
+
+  const checkpoint = session.contextCheckpoint
+  const checkpointIndex = checkpoint
+    ? path.findIndex((message) => message.id === checkpoint.throughReplyId)
+    : -1
+  const checkpointStale =
+    checkpoint !== undefined &&
+    (checkpointIndex === -1 || path.slice(0, checkpointIndex + 1).some((m) => deletedSpanIds.has(m.id)))
+
+  return {
+    ...session,
+    rootMessageId,
+    messages,
+    contextCheckpoint: checkpointStale ? undefined : checkpoint,
   }
 }

@@ -350,4 +350,11 @@ export const zh = {
   connectionErrorEmpty: '还没有粘贴密钥，请在官网复制后重试。',
   connectionErrorBrowser: '无法打开浏览器，请重试。',
   connectionErrorRemoveFailed: '无法移除配置，请重试。',
+  deleteTurn: '按轮删除',
+  selectedTurnsCount: '已选 {count} 轮',
+  selectAll: '全选',
+  deselectAll: '取消全选',
+  deleteTurnsConfirmTitle: '确认删除对话？',
+  deleteTurnsConfirmDescription: '将删除所选的 {count} 轮对话、对应重新生成的回复版本及不再被引用的附件，后续对话会自动接上。',
+  turnDeleted: '已删除 {count} 轮对话',
 } as const

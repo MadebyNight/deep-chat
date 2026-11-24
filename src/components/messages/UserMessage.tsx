@@ -1,4 +1,4 @@
-import { Textarea, IconEditOutline16, Button, IconButton } from "../base/index.js"
+import { Textarea, IconEditOutline16, IconTrashOutline16, Button, IconButton } from "../base/index.js"
 import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo, useLayoutEffect, useRef, useState } from 'react'
@@ -23,6 +23,8 @@ export const UserMessage = memo(function UserMessage({
   isFirst,
   isLast,
   busy,
+  selecting = false,
+  onStartTurnDeletion,
   versions,
   onSelectVersion,
 }: {
@@ -33,6 +35,8 @@ export const UserMessage = memo(function UserMessage({
   isFirst: boolean
   isLast: boolean
   busy: boolean
+  selecting?: boolean
+  onStartTurnDeletion?: (userId: string) => void
   versions: MessageVersions
   onSelectVersion: SelectMessageVersion
 }) {
@@ -118,12 +122,21 @@ export const UserMessage = memo(function UserMessage({
                 icon={<IconEditOutline16 />}
                 tooltip={t('editMessage')}
                 tooltipPlacement="bottom"
-                disabled={busy}
+                disabled={busy || selecting}
                 onClick={() => {
                   setDraft(message.content)
                   setEditing(true)
                 }}
               />
+              {onStartTurnDeletion && !selecting ? (
+                <IconButton
+                  icon={<IconTrashOutline16 />}
+                  tooltip={t('deleteTurn')}
+                  tooltipPlacement="bottom"
+                  disabled={busy}
+                  onClick={() => onStartTurnDeletion(message.id)}
+                />
+              ) : null}
             </div>
             <BranchSwitcher versions={versions} disabled={busy} onSelect={onSelectVersion} />
           </div>

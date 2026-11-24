@@ -87,11 +87,19 @@ export const saveSession = async (session: Session, files: StoredFile[] = []): P
   await Promise.all([
     (async () => {
       try {
+        const summaries = tx.objectStore('sessionSummaries')
+        const previousSummary = await summaries.get(session.id)
         for (const file of files) {
           await tx.objectStore('files').put(file)
         }
         await tx.objectStore('sessions').put(session)
-        await tx.objectStore('sessionSummaries').put(summary)
+        await summaries.put(summary)
+        // 若会话内删除了包含附件的轮次，在同一事务中清理不再被任何会话引用的本地原件
+        for (const id of previousSummary?.fileIds ?? []) {
+          if (!summary.fileIds.includes(id) && (await summaries.index('fileIds').count(id)) === 0) {
+            await tx.objectStore('files').delete(id)
+          }
+        }
       } catch (error) {
         abortTransaction(tx)
         throw error

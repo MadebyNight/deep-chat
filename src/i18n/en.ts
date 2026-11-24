@@ -359,4 +359,11 @@ export const en = {
   connectionErrorEmpty: 'No key pasted yet. Copy it on the official site and try again.',
   connectionErrorBrowser: 'Could not open the browser. Please try again.',
   connectionErrorRemoveFailed: 'Could not remove the configuration. Please try again.',
+  deleteTurn: 'Delete round',
+  selectedTurnsCount: '{count} selected',
+  selectAll: 'Select all',
+  deselectAll: 'Deselect all',
+  deleteTurnsConfirmTitle: 'Delete selected rounds?',
+  deleteTurnsConfirmDescription: 'Delete {count} selected rounds, their regenerated replies, and unreferenced attachments. Following messages will reconnect automatically.',
+  turnDeleted: 'Deleted {count} rounds',
 } satisfies Record<keyof typeof zh, string>

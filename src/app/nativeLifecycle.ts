@@ -9,6 +9,7 @@ import { initializeOfficialAccount } from '../services/officialAccount.js'
 import { newChat, useChatStore } from '../services/chat/store.js'
 import { backMobileSider, useMobileSider } from '../components/sider/mobileSiderState.js'
 import { closeSearchPanel, useSearchPanel } from '../components/search/searchPanelState.js'
+import { clearTurnSelection, useTurnSelection } from '../components/messages/turnSelectionState.js'
 import { flushDrafts } from '../services/chat/drafts.js'
 
 export const initializeNative = () => {
@@ -43,6 +44,8 @@ export const initializeNative = () => {
       closeSearchPanel()
     } else if (useMobileSider.getState().open) {
       backMobileSider()
+    } else if (useTurnSelection.getState().sessionId) {
+      clearTurnSelection()
     } else if (useChatStore.getState().activeId) {
       newChat()
     } else {

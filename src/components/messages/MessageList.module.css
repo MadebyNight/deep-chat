@@ -74,3 +74,79 @@
   margin: 0 auto;
   padding-bottom: 24px;
 }
+
+.turn {
+  display: block;
+}
+
+.turnSelecting {
+  position: relative;
+  border-radius: 16px;
+  padding: 10px 12px 10px 44px;
+  margin: 6px -12px;
+  touch-action: pan-y;
+  transition:
+    background-color var(--ds-transition-duration) ease,
+    box-shadow var(--ds-transition-duration) ease;
+}
+
+.turnSelected {
+  background-color: var(--dsw-alias-button-ghost-active-fill);
+  box-shadow: inset 0 0 0 1px var(--dsw-alias-button-ghost-active-border);
+}
+
+.turnContentSelecting {
+  pointer-events: none;
+  user-select: none;
+}
+
+.turnSelectOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  padding: 0;
+  border: none;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-y;
+
+  &[data-pressed] {
+    background-color: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.turnCheck {
+  position: absolute;
+  top: 20px;
+  left: 12px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  border: 1.5px solid var(--dsw-alias-border-l3);
+  background-color: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary-foreground);
+  pointer-events: none;
+  transition:
+    background-color var(--ds-transition-duration) ease,
+    border-color var(--ds-transition-duration) ease;
+}
+
+.turnFirst .turnCheck {
+  top: 44px;
+}
+
+@media not all and (min-width: 768px) {
+  .turnFirst .turnCheck {
+    top: 66px;
+  }
+}
+
+.turnCheckSelected {
+  border-color: var(--dsw-alias-brand-primary);
+  background-color: var(--dsw-alias-brand-primary);
+}
