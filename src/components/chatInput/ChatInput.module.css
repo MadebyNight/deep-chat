@@ -442,7 +442,10 @@
     border-color: var(--dsw-alias-border-l2);
 
     &[aria-pressed='true'] {
-      border-color: color-mix(in srgb, var(--dsw-alias-brand-text) 40%, transparent);
+      border-color: var(--dsw-alias-brand-text);
+      @supports (color: color-mix(in srgb, black, white)) {
+        border-color: color-mix(in srgb, var(--dsw-alias-brand-text) 40%, transparent);
+      }
       background-color: var(--dsw-alias-button-ghost-active-fill);
       font-weight: 600;
     }

@@ -46,16 +46,34 @@ function StartedApp({ storageError }: { storageError: boolean }) {
   return <App />
 }
 
+const withStorageDeadline = async <T,>(load: (deadline: Promise<never>) => Promise<T>) => {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Startup storage timed out')), 3000)
+  })
+  try {
+    return await load(deadline)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 const start = async () => {
   const startup = document.documentElement.dataset
   startup.startupStage = 'THEME_SETUP'
   setupTheme()
-  let storageError = false
   startup.startupStage = 'CREDENTIAL_STORAGE'
-  const credentials = await Promise.allSettled([initializeCredentials(), initializeCustomProvider()])
-  storageError = credentials.some((result) => result.status === 'rejected')
+  const credentials = await withStorageDeadline((deadline) => Promise.allSettled([
+    initializeCredentials(deadline),
+    initializeCustomProvider(deadline),
+  ]))
+  let storageError = credentials.some((result) => result.status === 'rejected')
   startup.startupStage = 'DRAFT_STORAGE'
-  try { await initializeDrafts() } catch { storageError = true }
+  try {
+    await withStorageDeadline(initializeDrafts)
+  } catch {
+    storageError = true
+  }
   startup.startupStage = 'REACT_RENDER'
   createRoot(document.getElementById('root') as HTMLElement).render(
     <AppBoundary><StartedApp storageError={storageError} /></AppBoundary>

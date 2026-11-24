@@ -181,11 +181,11 @@ export const setHapticsEnabled = (hapticsEnabled: boolean) => {
   useSettings.setState({ hapticsEnabled })
 }
 
-export const initializeCredentials = async () => {
+export const initializeCredentials = async (deadline: Promise<never>) => {
   writePreference(KEYS.apiKey, null)
   writePreference('chat-demo:location', null)
   if (isNative) {
-    const { value } = await credentials.read()
+    const { value } = await Promise.race([credentials.read(), deadline])
     useSettings.setState({ apiKey: value })
   }
 }

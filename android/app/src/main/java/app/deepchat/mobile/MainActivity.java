@@ -3,10 +3,13 @@ package app.deepchat.mobile;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.VibrationAttributes;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
@@ -30,6 +33,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.lifecycle.Lifecycle;
 
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
@@ -42,6 +46,11 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.util.Locale;
 
 public class MainActivity extends BridgeActivity {
+    private static final long STARTUP_PROBE_DELAY_MS = 12_000L;
+    private static final long STARTUP_PROBE_TIMEOUT_MS = 2_000L;
+    private final Handler startupHandler = new Handler(Looper.getMainLooper());
+    private Runnable startupProbe;
+    private Runnable startupTimeout;
     private View recoveryPanel;
     private Boolean barDark;
     private Integer barBackground;
@@ -71,6 +80,58 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(UpdateInstallerPlugin.class);
         super.onCreate(savedInstanceState);
         setupEdgeToEdge();
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        if (bridge != null) watchStartup(bridge.getWebView());
+    }
+
+    @Override
+    public void onStop() {
+        cancelStartupWatchdog();
+        super.onStop();
+    }
+
+    @Override
+    public void onDestroy() {
+        cancelStartupWatchdog();
+        super.onDestroy();
+    }
+
+    private void watchStartup(WebView webView) {
+        cancelStartupWatchdog();
+        if (recoveryPanel != null || isFinishing() || isDestroyed()) return;
+        Runnable timeout = () -> showRecovery(webView, "WEBVIEW_STARTUP_NO_RESPONSE");
+        startupTimeout = timeout;
+        startupProbe = () -> {
+            startupHandler.postDelayed(timeout, STARTUP_PROBE_TIMEOUT_MS);
+            webView.evaluateJavascript(
+                    "document.documentElement && document.documentElement.getAttribute('data-startup-result')",
+                    result -> {
+                        if (startupTimeout != timeout) return;
+                        if ("\"ready\"".equals(result) || "\"recovery\"".equals(result)) {
+                            // A DOM update alone does not guarantee that WebView can draw it.
+                            webView.postVisualStateCallback(0L, new WebView.VisualStateCallback() {
+                                @Override
+                                public void onComplete(long requestId) {
+                                    if (startupTimeout == timeout) cancelStartupWatchdog();
+                                }
+                            });
+                        } else {
+                            showRecovery(webView, "WEBVIEW_STARTUP_INCOMPLETE");
+                        }
+                    });
+        };
+        startupHandler.postDelayed(startupProbe, STARTUP_PROBE_DELAY_MS);
+    }
+
+    private void cancelStartupWatchdog() {
+        if (startupProbe != null) startupHandler.removeCallbacks(startupProbe);
+        if (startupTimeout != null) startupHandler.removeCallbacks(startupTimeout);
+        startupProbe = null;
+        startupTimeout = null;
     }
 
     private void setupEdgeToEdge() {
@@ -157,6 +218,7 @@ public class MainActivity extends BridgeActivity {
 
     private void showRecovery(WebView webView, String diagnostic) {
         if (recoveryPanel != null || isFinishing() || isDestroyed()) return;
+        cancelStartupWatchdog();
         ViewGroup parent = (ViewGroup) webView.getParent();
         recoveryPanel = getLayoutInflater().inflate(R.layout.startup_recovery, parent, false);
         TextView details = recoveryPanel.findViewById(R.id.startup_recovery_diagnostic);
@@ -309,6 +371,15 @@ public class MainActivity extends BridgeActivity {
         public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse error) {
             if (!handleFailure(view, request, "HTTP " + error.getStatusCode())) {
                 super.onReceivedHttpError(view, request, error);
+            }
+        }
+
+        @Override
+        public void onPageStarted(WebView view, String url, Bitmap favicon) {
+            if (rendererRetired || activity.recoveryPanel != null) return;
+            super.onPageStarted(view, url, favicon);
+            if (activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)) {
+                activity.watchStartup(view);
             }
         }
 

@@ -184,11 +184,18 @@ export const flushDrafts = () => {
   saving = task
   return task
 }
-export const initializeDrafts = async () => {
-  const db = await openDB('deepchat-drafts', 1, {
+export const initializeDrafts = async (deadline: Promise<never>) => {
+  const opening = openDB('deepchat-drafts', 1, {
     upgrade(database) { database.createObjectStore('drafts') },
   })
-  const saved = await db.get('drafts', 'all') as [string | null, Draft][] | undefined
+  const reading = opening.then(async (db) => ({
+    db,
+    saved: await db.get('drafts', 'all') as [string | null, Draft][] | undefined,
+  }))
+  const { db, saved } = await Promise.race([reading, deadline]).catch((error: unknown) => {
+    void opening.then((db) => db.close(), () => {})
+    throw error
+  })
   const connection = useCustomProvider.getState().enabled ? undefined : getAttachmentConnection()
   const drafts = new Map(saved ?? [])
   for (const draft of drafts.values()) {

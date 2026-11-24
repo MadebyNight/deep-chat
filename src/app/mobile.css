@@ -241,6 +241,17 @@
   background: color-mix(in srgb, var(--dsw-alias-brand-primary) 36%, var(--dsw-alias-bg-layer-2));
   color: var(--dsw-alias-label-primary);
 }
+@supports not (color: color-mix(in srgb, black, white)) {
+  .connection-usage-metrics button[aria-pressed='true'] {
+    border-color: var(--dsw-alias-brand-text);
+  }
+  .connection-usage-chart button[data-level='1'] {
+    background: rgba(70, 120, 220, 0.18);
+  }
+  .connection-usage-chart button[data-level='2'] {
+    background: rgba(70, 120, 220, 0.36);
+  }
+}
 .connection-usage-chart button[data-level='3'] {
   background: #6997eb;
   color: #102447;

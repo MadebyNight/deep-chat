@@ -32,6 +32,7 @@
         var panel = document.getElementById('startup-status');
         var message = document.getElementById('startup-message');
         var retry = document.getElementById('startup-retry');
+        var rootElement = document.documentElement;
         var zh = /^zh/i.test(navigator.language || '');
         var ready = false;
         var styles = document.querySelectorAll('link[rel="deepchat-startup-style"]');
@@ -60,6 +61,7 @@
             : 'Deep Chat could not start. Try again, or update your system WebView and reopen the app.';
           diagnostic.textContent = [code].concat(details || []).filter(Boolean).join(' · ');
           panel.hidden = false;
+          rootElement.setAttribute('data-startup-result', 'recovery');
         }
         function onStartupError(event) {
           if (ready || !panel.hidden) return;
@@ -73,7 +75,7 @@
         }
         var timeoutMs = 8000;
         var deadline = setTimeout(function () {
-          var stage = ready && remainingStyles ? 'STYLESHEET' : startupStage(document.documentElement.getAttribute('data-startup-stage'));
+          var stage = ready && remainingStyles ? 'STYLESHEET' : startupStage(rootElement.getAttribute('data-startup-stage'));
           showFailure('STARTUP_TIMEOUT', [stage, timeoutMs + ' ms']);
         }, timeoutMs);
         function hideWhenReady() {
@@ -82,6 +84,7 @@
           window.removeEventListener('error', onStartupError, true);
           panel.hidden = true;
           document.getElementById('root').removeAttribute('inert');
+          rootElement.setAttribute('data-startup-result', 'ready');
         }
         window.addEventListener('error', onStartupError, true);
         window.addEventListener('deepchat:startup-failed', function (event) {

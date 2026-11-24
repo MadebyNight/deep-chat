@@ -158,12 +158,12 @@ const applyProviderSettings = (settings: ProviderSettings) => {
   return previous.enabled !== (provider !== null) || previous.provider?.id !== provider?.id
 }
 
-export const initializeCustomProvider = async () => {
+export const initializeCustomProvider = async (deadline: Promise<never>) => {
   if (!isNative) {
     return
   }
   try {
-    const { value } = await credentials.read({ slot })
+    const { value } = await Promise.race([credentials.read({ slot }), deadline])
     if (!value) {
       return
     }
