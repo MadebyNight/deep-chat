@@ -340,10 +340,10 @@
 
 .mobilePage.mobilePage {
   width: 100%;
-  height: 100dvh;
+  height: 100%;
   max-width: none;
   max-height: none;
-  padding: max(12px, env(safe-area-inset-top)) 16px 0;
+  padding: calc(8px + var(--app-safe-top)) calc(16px + var(--app-safe-right)) 0 calc(16px + var(--app-safe-left));
   border-radius: 0;
   background: var(--dsw-alias-bg-base);
   box-shadow: none;
@@ -353,7 +353,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 0 max(16px, env(safe-area-inset-bottom));
+  padding: 8px 0 calc(16px + var(--app-safe-bottom));
   color: var(--dsw-alias-label-primary);
 }
 

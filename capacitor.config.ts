@@ -12,6 +12,11 @@ const config: CapacitorConfig = {
     loggingBehavior: 'none',
     resolveServiceWorkerRequests: false,
   },
+  plugins: {
+    SystemBars: {
+      insetsHandling: 'disable',
+    },
+  },
   server: { androidScheme: 'https', errorPath: 'webview-error.html' },
 }
 // eslint-disable-next-line import/no-default-export

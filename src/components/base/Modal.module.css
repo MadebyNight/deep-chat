@@ -20,7 +20,7 @@
   box-sizing: border-box;
   width: 380px;
   max-width: calc(100vw - 32px);
-  max-height: calc(100% - 24px);
+  max-height: calc(100% - 24px - var(--app-safe-top) - var(--app-safe-bottom));
   padding: 22px clamp(16px, 6vw, 24px);
   overflow-y: auto;
   overscroll-behavior: contain;

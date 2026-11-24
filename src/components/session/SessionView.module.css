@@ -76,6 +76,8 @@
   }
 
   .footer {
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-right: var(--app-safe-right);
+    padding-bottom: var(--app-safe-bottom);
+    padding-left: var(--app-safe-left);
   }
 }

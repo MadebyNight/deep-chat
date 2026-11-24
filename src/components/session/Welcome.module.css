@@ -210,7 +210,7 @@
     max-width: none;
     margin: 0;
     overflow-y: auto;
-    padding: 0 8px max(4px, env(safe-area-inset-bottom));
+    padding: 0 calc(8px + var(--app-safe-right)) max(4px, var(--app-safe-bottom)) calc(8px + var(--app-safe-left));
   }
 
   .greeting {

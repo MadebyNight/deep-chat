@@ -3,8 +3,8 @@
   align-items: center;
   flex-shrink: 0;
   box-sizing: border-box;
-  height: 56px;
-  padding: 2px 8px;
+  height: calc(56px + var(--app-safe-top));
+  padding: calc(2px + var(--app-safe-top)) calc(8px + var(--app-safe-right)) 2px calc(8px + var(--app-safe-left));
   border-bottom: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
 }
 

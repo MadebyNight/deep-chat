@@ -5,7 +5,7 @@
   max-width: 520px;
 }
 .connection-dialog.connection-dialog {
-  max-height: calc(100dvh - 24px);
+  max-height: calc(100dvh - 24px - var(--app-safe-top) - var(--app-safe-bottom));
   overflow-y: auto;
 }
 .connection-form {

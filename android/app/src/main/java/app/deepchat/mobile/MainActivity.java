@@ -1,6 +1,8 @@
 package app.deepchat.mobile;
 
 import android.content.Intent;
+import android.content.res.Configuration;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
@@ -12,17 +14,34 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.widget.TextView;
 
+import androidx.activity.EdgeToEdge;
+import androidx.activity.SystemBarStyle;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.browser.auth.AuthTabIntent;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
 import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+
+import java.util.Locale;
 
 public class MainActivity extends BridgeActivity {
     private View recoveryPanel;
+    private Boolean barDark;
+    private Integer barBackground;
+    private float safeTopDp;
+    private float safeRightDp;
+    private float safeBottomDp;
+    private float safeLeftDp;
     private final ActivityResultLauncher<Intent> accountAuthorization =
             AuthTabIntent.registerActivityResultLauncher(this, result -> {
                 // The loopback callback has already validated authorization and stored credentials.
@@ -44,6 +63,89 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(HistoryExportDownloadPlugin.class);
         registerPlugin(UpdateInstallerPlugin.class);
         super.onCreate(savedInstanceState);
+        setupEdgeToEdge();
+    }
+
+    private void setupEdgeToEdge() {
+        EdgeToEdge.enable(
+                this,
+                SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
+                SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
+        );
+        getWindow().getDecorView().setPadding(0, 0, 0, 0);
+        View content = findViewById(android.R.id.content);
+        if (content == null) return;
+        ViewCompat.setOnApplyWindowInsetsListener(content, (view, insets) -> {
+            Insets system = insets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
+            );
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            boolean imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime());
+            int bottomPadding = imeVisible ? ime.bottom : 0;
+            if (view.getPaddingLeft() != 0 || view.getPaddingTop() != 0
+                    || view.getPaddingRight() != 0 || view.getPaddingBottom() != bottomPadding) {
+                view.setPadding(0, 0, 0, bottomPadding);
+            }
+            float density = getResources().getDisplayMetrics().density;
+            if (density <= 0f) density = 1f;
+            int remainingBottom = imeVisible ? Math.max(0, system.bottom - ime.bottom) : system.bottom;
+            safeTopDp = system.top / density;
+            safeRightDp = system.right / density;
+            safeBottomDp = remainingBottom / density;
+            safeLeftDp = system.left / density;
+            applyCssSafeArea(bridge != null ? bridge.getWebView() : null);
+            return new WindowInsetsCompat.Builder(insets)
+                    .setInsets(
+                            WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout(),
+                            Insets.NONE
+                    )
+                    .setInsets(WindowInsetsCompat.Type.ime(), Insets.NONE)
+                    .setVisible(WindowInsetsCompat.Type.ime(), false)
+                    .build();
+        });
+        ViewCompat.requestApplyInsets(content);
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        applySystemBarAppearance();
+        View content = findViewById(android.R.id.content);
+        if (content != null) ViewCompat.requestApplyInsets(content);
+    }
+
+    void setSystemBarAppearance(boolean dark, Integer background) {
+        barDark = dark;
+        if (background != null) barBackground = background;
+        applySystemBarAppearance();
+    }
+
+    private void applySystemBarAppearance() {
+        var window = getWindow();
+        if (barDark != null) {
+            WindowInsetsControllerCompat controller =
+                    WindowCompat.getInsetsController(window, window.getDecorView());
+            controller.setAppearanceLightStatusBars(!barDark);
+            controller.setAppearanceLightNavigationBars(!barDark);
+        }
+        if (barBackground != null) {
+            window.getDecorView().setBackgroundColor(barBackground);
+        }
+    }
+
+    void applyCssSafeArea(WebView webView) {
+        if (webView == null) return;
+        String js = String.format(
+                Locale.US,
+                "try{var s=document.documentElement.style;"
+                        + "s.setProperty('--safe-area-top','%.2fpx');"
+                        + "s.setProperty('--safe-area-right','%.2fpx');"
+                        + "s.setProperty('--safe-area-bottom','%.2fpx');"
+                        + "s.setProperty('--safe-area-left','%.2fpx');"
+                        + "}catch(e){}",
+                safeTopDp, safeRightDp, safeBottomDp, safeLeftDp
+        );
+        webView.post(() -> webView.evaluateJavascript(js, null));
     }
 
     private void showRecovery(WebView webView, String diagnostic) {
@@ -70,6 +172,26 @@ public class MainActivity extends BridgeActivity {
         public void load() {
             Bridge bridge = getBridge();
             bridge.setWebViewClient(new RecoveryClient((MainActivity) getActivity(), bridge));
+        }
+
+        @PluginMethod
+        public void setSystemBarAppearance(PluginCall call) {
+            boolean dark = Boolean.TRUE.equals(call.getBoolean("dark", false));
+            String colorValue = call.getString("background");
+            Integer parsed = null;
+            if (colorValue != null) {
+                try {
+                    parsed = Color.parseColor(colorValue);
+                } catch (IllegalArgumentException ignored) {
+                    // Ignore malformed colors.
+                }
+            }
+            Integer background = parsed;
+            MainActivity activity = (MainActivity) getActivity();
+            activity.runOnUiThread(() -> {
+                activity.setSystemBarAppearance(dark, background);
+                call.resolve();
+            });
         }
     }
 
@@ -124,6 +246,7 @@ public class MainActivity extends BridgeActivity {
         public void onPageCommitVisible(WebView view, String url) {
             fallbackRequested = false;
             if (!url.equals(bridge.getErrorUrl())) mainDocumentError = null;
+            activity.applyCssSafeArea(view);
             super.onPageCommitVisible(view, url);
         }
 

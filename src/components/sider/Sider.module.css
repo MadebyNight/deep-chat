@@ -217,6 +217,10 @@
 .drawer.historySearch {
   width: 100%;
   max-width: none;
+
+  .mobile {
+    padding-right: var(--app-safe-right);
+  }
 }
 
 .historyHeader {
@@ -247,7 +251,7 @@
 
 .mobile {
   width: 100%;
-  padding: 0;
+  padding: var(--app-safe-top) 0 0 var(--app-safe-left);
   background-color: var(--dsw-alias-bg-layer-2);
 
   .newChat {
@@ -318,8 +322,9 @@
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
-  height: 64px;
-  padding: 0 17px;
+  box-sizing: border-box;
+  height: calc(64px + var(--app-safe-bottom));
+  padding: 0 17px var(--app-safe-bottom);
 }
 
 .accountRow {
