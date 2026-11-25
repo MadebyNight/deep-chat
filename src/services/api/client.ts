@@ -5,6 +5,7 @@ import { deepSeekRates, OFFICIAL_API_ORIGIN, type TokenRates } from './tokenPric
 import { readMessageEvent } from './parseEvent.js'
 import { readServerSentEvents } from './sse.js'
 import { applyAccountState, officialAccountRequest, officialAccountStream, type AccountState } from '../officialAccount.js'
+import { customGenerationFields, type GenerationParams } from '../generation.js'
 import type {
   ApiErrorBody,
   CreateMessageRequest,
@@ -255,7 +256,7 @@ export async function* streamCustomMessage(
   messages: CustomMessage[],
   signal: AbortSignal,
   rates?: TokenRates,
-  options?: { thinking?: boolean }
+  options?: { thinking?: boolean; generation?: GenerationParams }
 ): AsyncGenerator<MessageStreamEvent> {
   signal.throwIfAborted()
   const failure = { key: 'customProviderRequestFailed' } as const
@@ -274,6 +275,7 @@ export async function* streamCustomMessage(
         stream: true,
         ...(includeUsage ? { stream_options: { include_usage: true } } : {}),
         ...(includeReasoning ? { reasoning_effort: reasoningEffort } : {}),
+        ...(options?.generation ? customGenerationFields(options.generation) : {}),
       }),
       signal,
     })

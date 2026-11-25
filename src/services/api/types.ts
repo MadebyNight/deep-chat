@@ -181,6 +181,10 @@ export type CreateMessageRequest = {
   safety_check: { level: 'high' }
   title?: { enabled: boolean }
   max_tokens?: number
+  /** 官方账号协议与思考模式不发送；由生成参数拼装层裁剪。 */
+  temperature?: number
+  /** 官方账号协议与思考模式不发送；由生成参数拼装层裁剪。 */
+  top_p?: number
 }
 
 // ---------- 响应：流式事件 ----------

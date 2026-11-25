@@ -33,6 +33,7 @@ import { useTranslate, type TranslationKey, type TranslationMessage } from '../.
 import { showToast } from '../base/toastState.js'
 import { ConnectionSetting } from './ConnectionDialog.js'
 import { CustomProviderSetting } from './CustomProviderSetting.js'
+import { GenerationSettingsItem } from './GenerationSettings.js'
 import { UsageChart } from './UsageChart.js'
 import { VersionSetting } from './UpdateDialog.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
@@ -125,6 +126,7 @@ const SettingsContent = () => {
             aria-label={t('settingDialogAsideGeneralOptionLabel')}
           >
             <MobilePreferences onFont={() => setPage('font')} />
+            <GenerationSettingsItem />
             <SettingsPageLink
               label={t('settingsPersonalization')}
               onClick={() => setPage('personalization')}
@@ -217,6 +219,7 @@ const SettingsContent = () => {
             <>
               <ThemeSetting />
               <LocaleSetting />
+              <GenerationSettingsItem />
               <TtsVoiceSetting />
               <ThinkingCollapseSetting />
               <ContextCompactionSetting />

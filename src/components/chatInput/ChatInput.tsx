@@ -19,6 +19,7 @@ import {
 } from '../../services/chat/drafts.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
 import { ensureChatConnection } from '../settings/settingsDialogState.js'
+import { GenerationEntryButton } from '../settings/GenerationSettings.js'
 import { DragMask, useFileDrop } from './DragMask.js'
 import { showToast } from '../base/toastState.js'
 import {
@@ -286,7 +287,7 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
             }
           }}
         >
-          {/* 深度思考 / 智能搜索开关，tooltip 在按钮上方 */}
+          {/* 深度思考 / 生成参数 / 智能搜索，深度思考始终保留现有开关状态 */}
           <div ref={togglesRef} className={styles.toggles}>
             <Tooltip content={t('deactivatedThinkTooltip')}>
               <ActionButton
@@ -303,6 +304,12 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
                 <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
               </ActionButton>
             </Tooltip>
+            <GenerationEntryButton
+              sessionId={sessionId}
+              className={styles.toggle}
+              labelClassName={styles.toggleLabel}
+              disabled={importingHistory}
+            />
             <Tooltip content={t(custom ? 'customProviderSearchUnavailable' : 'deactivatedSearchTooltip')}>
               <ActionButton
                 type="button"

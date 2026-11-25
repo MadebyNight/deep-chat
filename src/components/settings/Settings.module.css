@@ -735,6 +735,60 @@
   border-top: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
 }
 
+.generationEntryLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.generationForm {
+  display: grid;
+  gap: 14px;
+  padding-block: 2px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.generationField {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.875rem;
+}
+
+.generationField input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-specific-login-input);
+  color: inherit;
+  font: inherit;
+}
+
+.generationField input:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-text);
+  outline-offset: 1px;
+}
+
+.generationSelect {
+  width: 100%;
+}
+
+.generationRangeRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.generationStatus {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
 .mobilePageMain .settingsGroup > .cell {
   min-height: 48px;
   gap: 12px;
