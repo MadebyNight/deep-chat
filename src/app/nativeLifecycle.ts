@@ -11,6 +11,7 @@ import { backMobileSider, useMobileSider } from '../components/sider/mobileSider
 import { closeSearchPanel, useSearchPanel } from '../components/search/searchPanelState.js'
 import { clearTurnSelection, useTurnSelection } from '../components/messages/turnSelectionState.js'
 import { flushDrafts } from '../services/chat/drafts.js'
+import { initializeSystemIntake, pullPendingIntake } from '../services/systemIntake.js'
 
 export const initializeNative = () => {
   const onReturn = () => {
@@ -30,8 +31,12 @@ export const initializeNative = () => {
     })
   }
   run(initializeOfficialAccount)
+  run(initializeSystemIntake)
   run(() => Browser.addListener('browserFinished', resumeConnection))
-  run(() => NativeApp.addListener('resume', resumeConnection))
+  run(() => NativeApp.addListener('resume', () => {
+    resumeConnection()
+    run(pullPendingIntake)
+  }))
   run(() => NativeApp.addListener('pause', () => run(flushDrafts)))
   run(() => NativeApp.addListener('backButton', () => {
     if (document.body.classList.contains('keyboard-open')) {

@@ -76,6 +76,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SecureCredentialsPlugin.class);
         registerPlugin(OfficialBrowserPlugin.class);
         registerPlugin(DeepSeekAccountPlugin.class);
+        registerPlugin(ShareIntakePlugin.class);
         registerPlugin(HistoryExportDownloadPlugin.class);
         registerPlugin(UpdateInstallerPlugin.class);
         super.onCreate(savedInstanceState);
