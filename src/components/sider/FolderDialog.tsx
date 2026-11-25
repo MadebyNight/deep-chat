@@ -36,7 +36,6 @@ const mutationToast = (result: FolderMutationResult) => {
 export const FolderDialog = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
   const t = useTranslate()
   const folders = useChatStore((state) => state.folders)
-  const sessions = useChatStore((state) => state.sessions)
   const [name, setName] = useState('')
   const [editing, setEditing] = useState<Folder | null>(null)
   const [editName, setEditName] = useState('')
@@ -45,8 +44,6 @@ export const FolderDialog = ({ open, onClose }: { open: boolean; onClose: () => 
   if (!open) {
     return null
   }
-  const countFor = (folder: Folder) =>
-    sessions.filter((session) => session.folderId === folder.id).length
   const add = async () => {
     if (pending) {
       return
@@ -117,7 +114,6 @@ export const FolderDialog = ({ open, onClose }: { open: boolean; onClose: () => 
           </>
         }
       >
-        <p>{t('deleteFolderConfirmDescription', { count: countFor(deleting) })}</p>
       </Modal>
     )
   }
