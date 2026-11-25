@@ -8,6 +8,8 @@ import {
   removeCustomProvider,
   saveCustomProvider,
   selectCustomProvider,
+  setFallbackProviders,
+  setStickyProvider,
   useCustomProvider,
   type CustomProvider,
 } from '../../services/customProvider.js'
@@ -17,25 +19,62 @@ import {
   IconButton,
   IconEllipsisOutline16,
   IconChevronDownOutline14,
+  IconChevronDownOutline16,
+  IconChevronUpOutline16,
   IconRefreshOutline16,
+  IconTrashOutline16,
   Input,
   Menu,
   Modal,
   Select,
+  Switch,
 } from '../base/index.js'
 import { showToast } from '../base/toastState.js'
 import styles from './Settings.module.css'
 
 export const CustomProviderSetting = () => {
   const t = useTranslate()
-  const { providers, activeId, enabled } = useCustomProvider()
+  const {
+    providers,
+    activeId,
+    enabled,
+    fallbackProviderIds,
+    stickyProvider,
+  } = useCustomProvider()
   const [editor, setEditor] = useState<CustomProvider | 'new' | null>(null)
   const [removing, setRemoving] = useState<CustomProvider | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
   const saving = useRef(false)
+  const active = providers.find((provider) => provider.id === activeId)
+  const fallbackProviders = fallbackProviderIds.flatMap((id) => {
+    const provider = providers.find((item) => item.id === id)
+    return provider && id !== activeId ? [provider] : []
+  })
+  const inactiveProviders = providers.filter(
+    (provider) => provider.id !== activeId && !fallbackProviderIds.includes(provider.id)
+  )
+  const moveFallback = (index: number, delta: -1 | 1) => {
+    const next = [...fallbackProviderIds]
+    const target = index + delta
+    if (target < 0 || target >= next.length) {
+      return
+    }
+    ;[next[index], next[target]] = [next[target], next[index]]
+    void apply(() => setFallbackProviders(next), false)
+  }
+  const toggleFallback = (provider: CustomProvider, checked: boolean) =>
+    apply(
+      () =>
+        setFallbackProviders(
+          checked
+            ? [...fallbackProviderIds, provider.id]
+            : fallbackProviderIds.filter((id) => id !== provider.id)
+        ),
+      false
+    )
 
-  const apply = async (operation: () => Promise<boolean>) => {
+  const apply = async (operation: () => Promise<boolean>, resetChat = true) => {
     if (saving.current) {
       return false
     }
@@ -43,7 +82,7 @@ export const CustomProviderSetting = () => {
     setBusy(true)
     setError(false)
     try {
-      if (await operation()) {
+      if ((await operation()) && resetChat) {
         newChat()
       }
       return true
@@ -147,6 +186,73 @@ export const CustomProviderSetting = () => {
           {t('customProviderAdd')}
         </Button>
       </div>
+      {active ? (
+        <section className={styles.providerRouting} aria-label={t('customProviderFallbackTitle')}>
+          <strong>{t('customProviderFallbackTitle')}</strong>
+          {fallbackProviders.length > 0 ? (
+            <ol className={styles.providerFallbackList}>
+              {fallbackProviders.map((provider, index) => (
+                <li key={provider.id}>
+                  <span>
+                    <b>{index + 1}</b>
+                    {new URL(provider.baseUrl).host} · {provider.model}
+                  </span>
+                  <div className={styles.providerFallbackActions}>
+                    <IconButton
+                      icon={<IconChevronUpOutline16 />}
+                      disabled={busy || index === 0}
+                      aria-label={t('moveUp')}
+                      onClick={() => moveFallback(index, -1)}
+                    />
+                    <IconButton
+                      icon={<IconChevronDownOutline16 />}
+                      disabled={busy || index === fallbackProviders.length - 1}
+                      aria-label={t('moveDown')}
+                      onClick={() => moveFallback(index, 1)}
+                    />
+                    <IconButton
+                      icon={<IconTrashOutline16 />}
+                      disabled={busy}
+                      aria-label={t('delete')}
+                      onClick={() => void toggleFallback(provider, false)}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className={styles.description}>{t('customProviderFallbackEmpty')}</p>
+          )}
+          {inactiveProviders.length > 0 ? (
+            <div className={styles.providerFallbackChoices}>
+              {inactiveProviders.map((provider) => (
+                <div key={provider.id}>
+                  <span>
+                    {new URL(provider.baseUrl).host} · {provider.model}
+                  </span>
+                  <Button
+                    size="s"
+                    variant="outlined"
+                    disabled={busy}
+                    onClick={() => void toggleFallback(provider, true)}
+                  >
+                    {t('customProviderFallbackAdd')}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <div className={styles.providerSticky}>
+            <strong>{t('customProviderSticky')}</strong>
+            <Switch
+              checked={stickyProvider}
+              disabled={busy}
+              aria-label={t('customProviderSticky')}
+              onClick={() => void apply(() => setStickyProvider(!stickyProvider), false)}
+            />
+          </div>
+        </section>
+      ) : null}
       {editor ? (
         <ProviderEditor
           provider={editor === 'new' ? undefined : editor}

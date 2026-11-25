@@ -263,6 +263,9 @@ export const toSessionFile = (original: Session, exportImage: ExportImage): Sess
     // 格式要求非空；空会话没有消息可指向，写 0。
     current_message_id: current ? id(current) : 0,
     ...(session.customProviderId ? { deepchat_custom_provider_id: session.customProviderId } : {}),
+    ...(session.pinnedProviderId
+      ? { deepchat_pinned_provider_id: session.pinnedProviderId }
+      : {}),
     inserted_at: iso(session.createdAt),
     updated_at: iso(session.updatedAt),
     messages,

@@ -209,6 +209,33 @@
 .connection-usage-metrics button[aria-pressed='true'] strong {
   color: var(--dsw-alias-brand-text);
 }
+.connection-usage-cache {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.connection-usage-cache > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: var(--dsw-alias-bg-skeleton);
+  color: var(--dsw-alias-label-secondary);
+  font-size: min(0.6875rem, 3.5cqi);
+}
+.connection-usage-cache span,
+.connection-usage-cache strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connection-usage-cache strong {
+  color: var(--dsw-alias-label-primary);
+  font-size: min(0.875rem, 4.4cqi);
+  font-variant-numeric: tabular-nums;
+}
 .connection-usage-weekdays,
 .connection-usage-chart {
   display: grid;

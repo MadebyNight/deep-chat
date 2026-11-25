@@ -81,12 +81,30 @@ export default class DeepChatMobile extends Service {
       await send({ id, result })
     } catch (error) {
       const failure = error.failure ?? error
+      const networkCodes = [
+        'ECONNRESET',
+        'ECONNREFUSED',
+        'ENOTFOUND',
+        'EAI_AGAIN',
+        'ETIMEDOUT',
+        'UND_ERR_CONNECT_TIMEOUT',
+        'UND_ERR_HEADERS_TIMEOUT',
+        'UND_ERR_BODY_TIMEOUT',
+        'UND_ERR_SOCKET',
+      ]
+      const networkFailure =
+        failure instanceof TypeError ||
+        failure?.name === 'TypeError' ||
+        networkCodes.includes(failure?.code) ||
+        networkCodes.includes(failure?.cause?.code)
       const inputOverflow = method === 'messages' && [undefined, 400, 413, 422].includes(failure.status) && (
         /^(context_length_exceeded|context_window_exceeded|input_token_limit_exceeded)$/i.test(failure.code ?? '') ||
         /maximum context length is\s+[\d,]+\s+tokens|(?:input tokens|input token count)\s*\([^)]*\)\s*exceed(?:s|ed)?\s+(?:the )?(?:maximum|context)|(?:input|prompt) (?:length|tokens).*exceed(?:s|ed)?.*(?:context window|context length|input token limit)/i.test(failure.message ?? '')
       )
       await send({ id, error: {
-        code: inputOverflow ? 'context_length_exceeded' : typeof failure.code === 'string' ? failure.code : 'ACCOUNT_RUNTIME',
+        code: inputOverflow ? 'context_length_exceeded'
+          : networkFailure ? 'ACCOUNT_NETWORK'
+            : typeof failure.code === 'string' ? failure.code : 'ACCOUNT_RUNTIME',
         status: Number.isInteger(failure.status) ? failure.status : undefined,
         ...(error.upstream && { detail: failure.message?.slice(0, 2048) }),
       } })

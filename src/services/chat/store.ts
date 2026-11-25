@@ -1,17 +1,39 @@
 import { create } from 'zustand'
 import { showToast } from '../../components/base/toastState.js'
 import { createId } from '../../utils/id.js'
-import { ApiError, streamCustomMessage, streamMessage, streamOfficialMessage } from '../api/client.js'
+import {
+  API_ORIGIN,
+  ApiError,
+  streamCustomMessage,
+  streamMessage,
+  streamOfficialMessage,
+} from '../api/client.js'
 import type { ChatModel, CreateMessageRequest, MessageStreamEvent } from '../api/types.js'
-import type { TokenRates } from '../api/tokenPricing.js'
-import { matchesChatProvider, useCustomProvider, type CustomProvider } from '../customProvider.js'
+import {
+  deepSeekRates,
+  OFFICIAL_API_ORIGIN,
+  tokenUsageCost,
+  type TokenRates,
+} from '../api/tokenPricing.js'
+import {
+  matchesChatProvider,
+  providerRoute,
+  useCustomProvider,
+  type CustomProvider,
+} from '../customProvider.js'
 import { ensureChatConnection } from '../../components/settings/settingsDialogState.js'
 import {
   extractFileIds,
   getFileErrorCode,
   isInputContextOverflow,
   isRetryableApiError,
+  isTransientChatError,
 } from '../api/errors.js'
+import {
+  CHAT_RETRY_BASE_DELAY_MS,
+  streamWithPreContentRetry,
+  type StreamRetryNotice,
+} from '../api/streamRetry.js'
 import {
   attachmentTaskKey, cancelUpload, describeUploadError, getAttachmentConnection, LEGACY_KEY_FILE_SCOPE,
   uploadAttachment, useUploads, type AttachmentConnection,
@@ -53,6 +75,7 @@ import {
   type AssistantMessage,
   type FileAttachment,
   type Message,
+  type MessageRoute,
   type Session,
   type SessionSummary,
   type UserMessage,
@@ -295,6 +318,15 @@ const createReply = (connection: ChatConnection): AssistantMessage => {
     prefix: connection.kind === 'deepseek',
     status: 'pending',
     blocks: [],
+    ...(connection.kind === 'custom'
+      ? {
+          route: routeInfo(
+            connection.routes[0]?.provider ?? connection.provider,
+            connection.routes[0]?.provider.id !== connection.provider.id,
+            connection.provider
+          ),
+        }
+      : {}),
   }
 }
 
@@ -626,12 +658,19 @@ const removeSessionData = async (id: string): Promise<boolean> => {
 
 export const stopReply = (sessionId: string) => getStreamController(sessionId)?.abort()
 
+type CustomProviderRoute = { provider: CustomProvider; rates?: TokenRates }
+
 type ChatConnection =
   | { kind: 'deepseek'; attachment: AttachmentConnection | undefined }
-  | { kind: 'custom'; provider: CustomProvider; rates?: TokenRates }
+  | {
+      kind: 'custom'
+      provider: CustomProvider
+      routes: CustomProviderRoute[]
+      stickyProvider: boolean
+    }
 
 const chatConnectionFor = (session?: Session): ChatConnection | undefined => {
-  const { enabled, provider, rates } = useCustomProvider.getState()
+  const { enabled, provider, rates, ratesById, ...settings } = useCustomProvider.getState()
   if (enabled && !provider) {
     ensureChatConnection()
     return
@@ -641,9 +680,71 @@ const chatConnectionFor = (session?: Session): ChatConnection | undefined => {
     return
   }
   return enabled && provider
-    ? { kind: 'custom', provider, rates }
+    ? {
+        kind: 'custom',
+        provider,
+        stickyProvider: settings.stickyProvider,
+        routes: providerRoute({ ...settings, activeId: provider.id }, session?.pinnedProviderId).map(
+          (candidate) => ({
+            provider: candidate,
+            rates: ratesById[candidate.id] ?? (candidate.id === provider.id ? rates : undefined),
+          })
+        ),
+      }
     : { kind: 'deepseek', attachment: getAttachmentConnection() }
 }
+
+const providerLabel = (provider: CustomProvider) =>
+  `${new URL(provider.baseUrl).host} · ${provider.model}`
+
+const routeInfo = (
+  provider: CustomProvider,
+  fallback: boolean,
+  primary?: CustomProvider
+): MessageRoute => ({
+  providerId: provider.id,
+  providerName: new URL(provider.baseUrl).host,
+  model: provider.model,
+  fallback,
+  ...(fallback && primary && primary.id !== provider.id
+    ? {
+        fallbackFrom: {
+          providerId: primary.id,
+          providerName: new URL(primary.baseUrl).host,
+        },
+      }
+    : {}),
+})
+
+const withUsageCost = (reply: AssistantMessage, rates?: TokenRates): AssistantMessage => {
+  const cost = reply.usage ? tokenUsageCost(reply.usage, rates) : undefined
+  return {
+    ...reply,
+    retry: undefined,
+    ...(cost ?? { costNanos: undefined, cacheSavedNanos: undefined }),
+  }
+}
+
+const retryNotice = (notice: StreamRetryNotice): AssistantMessage['retry'] => ({
+  attempt: notice.attempt,
+  maxAttempts: notice.maxRetries,
+  phase: 'retry',
+})
+
+const waitForChannel = (delayMs: number, signal: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    if (signal.aborted) {
+      resolve()
+      return
+    }
+    const finish = () => {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', finish)
+      resolve()
+    }
+    const timer = setTimeout(finish, delayMs)
+    signal.addEventListener('abort', finish, { once: true })
+  })
 
 /**
  * 提交指定会话的最新草稿；null 表示新建会话。
@@ -683,7 +784,14 @@ export const sendMessage = (targetSessionId: string | null) => {
       updatedAt: now,
       messages: [],
       rootMessageId: null,
-      ...(chatConnection.kind === 'custom' ? { customProviderId: chatConnection.provider.id } : {}),
+      ...(chatConnection.kind === 'custom'
+        ? {
+            customProviderId: chatConnection.provider.id,
+            ...(chatConnection.stickyProvider
+              ? { pinnedProviderId: chatConnection.provider.id }
+              : {}),
+          }
+        : {}),
     }
     sessionId = session.id
     touchSession(session.id)
@@ -1172,6 +1280,17 @@ const streamReply = async (
   let forceCompact = false
   let retriedOverflow = false
   let fileRetries = 0
+  let usedRates: TokenRates | undefined
+  const showRetry = (notice: StreamRetryNotice) => {
+    reply = {
+      ...reply,
+      usage: undefined,
+      costNanos: undefined,
+      cacheSavedNanos: undefined,
+      retry: retryNotice(notice),
+    }
+    updateReply(sessionId, reply)
+  }
   try {
     for (;;) {
       let preparing = false
@@ -1184,16 +1303,86 @@ const streamReply = async (
             { role: 'assistant' as const, content: getReplyText(assistant) },
           ])
           messages.push({ role: 'user', content: request.question.content })
-          for await (const event of streamCustomMessage(
-            chatConnection.provider,
-            messages,
-            controller.signal,
-            chatConnection.rates,
-            { thinking: !!initial.thinking }
-          )) {
-            apply(event)
+          let completed = false
+          for (let index = 0; index < chatConnection.routes.length; index++) {
+            const route = chatConnection.routes[index]
+            const fallback = route.provider.id !== chatConnection.provider.id
+            usedRates = route.rates
+            reply = {
+              ...reply,
+              route: routeInfo(route.provider, fallback, chatConnection.provider),
+              retry: undefined,
+            }
+            updateReply(sessionId, reply)
+            let emittedContent = false
+            try {
+              for await (const event of streamWithPreContentRetry({
+                signal: controller.signal,
+                createStream: (signal) => {
+                  blockIndexes.clear()
+                  return streamCustomMessage(
+                    route.provider,
+                    messages,
+                    signal,
+                    route.rates,
+                    { thinking: !!initial.thinking }
+                  )
+                },
+                isContentEvent: (event) => event.type === 'content_block_start',
+                onRetry: showRetry,
+              })) {
+                emittedContent ||= event.type === 'content_block_start'
+                receivedContent ||= emittedContent
+                apply(event)
+              }
+              reply = settleReply(reply, 'done', Date.now())
+              if (
+                chatConnection.stickyProvider &&
+                getSession(sessionId)?.pinnedProviderId !== route.provider.id
+              ) {
+                updateSession(sessionId, (session) => ({
+                  ...session,
+                  pinnedProviderId: route.provider.id,
+                }))
+                persist(sessionId)
+              }
+              completed = true
+              break
+            } catch (error) {
+              if (controller.signal.aborted) {
+                throw error
+              }
+              const next = chatConnection.routes[index + 1]
+              if (
+                emittedContent ||
+                !next ||
+                !isTransientChatError(error)
+              ) {
+                throw error
+              }
+              reply = {
+                ...reply,
+                retry: {
+                  attempt: 1,
+                  maxAttempts: 1,
+                  phase: 'fallback',
+                  target: providerLabel(next.provider),
+                },
+              }
+              updateReply(sessionId, reply)
+              showToast({
+                key: 'customProviderFallback',
+                params: { provider: providerLabel(next.provider) },
+              })
+              await waitForChannel(CHAT_RETRY_BASE_DELAY_MS, controller.signal)
+              if (controller.signal.aborted) {
+                throw new DOMException('Cancelled', 'AbortError')
+              }
+            }
           }
-          reply = settleReply(reply, 'done', Date.now())
+          if (!completed) {
+            throw new ApiError('http', { key: 'customProviderRequestFailed' }, 503)
+          }
           break
         }
         if (!connection) {throw new ApiError('http', { key: 'replyInvalidApiKey' }, 401)}
@@ -1262,8 +1451,21 @@ const streamReply = async (
           ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
         }
         sent = prepared
-        const events = stream(messageBody, controller.signal)
-        blockIndexes.clear()
+        const events = streamWithPreContentRetry({
+          signal: controller.signal,
+          createStream: (signal) => {
+            blockIndexes.clear()
+            const startedAt = new Date()
+            usedRates = deepSeekRates(
+              official ? OFFICIAL_API_ORIGIN : API_ORIGIN,
+              options.model,
+              startedAt
+            )
+            return stream(messageBody, signal)
+          },
+          isContentEvent: (event) => event.type === 'content_block_start',
+          onRetry: showRetry,
+        })
         for await (const event of events) {
           receivedContent ||= event.type === 'content_block_start'
           if (
@@ -1349,6 +1551,7 @@ const streamReply = async (
     titleRequests.delete(controller)
     streamFlushes.delete(sessionId)
     cancelAnimationFrame(frame)
+    reply = withUsageCost(reply, usedRates)
     updateReply(sessionId, reply)
     set((state) => ({
       streaming: Object.fromEntries(

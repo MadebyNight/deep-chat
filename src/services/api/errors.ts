@@ -1,6 +1,17 @@
 import { ApiError } from './client.js'
 
 /**
+ * 首包等待超时。它不是调用方主动取消，因此沿用网络错误的分类，
+ * 让上层可以在重试耗尽后继续尝试备用线路。
+ */
+export class FirstContentTimeoutError extends ApiError {
+  constructor(readonly timeoutMs: number) {
+    super('network', { key: 'replyRequestFailed' }, 408)
+    this.name = 'FirstContentTimeoutError'
+  }
+}
+
+/**
  * 接口失败的统一分类。各调用方按自己的场景给同一种情况配不同文案，
  * 例如余额不足在回答、上传、朗读里措辞不同，所以这里只归类，不生成文案。
  */
@@ -51,6 +62,21 @@ export const isRetryableApiError = (error: unknown): boolean => {
     condition === 'network' ||
     condition === 'rateLimited' ||
     condition === 'serverBusy'
+  )
+}
+
+/**
+ * 聊天首包重试只接受瞬时网络、首包超时、限流和网关/服务端繁忙，
+ * 401、402、参数错误、主动取消及未知异常都不自动重试。
+ */
+export const isTransientChatError = (error: unknown, timedOut = false): boolean => {
+  if (timedOut) {
+    return true
+  }
+  return (
+    error instanceof ApiError &&
+    (error.kind === 'network' ||
+      (error.status !== undefined && [408, 429, 502, 503, 504].includes(error.status)))
   )
 }
 

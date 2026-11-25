@@ -149,6 +149,7 @@ export const settleReply = (
   ...reply,
   status,
   error,
+  retry: undefined,
   blocks: reply.blocks.flatMap((block): ReplyBlock[] => {
     if (reply.stopReason === 'refusal' && (block.type === 'thinking' || block.type === 'text')) {
       return []

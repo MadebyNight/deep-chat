@@ -1,13 +1,33 @@
 import { create } from 'zustand'
 import { formatDate } from '../../utils/format.js'
 import type { MessageUsage } from '../api/types.js'
-import { tokenCost, type TokenRates } from '../api/tokenPricing.js'
+import { tokenUsageCost, type TokenRates, type UsageCost } from '../api/tokenPricing.js'
 
 const STORAGE_KEY = 'deepchat:daily-chat-usage'
 const RETAINED_DAYS = 62
 
-export type DailyChatUsage = { calls: number; reported: number; tokens: number; priced: number; costNanos: number }
-const EMPTY_DAY: DailyChatUsage = { calls: 0, reported: 0, tokens: 0, priced: 0, costNanos: 0 }
+export type DailyChatUsage = {
+  calls: number
+  reported: number
+  tokens: number
+  priced: number
+  costNanos: number
+  /** 全部输入侧 Token，含缓存命中与缓存写入，用于计算缓存命中率 */
+  inputTokens: number
+  cacheReadTokens: number
+  cacheSavedNanos: number
+}
+export type ChatUsageSnapshot = UsageCost & { inputTokens: number; cacheReadTokens: number }
+const EMPTY_DAY: DailyChatUsage = {
+  calls: 0,
+  reported: 0,
+  tokens: 0,
+  priced: 0,
+  costNanos: 0,
+  inputTokens: 0,
+  cacheReadTokens: 0,
+  cacheSavedNanos: 0,
+}
 const isCount = (value: unknown): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 
@@ -30,10 +50,39 @@ const load = (): Record<string, DailyChatUsage> | undefined => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || !entry || typeof entry !== 'object') {
         continue
       }
-      const { calls, reported, tokens, priced, costNanos } = entry as Partial<DailyChatUsage>
-      if (isCount(calls) && isCount(reported) && isCount(tokens) && reported <= calls) {
+      const {
+        calls,
+        reported,
+        tokens,
+        priced,
+        costNanos,
+        inputTokens: storedInputTokens,
+        cacheReadTokens: storedCacheReadTokens,
+        cacheSavedNanos: storedCacheSavedNanos,
+      } = entry as Partial<DailyChatUsage>
+      if (
+        isCount(calls) &&
+        isCount(reported) &&
+        isCount(tokens) &&
+        reported <= calls
+      ) {
         const validPrice = isCount(priced) && priced <= reported && isCount(costNanos)
-        days[key] = { calls, reported, tokens, priced: validPrice ? priced : 0, costNanos: validPrice ? costNanos : 0 }
+        const inputTokens = isCount(storedInputTokens) ? storedInputTokens : 0
+        const cacheReadTokens = isCount(storedCacheReadTokens) ? storedCacheReadTokens : 0
+        if (inputTokens > tokens || cacheReadTokens > inputTokens) {
+          continue
+        }
+        days[key] = {
+          calls,
+          reported,
+          tokens,
+          priced: validPrice ? priced : 0,
+          costNanos: validPrice ? costNanos : 0,
+          inputTokens,
+          cacheReadTokens,
+          cacheSavedNanos:
+            validPrice && isCount(storedCacheSavedNanos) ? storedCacheSavedNanos : 0,
+        }
       }
     }
     return retainDays(days)
@@ -83,7 +132,7 @@ export const recordChatRequest = (now = new Date(), rates?: TokenRates) => {
     return isCount(calls) ? { ...day, calls } : day
   })
   let reported = false
-  return (usage: MessageUsage, useRates = true) => {
+  return (usage: MessageUsage, useRates = true): ChatUsageSnapshot | undefined => {
     if (reported) {
       return
     }
@@ -97,20 +146,45 @@ export const recordChatRequest = (now = new Date(), rates?: TokenRates) => {
       return
     }
     const tokens = input + cached + written + output
+    const inputTokens = input + cached + written
+    const priced = useRates ? tokenUsageCost(usage, rates) : undefined
+    let snapshot: ChatUsageSnapshot | undefined
     updateDay(key, (day) => {
       const total = day.tokens + tokens
-      if (day.reported >= day.calls || !isCount(total)) {
+      const totalInput = day.inputTokens + inputTokens
+      const totalCached = day.cacheReadTokens + cached
+      if (
+        day.reported >= day.calls ||
+        !isCount(total) ||
+        !isCount(totalInput) ||
+        !isCount(totalCached)
+      ) {
         return day
       }
       reported = true
-      const cost = useRates ? tokenCost(usage, rates) : undefined
-      const costNanos = day.costNanos + (cost ?? 0)
-      const priced = cost !== undefined && isCount(costNanos)
+      const costNanos = day.costNanos + (priced?.costNanos ?? 0)
+      const cacheSavedNanos = day.cacheSavedNanos + (priced?.cacheSavedNanos ?? 0)
+      const canPrice =
+        priced !== undefined && isCount(costNanos) && isCount(cacheSavedNanos)
+      if (canPrice) {
+        snapshot = {
+          ...priced,
+          inputTokens,
+          cacheReadTokens: cached,
+        }
+      }
       return {
-        ...day, reported: day.reported + 1, tokens: total,
-        priced: day.priced + Number(priced), costNanos: priced ? costNanos : day.costNanos,
+        ...day,
+        reported: day.reported + 1,
+        tokens: total,
+        inputTokens: totalInput,
+        cacheReadTokens: totalCached,
+        priced: day.priced + Number(canPrice),
+        costNanos: canPrice ? costNanos : day.costNanos,
+        cacheSavedNanos: canPrice ? cacheSavedNanos : day.cacheSavedNanos,
       }
     })
+    return snapshot
   }
 }
 

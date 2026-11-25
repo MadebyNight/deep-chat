@@ -73,6 +73,25 @@ export type ReplyBlock = ThinkingPart | TextPart | ServerToolBlock
  */
 export type ReplyStatus = 'pending' | 'streaming' | 'done' | 'stopped' | 'error'
 
+/** 实际完成本轮的自定义供应商线路，用于历史记录与 fallback 提示 */
+export type MessageRoute = {
+  providerId: string
+  providerName: string
+  model: string
+  fallback: boolean
+  /** fallback 时记录被跳过的主线路，便于历史说明 */
+  fallbackFrom?: { providerId: string; providerName: string }
+}
+
+export type ReplyRetry = {
+  /** 即将进行第几次重试，从 1 开始 */
+  attempt: number
+  maxAttempts: number
+  phase: 'retry' | 'fallback'
+  /** fallback 时展示目标线路 */
+  target?: string
+}
+
 export type AssistantMessage = MessageBranch & {
   id: string
   role: 'assistant'
@@ -94,6 +113,14 @@ export type AssistantMessage = MessageBranch & {
   stopDetails?: StopDetails
   /** 最近一次请求的用量，续写后更新 */
   usage?: MessageUsage
+  /** 按实际请求时间与费率计算的单轮估算费用快照 */
+  costNanos?: number
+  /** 缓存命中相对未命中输入价节省的估算金额快照 */
+  cacheSavedNanos?: number
+  /** 自定义供应商实际命中的线路；旧消息缺省 */
+  route?: MessageRoute
+  /** 仅流式期间展示的重试/切线路状态 */
+  retry?: ReplyRetry
   error?: {
     /** upload：发送前补传附件失败，请求没有发出 */
     kind: ApiErrorKind | 'upload'
@@ -124,6 +151,8 @@ export type Session = {
   messages: Message[]
   contextCheckpoint?: ContextCheckpoint
   customProviderId?: string
+  /** 粘性会话当前优先使用自定义供应商线路；缺省表示使用主线路 */
+  pinnedProviderId?: string
   /** undefined 表示线性消息列表；null 表示空会话。 */
   rootMessageId?: string | null
 }

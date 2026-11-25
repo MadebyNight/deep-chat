@@ -23,6 +23,7 @@ import {
   setChatFontSize,
   setHapticsEnabled,
   setLocale,
+  setShowMessageUsage,
   setThemePreference,
   setTtsVoice,
   useSettings,
@@ -155,6 +156,7 @@ const SettingsContent = () => {
         <section className={styles.settingsGroup}>
           <ThinkingCollapseSetting />
           <ContextCompactionSetting />
+          <MessageUsageSetting />
           {isNative ? <HapticsSetting /> : null}
         </section>
       ),
@@ -218,6 +220,7 @@ const SettingsContent = () => {
               <TtsVoiceSetting />
               <ThinkingCollapseSetting />
               <ContextCompactionSetting />
+              <MessageUsageSetting />
               {isNative ? <HapticsSetting /> : null}
               <AutoReadSetting />
               <VersionSetting />
@@ -637,6 +640,27 @@ const ContextCompactionSetting = () => {
           onClick={() => {
             triggerHaptic('light')
             setAutoCompactContext(!enabled)
+          }}
+        />
+      }
+    />
+  )
+}
+
+const MessageUsageSetting = () => {
+  const t = useTranslate()
+  const enabled = useSettings((state) => state.showMessageUsage)
+  return (
+    <SettingCell
+      label={t('settingsShowMessageUsage')}
+      status={null}
+      action={
+        <Switch
+          checked={enabled}
+          aria-label={t('settingsShowMessageUsage')}
+          onClick={() => {
+            triggerHaptic('light')
+            setShowMessageUsage(!enabled)
           }}
         />
       }

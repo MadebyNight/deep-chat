@@ -1,6 +1,7 @@
 import type { ChatModel, MessageUsage } from './types.js'
 
 export type TokenRates = { input: number; output: number; cacheRead?: number; cacheWrite?: number }
+export type UsageCost = { costNanos: number; cacheSavedNanos: number }
 export const NANOS_PER_YUAN = 1_000_000_000
 export const OFFICIAL_API_ORIGIN = 'https://api.deepseek.com'
 
@@ -44,6 +45,33 @@ export const tokenCost = (usage: MessageUsage, rates?: TokenRates) => {
         cache_creation_input_tokens * (rates.cacheWrite ?? 0))
   )
   return Number.isSafeInteger(cost) && cost >= 0 ? cost : undefined
+}
+
+/**
+ * 缓存节省 = 命中 Token ×（未命中的输入单价 - 缓存读取单价）。
+ * 缓存读取单价未知时无法可靠估算，返回 undefined；没有命中时节省为 0。
+ */
+export const tokenCacheSavings = (usage: MessageUsage, rates?: TokenRates) => {
+  if (!rates) {
+    return undefined
+  }
+  const cacheRead = usage.cache_read_input_tokens
+  if (cacheRead > 0 && rates.cacheRead === undefined) {
+    return undefined
+  }
+  const savings = Math.round(
+    NANOS_PER_YUAN * cacheRead * Math.max(0, rates.input - (rates.cacheRead ?? 0))
+  )
+  return Number.isSafeInteger(savings) && savings >= 0 ? savings : undefined
+}
+
+/** 单轮估算费用与缓存节省必须来自同一套费率，缺任一项时不展示不完整金额。 */
+export const tokenUsageCost = (usage: MessageUsage, rates?: TokenRates): UsageCost | undefined => {
+  const costNanos = tokenCost(usage, rates)
+  const cacheSavedNanos = tokenCacheSavings(usage, rates)
+  return costNanos === undefined || cacheSavedNanos === undefined
+    ? undefined
+    : { costNanos, cacheSavedNanos }
 }
 
 // https://api-docs.deepseek.com/zh-cn/quick_start/pricing/

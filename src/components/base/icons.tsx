@@ -27,6 +27,38 @@ export const IconChevronRightOutline14 = () => (
   </svg>
 )
 
+export const IconChevronUpOutline16 = () => (
+  <svg
+    width={16}
+    height={16}
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.5}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path d="M3.5 9.75L8 5.25L12.5 9.75" />
+  </svg>
+)
+
+export const IconChevronDownOutline16 = () => (
+  <svg
+    width={16}
+    height={16}
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.5}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path d="M3.5 6.25L8 10.75L12.5 6.25" />
+  </svg>
+)
+
 export const IconCloseFill14 = () => (
   <svg width={14} height={14} viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path

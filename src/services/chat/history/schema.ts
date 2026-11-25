@@ -258,6 +258,9 @@ export const readSessionFile: Read<SessionFile> = (value) => {
     ...(typeof item.deepchat_custom_provider_id === 'string' && item.deepchat_custom_provider_id
       ? { deepchat_custom_provider_id: item.deepchat_custom_provider_id }
       : {}),
+    ...(typeof item.deepchat_pinned_provider_id === 'string' && item.deepchat_pinned_provider_id
+      ? { deepchat_pinned_provider_id: item.deepchat_pinned_provider_id }
+      : {}),
     current_message_id: count(item.current_message_id),
     inserted_at: time(item.inserted_at),
     updated_at: time(item.updated_at),
