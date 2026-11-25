@@ -36,7 +36,7 @@ export const shareText = async (title: string, text: string) => {
   throw new Error('share unsupported')
 }
 
-export const saveArchive = async (name: string, blob: Blob) => {
+export const saveArchive = async (name: string, blob: Blob, title = '保存聊天记录') => {
   if (isNative) {
     const data = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader()
@@ -45,7 +45,7 @@ export const saveArchive = async (name: string, blob: Blob) => {
       reader.readAsDataURL(blob)
     })
     const { uri } = await Filesystem.writeFile({ path: name, data, directory: Directory.Cache })
-    await Share.share({ title: '保存聊天记录', files: [uri] })
+    await Share.share({ title, files: [uri] })
     return
   }
   const url = URL.createObjectURL(blob)

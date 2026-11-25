@@ -352,6 +352,13 @@
     ]
   },
   {
+    "file": "src/components/session/PromptLibraryModal.tsx",
+    "group": "sessions",
+    "components": [
+      "PromptLibraryModal"
+    ]
+  },
+  {
     "file": "src/components/session/PromptPicker.tsx",
     "group": "sessions",
     "components": [
