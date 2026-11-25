@@ -21,6 +21,7 @@ import {
   setAutoCompactContext,
   setAutoReadAloud,
   setChatFontSize,
+  setCopyFormat,
   setHapticsEnabled,
   setLocale,
   setThemePreference,
@@ -153,6 +154,7 @@ const SettingsContent = () => {
       font: <FontSizeSetting />,
       personalization: (
         <section className={styles.settingsGroup}>
+          <CopyFormatSetting />
           <ThinkingCollapseSetting />
           <ContextCompactionSetting />
           {isNative ? <HapticsSetting /> : null}
@@ -215,6 +217,7 @@ const SettingsContent = () => {
             <>
               <ThemeSetting />
               <LocaleSetting />
+              <CopyFormatSetting />
               <TtsVoiceSetting />
               <ThinkingCollapseSetting />
               <ContextCompactionSetting />
@@ -523,6 +526,28 @@ const LocaleSetting = () => {
             { value: 'en-US', label: t('settingsLocaleEnUS'), lang: 'en' },
           ]}
           onChange={setLocale}
+        />
+      }
+    />
+  )
+}
+
+const CopyFormatSetting = () => {
+  const t = useTranslate()
+  const copyFormat = useSettings((state) => state.copyFormat)
+  return (
+    <SettingCell
+      label={t('copyFormat')}
+      status={null}
+      action={
+        <Select
+          ariaLabel={t('copyFormat')}
+          value={copyFormat}
+          options={[
+            { value: 'markdown', label: t('copyMarkdown') },
+            { value: 'plain', label: t('copyPlainText') },
+          ]}
+          onChange={setCopyFormat}
         />
       }
     />

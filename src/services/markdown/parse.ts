@@ -25,15 +25,10 @@ declare module 'mdast' {
 
 const text = (value: string): Text => ({ type: 'text', value })
 
-/**
- * 解析正文，并把渲染器不单独处理的节点提前换掉，渲染时无需再读原文：
- * - 传入 sources 时，[citation:N] 换成角标节点，找不到来源的直接去掉
- * - disableLink 时链接只保留文字
- * - 删除线保留原样的 ~ 定界符，脚注、引用式链接与定义显示原文
- */
-export function toMdAst(
+/** 解析 Markdown；传入 sources 时把 [citation:N] 换成对应来源节点。 */
+export function parseMdAst(
   input: string,
-  { sources, disableLink }: { sources: Source[] | undefined; disableLink: boolean }
+  { sources }: { sources?: Source[] }
 ): Root {
   const ast = fromMarkdown(input, {
     extensions: [
@@ -57,6 +52,19 @@ export function toMdAst(
       { ignore: ['linkReference'] }
     )
   }
+  return ast
+}
+
+/**
+ * 解析正文，并把渲染器不单独处理的节点提前换掉，渲染时无需再读原文：
+ * - 链接节点按 disableLink 保留或只留文字
+ * - 删除线保留原样的 ~ 定界符，脚注、引用式链接与定义显示原文
+ */
+export function toMdAst(
+  input: string,
+  { sources, disableLink }: { sources: Source[] | undefined; disableLink: boolean }
+): Root {
+  const ast = parseMdAst(input, { sources })
   const raw = (node: Nodes) => input.slice(node.position?.start.offset, node.position?.end.offset)
   // 先处理子节点，再按需把当前节点换成若干节点
   const simplify = (node: Nodes): Nodes[] => {

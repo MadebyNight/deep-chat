@@ -1,0 +1,8 @@
+.group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-touch-callout: none;
+}

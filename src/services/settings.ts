@@ -7,6 +7,9 @@ export type Locale = 'zh-CN' | 'en-US'
 /** 主题偏好；默认跟随系统 */
 export type ThemePreference = 'light' | 'dark' | 'system'
 
+/** 消息复制默认格式；默认沿用 Markdown 原文 */
+export type CopyFormat = 'markdown' | 'plain'
+
 /** 非敏感设置保存在本机；连接密钥仅在内存及 Android Keystore 加密存储中。 */
 export type PromptPreset = { id: string; title: string; body: string }
 type PromptPreferences = { presets: PromptPreset[]; selectedId: string | null }
@@ -15,6 +18,7 @@ type Settings = {
   apiKey: string | null
   locale: Locale
   themePreference: ThemePreference
+  copyFormat: CopyFormat
   chatFontSize: number | null
   ttsVoice: TtsVoice
   autoReadAloud: boolean
@@ -32,6 +36,7 @@ const KEYS = {
   apiKey: 'chat-demo:api-key',
   locale: 'chat-demo:locale',
   themePreference: 'chat-demo:theme-preference',
+  copyFormat: 'deepchat:copy-format',
   chatFontSize: 'deepchat:chat-font-size',
   ttsVoice: 'chat-demo:tts-voice',
   autoReadAloud: 'chat-demo:auto-read-aloud',
@@ -84,6 +89,9 @@ const initialThemePreference = (): ThemePreference => {
   return saved === 'light' || saved === 'dark' ? saved : 'system'
 }
 
+const initialCopyFormat = (): CopyFormat =>
+  readPreference(KEYS.copyFormat) === 'plain' ? 'plain' : 'markdown'
+
 const initialChatFontSize = () => {
   const value = Number(readPreference(KEYS.chatFontSize))
   return Number.isInteger(value) && value >= 14 && value <= 22 ? value : null
@@ -128,6 +136,7 @@ export const useSettings = create<Settings>(() => ({
   apiKey: null,
   locale: initialLocale(),
   themePreference: initialThemePreference(),
+  copyFormat: initialCopyFormat(),
   chatFontSize: initialChatFontSize(),
   ttsVoice: initialTtsVoice(),
   autoReadAloud: readPreference(KEYS.autoReadAloud) === 'true',
@@ -149,6 +158,11 @@ export const setLocale = (locale: Locale) => {
 export const setThemePreference = (themePreference: ThemePreference) => {
   writePreference(KEYS.themePreference, themePreference)
   useSettings.setState({ themePreference })
+}
+
+export const setCopyFormat = (copyFormat: CopyFormat) => {
+  writePreference(KEYS.copyFormat, copyFormat)
+  useSettings.setState({ copyFormat })
 }
 
 export const setChatFontSize = (chatFontSize: number | null) => {

@@ -344,8 +344,163 @@
   word-break: break-all;
 }
 
+.markdown-block-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.markdown-block-button {
+  gap: 4px;
+}
+
+.markdown-table-block {
+  min-width: 0;
+  margin: 16px 0;
+}
+
+.markdown-table-block .markdown-table-wrapper {
+  margin-top: 8px;
+}
+
 .markdown-table-wrapper {
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.markdown-block-preview.markdown-block-preview {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  padding:
+    calc(12px + var(--app-safe-top))
+    calc(16px + var(--app-safe-right))
+    calc(12px + var(--app-safe-bottom))
+    calc(16px + var(--app-safe-left));
+  overflow: hidden;
+  border-radius: 0;
+  background: var(--dsw-alias-bg-base);
+}
+
+.markdown-block-preview-main.markdown-block-preview-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  color: var(--dsw-alias-label-primary);
+}
+
+.markdown-table-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.markdown-table-preview table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  max-width: none;
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-markdown-table);
+}
+
+.markdown-table-preview th,
+.markdown-table-preview td {
+  box-sizing: border-box;
+  min-width: 120px;
+  max-width: min(70vw, 520px);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.markdown-table-preview th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom-color: var(--dsw-alias-border-l3);
+  background: var(--dsw-alias-bg-base);
+  font: var(--dsw-font-markdown-table-head);
+}
+
+.markdown-table-preview strong {
+  font-weight: 600;
+}
+
+.markdown-table-preview a {
+  color: var(--dsw-alias-brand-text);
+  text-decoration: none;
+}
+
+.markdown-table-preview code {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 5px;
+  border-radius: 6px;
+  font-family: var(--ds-font-family-code);
+  font-size: 0.875em;
+  background: var(--dsw-alias-markdown-inline-code);
+}
+
+.markdown-math-block {
+  min-width: 0;
+  margin: 16px 0;
+}
+
+.markdown-math-block > .ds-markdown-math {
+  margin: 8px 0 0;
+}
+
+.markdown-math-fallback {
+  margin: 8px 0 0;
+  font-family: var(--ds-font-family-code);
+  overflow-wrap: anywhere;
+}
+
+.markdown-math-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  text-align: center;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.markdown-math-preview .markdown-math-preview-formula {
+  display: inline-block;
+  box-sizing: border-box;
+  min-width: max-content;
+  margin: 0;
+  padding: clamp(24px, 8vh, 72px) 24px;
+  text-align: center;
+}
+
+.markdown-math-preview .markdown-math-preview-formula .katex {
+  font-size: 1.4em;
+}
+
+.markdown-math-source {
+  box-sizing: border-box;
+  min-width: 100%;
+  margin: 0;
+  padding: 24px;
+  text-align: start;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-markdown-code-block);
 }
 
 .md-code-block-switch {
