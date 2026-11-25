@@ -5,6 +5,7 @@ import { getAttachmentConnection } from './attachments.js'
 import { addDraftFiles, getDraft, setDraftText } from './chat/drafts.js'
 import { newChat, useChatStore } from './chat/store.js'
 import { useCustomProvider } from './customProvider.js'
+import { initializeOfficialAccount, useOfficialAccount } from './officialAccount.js'
 import {
   describeIntakeError,
   mergeDraftText,
@@ -92,7 +93,11 @@ const addSharedFiles = async (files: SharedIntakeFile[]) => {
     showToast({ key: 'customProviderTextOnly' })
     return
   }
-  const connection = getAttachmentConnection()
+  let connection = getAttachmentConnection()
+  if (!connection && useOfficialAccount.getState().active) {
+    await initializeOfficialAccount()
+    connection = getAttachmentConnection()
+  }
   const error = addDraftFiles(null, loaded, connection)
   if (error) {
     showToast(error)
