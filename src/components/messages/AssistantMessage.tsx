@@ -1,4 +1,4 @@
-import { ActionButton, IconRefreshOutline16, IconShareOutline16, IconWarningOutline16, IconButton, Button } from "../base/index.js"
+import { ActionButton, IconRefreshOutline16, IconShareOutline16, IconWarningOutline16, IconButton, Button, Menu } from "../base/index.js"
 import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo } from 'react'
@@ -21,6 +21,7 @@ import { CopyButton } from './CopyButton.js'
 import { ReplyArea } from './ReplyArea.js'
 import { useReplyView } from './useReplyView.js'
 import { showToast } from '../base/toastState.js'
+import { openExportDialog } from './exportDialogState.js'
 import {
   BranchSwitcher,
   type MessageVersions,
@@ -152,19 +153,59 @@ export const AssistantMessage = memo(function AssistantMessage({
               <ReadAloudButton messageId={message.id} text={responseText} />
             ) : null}
             {responseText && !refused ? (
-              <IconButton
-                icon={<IconShareOutline16 />}
-                tooltip={t('share')}
-                tooltipPlacement="bottom"
-                disabled={busy}
-                onClick={async () => {
-                  try {
-                    await shareText(t('appName'), responseText)
-                  } catch {
-                    showToast({ key: 'shareFailed' })
-                  }
-                }}
-              />
+              <Menu
+                options={[
+                  {
+                    key: 'text',
+                    label: t('exportMenuText'),
+                    onSelect: async () => {
+                      try {
+                        await shareText(t('appName'), responseText)
+                      } catch {
+                        showToast({ key: 'shareFailed' })
+                      }
+                    },
+                  },
+                  {
+                    key: 'markdown',
+                    label: t('exportMenuMarkdown'),
+                    onSelect: () =>
+                      openExportDialog(
+                        { kind: 'message', sessionId, messageId: message.id },
+                        'markdown'
+                      ),
+                  },
+                  {
+                    key: 'image',
+                    label: t('exportMenuImage'),
+                    onSelect: () =>
+                      openExportDialog(
+                        { kind: 'message', sessionId, messageId: message.id },
+                        'image'
+                      ),
+                  },
+                  {
+                    key: 'print',
+                    label: t('exportMenuPrint'),
+                    onSelect: () =>
+                      openExportDialog(
+                        { kind: 'message', sessionId, messageId: message.id },
+                        'print'
+                      ),
+                  },
+                ]}
+              >
+                {({ open, toggle }) => (
+                  <IconButton
+                    icon={<IconShareOutline16 />}
+                    tooltip={t('share')}
+                    tooltipPlacement="bottom"
+                    disabled={busy}
+                    aria-expanded={open}
+                    onClick={toggle}
+                  />
+                )}
+              </Menu>
             ) : null}
             <IconButton
               icon={<IconRefreshOutline16 />}

@@ -5,7 +5,7 @@ type TurnSelectionState = {
   selectedUserIds: string[]
 }
 
-/** 当前会话的按轮多选删除状态 */
+/** 当前会话的按轮多选状态 */
 export const useTurnSelection = create<TurnSelectionState>(() => ({
   sessionId: null,
   selectedUserIds: [],

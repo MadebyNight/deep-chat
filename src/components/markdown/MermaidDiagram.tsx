@@ -2,6 +2,7 @@ import { useTranslate } from '../../i18n/index.js'
 import { memo, useEffect, useRef, useState } from 'react'
 import { useTheme } from '../../app/theme.js'
 import { renderMermaid } from '../../services/markdown/mermaid.js'
+import { useMarkdownTheme } from './MarkdownThemeContext.js'
 
 /** 流式绘制最新内容、保留上次有效图；回答结束后才显示渲染错误。 */
 export const MermaidDiagram = memo(function MermaidDiagram({
@@ -12,8 +13,13 @@ export const MermaidDiagram = memo(function MermaidDiagram({
   loading: boolean
 }) {
   const t = useTranslate()
-  const dark = useTheme() === 'dark'
-  const [result, setResult] = useState({ svg: '', failedCode: null as string | null })
+  const dark = useMarkdownTheme(useTheme()) === 'dark'
+  const [result, setResult] = useState({
+    svg: '',
+    renderedCode: '',
+    renderedDark: false,
+    failedCode: null as string | null,
+  })
   const latestCodeRef = useRef(code)
   latestCodeRef.current = code
   // 流式阶段从 ref 取最新文本，避免每个片段都取消绘制；结束后立即绘制完整内容。
@@ -32,7 +38,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({
       const svg = await renderMermaid(input, dark, () => cancelled)
       if (svg && !cancelled) {
         displayedCode = input
-        setResult({ svg, failedCode: null })
+        setResult({ svg, renderedCode: input, renderedDark: dark, failedCode: null })
       }
     }
 
@@ -58,7 +64,12 @@ export const MermaidDiagram = memo(function MermaidDiagram({
                 }
               }
             } else {
-              setResult({ svg: '', failedCode: input })
+              setResult({
+                svg: '',
+                renderedCode: '',
+                renderedDark: dark,
+                failedCode: input,
+              })
             }
           }
         }
@@ -77,8 +88,9 @@ export const MermaidDiagram = memo(function MermaidDiagram({
   }, [dark, loading, finalCode])
 
   if (!code.trim() || !result.svg) {
+    const state = !code.trim() ? 'empty' : !loading && result.failedCode === code ? 'error' : 'loading'
     return (
-      <div className="md-mermaid-status" role="status">
+      <div className="md-mermaid-status" role="status" data-mermaid-state={state}>
         {!loading && !code.trim()
           ? t('mermaidEmpty')
           : !loading && result.failedCode === code
@@ -88,5 +100,13 @@ export const MermaidDiagram = memo(function MermaidDiagram({
     )
   }
 
-  return <div className="md-mermaid-diagram" dangerouslySetInnerHTML={{ __html: result.svg }} />
+  return (
+    <div
+      className="md-mermaid-diagram"
+      data-mermaid-state={
+        result.renderedCode === code && result.renderedDark === dark ? 'ready' : 'loading'
+      }
+      dangerouslySetInnerHTML={{ __html: result.svg }}
+    />
+  )
 })

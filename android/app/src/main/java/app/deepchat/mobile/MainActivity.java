@@ -77,6 +77,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(OfficialBrowserPlugin.class);
         registerPlugin(DeepSeekAccountPlugin.class);
         registerPlugin(HistoryExportDownloadPlugin.class);
+        registerPlugin(NativeExportPlugin.class);
         registerPlugin(UpdateInstallerPlugin.class);
         super.onCreate(savedInstanceState);
         setupEdgeToEdge();

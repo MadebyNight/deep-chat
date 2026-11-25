@@ -1,10 +1,20 @@
-import { ActionButton, Input, IconEditOutline16, IconEllipsisOutline16, IconTrashOutline16, IconButton, Menu } from "../base/index.js"
+import {
+  ActionButton,
+  Input,
+  IconEditOutline16,
+  IconEllipsisOutline16,
+  IconShareOutline16,
+  IconTrashOutline16,
+  IconButton,
+  Menu,
+} from "../base/index.js"
 import clsx from 'clsx'
 import { memo, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { renameSession, selectSession, toggleSessionPinned } from '../../services/chat/store.js'
 import type { SessionSummary } from '../../services/chat/types.js'
 import { closeMobileSider } from './mobileSiderState.js'
+import { openExportDialog } from '../messages/exportDialogState.js'
 import styles from './SessionItem.module.css'
 
 export const SessionItem = memo(function SessionItem({
@@ -84,6 +94,13 @@ export const SessionItem = memo(function SessionItem({
                 key: 'pin',
                 label: t(session.pinned ? 'unpinChat' : 'pinChat'),
                 onSelect: () => void toggleSessionPinned(session.id),
+              },
+              {
+                key: 'export',
+                label: t('exportSessionMenu'),
+                icon: <IconShareOutline16 />,
+                onSelect: () =>
+                  openExportDialog({ kind: 'session', sessionId: session.id }, 'markdown'),
               },
               ...(onStartSelection
                 ? [{ key: 'select', label: t('selectChats'), onSelect: onStartSelection }]

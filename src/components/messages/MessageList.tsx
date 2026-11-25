@@ -312,7 +312,7 @@ export const MessageList = ({
                         type="button"
                         className={styles.turnSelectOverlay}
                         aria-pressed={selected}
-                        aria-label={t('deleteTurn')}
+                        aria-label={t('selectTurn')}
                         onClick={() => {
                           triggerHaptic('light')
                           toggleTurnSelection(session.id, turn.userId)
