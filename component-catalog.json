@@ -89,7 +89,10 @@
       "IconDownloadOutline16",
       "IconEditOutline16",
       "IconEllipsisOutline16",
+      "IconFolderOutline16",
+      "IconFolderPlusOutline16",
       "IconFollowsystemOutline16",
+      "IconForkOutline16",
       "IconGlobeLanguageOutline14",
       "IconLightOutline16",
       "IconLinkOutline14",
@@ -443,6 +446,13 @@
     "group": "sessions",
     "components": [
       "CollapsedSider"
+    ]
+  },
+  {
+    "file": "src/components/sider/FolderDialog.tsx",
+    "group": "sessions",
+    "components": [
+      "FolderDialog"
     ]
   },
   {

@@ -25,8 +25,79 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.header > span {
+  margin-left: auto;
+}
+
 .withCollapsedSider {
   margin-left: 113px;
+}
+
+.handoffBanner,
+.longContextBanner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  box-sizing: border-box;
+  width: calc(var(--message-list-max-width) - 64px);
+  max-width: calc(100% - 24px);
+  margin: 0 auto 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
+  border-radius: 14px;
+  background-color: var(--dsw-alias-bg-layer-3);
+}
+
+.longContextBanner {
+  background-color: var(--dsw-alias-interactive-bg-hover);
+  justify-content: center;
+}
+
+.bannerText {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+
+  strong {
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 600;
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.bannerAction {
+  flex-shrink: 0;
+  padding: 4px 2px;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-brand-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.handoffSummary {
+  flex-basis: 100%;
+  max-height: 220px;
+  margin: 4px 0 0;
+  padding: 10px 0 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--dsw-alias-label-primary);
+}
+
+.summaryStatus {
+  margin: 4px 0;
+  line-height: 1.6;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .footer {
@@ -67,6 +138,14 @@
 }
 
 @media not all and (min-width: 768px) {
+  .handoffBanner,
+  .longContextBanner {
+    width: calc(100% - 16px);
+    max-width: none;
+    margin: 4px auto 8px;
+    padding: 9px 10px;
+  }
+
   .inputContainer {
     position: relative;
     bottom: auto;

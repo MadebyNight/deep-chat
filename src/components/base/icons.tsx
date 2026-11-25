@@ -115,6 +115,49 @@ export const IconEditOutline16 = () => (
   </svg>
 )
 
+export const IconForkOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="4" cy="3" r="1.6" stroke="currentColor" strokeWidth="1.2" />
+    <circle cx="4" cy="13" r="1.6" stroke="currentColor" strokeWidth="1.2" />
+    <circle cx="12" cy="5" r="1.6" stroke="currentColor" strokeWidth="1.2" />
+    <path
+      d="M4 4.6v6.8M4 7.5c0-1.4 1-2.5 2.5-2.5H8c2 0 2.4-1.2 2.4-1.2"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
+export const IconFolderOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M1.75 4.1c0-1.02.83-1.85 1.85-1.85h2.1c.5 0 .98.2 1.33.56l.7.7h4.67c1.02 0 1.85.83 1.85 1.85v5.5c0 1.02-.83 1.85-1.85 1.85H3.6a1.85 1.85 0 0 1-1.85-1.85V4.1Z"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinejoin="round"
+    />
+    <path d="M1.9 5.15h12.2" stroke="currentColor" strokeWidth="1.2" />
+  </svg>
+)
+
+export const IconFolderPlusOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M1.75 4.1c0-1.02.83-1.85 1.85-1.85h2.1c.5 0 .98.2 1.33.56l.7.7h4.67c1.02 0 1.85.83 1.85 1.85v5.5c0 1.02-.83 1.85-1.85 1.85H3.6a1.85 1.85 0 0 1-1.85-1.85V4.1Z"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M8 6.3v4.1M5.95 8.35h4.1"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
 export const IconEllipsisOutline16 = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path

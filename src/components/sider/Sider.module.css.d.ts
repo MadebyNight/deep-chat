@@ -8,9 +8,13 @@ declare const styles: {
   readonly "newChat": string;
   readonly "newChatIcon": string;
   readonly "listWrap": string;
+  readonly "listWrapWithFilters": string;
   readonly "list": string;
   readonly "section": string;
   readonly "sectionHeader": string;
+  readonly "folderBar": string;
+  readonly "folderChip": string;
+  readonly "manageFolders": string;
   readonly "bottom": string;
   readonly "settings": string;
   readonly "settingsIcon": string;
@@ -21,6 +25,7 @@ declare const styles: {
   readonly "drawerMask": string;
   readonly "mobile": string;
   readonly "bottomMobile": string;
+  readonly "selectionActions": string;
   readonly "accountRow": string;
   readonly "accountAvatar": string;
   readonly "account": string;
