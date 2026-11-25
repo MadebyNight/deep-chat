@@ -15,7 +15,12 @@ import {
   type NativeIntake,
   type SharedIntakeFile,
 } from './intakeProtocol.js'
-import { consumePendingIntake, releaseShareIntake, subscribeShareIntake } from './native.js'
+import {
+  consumePendingIntake,
+  openCameraIntake,
+  releaseShareIntake,
+  subscribeShareIntake,
+} from './native.js'
 
 export type ComposeAction = 'focus' | 'voice' | 'camera'
 
@@ -59,6 +64,14 @@ export const subscribeComposeAction = (listener: (action: ComposeAction) => void
   return () => {
     composeListeners.delete(listener)
   }
+}
+
+export const hasNativeCamera = Capacitor.getPlatform() === 'android'
+
+export const captureSharedPhoto = () => {
+  if (!hasNativeCamera) {return false}
+  void openCameraIntake().catch(() => showToast({ key: 'shareIntakeCameraFailed' }))
+  return true
 }
 
 const loadSharedFile = async (file: SharedIntakeFile) => {

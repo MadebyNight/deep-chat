@@ -206,6 +206,7 @@ export const zh = {
   shareIntakeTotalTooLarge: '分享内容总大小超过限制（{size}MB）',
   shareIntakeTextTooLong: '分享文本过长（最多 {size}KB）',
   shareIntakeReadFailed: '无法读取分享内容，请重试',
+  shareIntakeCameraFailed: '无法打开相机，请重试',
   shareIntakeBusy: '当前操作尚未完成，请稍后重试',
   dragFileToUpload: '文件拖动到此处即可上传',
   dragFileDesc: '最多 {count} 个，每个 {size}MB',

@@ -32,7 +32,12 @@ import { useVoiceInput } from './useVoiceInput.js'
 import { VoiceButton } from './VoiceButton.js'
 import { Spectrum } from './Spectrum.js'
 import { useTranslate } from '../../i18n/index.js'
-import { subscribeComposeAction } from '../../services/systemIntake.js'
+import {
+  captureSharedPhoto,
+  hasNativeCamera,
+  subscribeComposeAction,
+} from '../../services/systemIntake.js'
+import { initializeOfficialAccount, useOfficialAccount } from '../../services/officialAccount.js'
 import styles from './ChatInput.module.css'
 
 /** 输入框：自适应高度的文本框 + 文件 + 深度思考与智能搜索开关 + 语音输入 + 发送 / 停止 */
@@ -181,7 +186,7 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
     () =>
       subscribeComposeAction((action) => {
         if (action === 'camera') {
-          if (!isMobile) {
+          if (!isMobile && !hasNativeCamera) {
             textareaRef.current?.focus({ preventScroll: true })
             return
           }
@@ -189,9 +194,17 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
             showToast({ key: 'customProviderTextOnly' })
             return
           }
-          if (ensureChatConnection()) {
-            cameraInputRef.current?.click()
-          }
+          void (async () => {
+            if (useOfficialAccount.getState().active) {
+              await initializeOfficialAccount()
+            }
+            if (!ensureChatConnection()) {
+              return
+            }
+            if (!captureSharedPhoto() && isMobile) {
+              cameraInputRef.current?.click()
+            }
+          })()
           return
         }
         if (action === 'voice' && voiceAvailable && voiceStatus === 'idle' && !importingHistory) {

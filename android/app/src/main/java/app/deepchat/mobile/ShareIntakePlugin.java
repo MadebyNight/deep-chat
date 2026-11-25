@@ -1,18 +1,23 @@
 package app.deepchat.mobile;
 
+import android.app.Activity;
 import android.content.ClipData;
-import android.content.ContentResolver;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
+import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+
+import androidx.activity.result.ActivityResult;
+import androidx.core.content.FileProvider;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.io.File;
@@ -39,6 +44,8 @@ import java.util.concurrent.RejectedExecutionException;
 public class ShareIntakePlugin extends Plugin {
     private static final String EVENT_NAME = "intake";
     private static final String CACHE_DIRECTORY = "shared_intake";
+    private static final String CAMERA_FILE_NAME = "photo.jpg";
+    private static final String CAMERA_MIME_TYPE = "image/jpeg";
     private static final int MAX_PENDING_INTAKES = 4;
 
     private static final String ERROR_TOO_MANY_FILES = "TOO_MANY_FILES";
@@ -52,6 +59,10 @@ public class ShareIntakePlugin extends Plugin {
     private final ArrayDeque<JSObject> pending = new ArrayDeque<>();
     private final Map<String, File> intakeDirectories = new HashMap<>();
     private final ExecutorService intakeExecutor = Executors.newSingleThreadExecutor();
+    private boolean cameraPending;
+    private String cameraIntakeId;
+    private File cameraDirectory;
+    private File cameraFile;
 
     private static final class IntakeFailure extends Exception {
         final String code;
@@ -121,6 +132,105 @@ public class ShareIntakePlugin extends Plugin {
         }
         call.resolve();
         submit(() -> deleteDirectory(directory));
+    }
+
+    @PluginMethod
+    public void openCamera(PluginCall call) {
+        if (cameraPending) {
+            call.reject("Camera is already open");
+            return;
+        }
+        String id = "intake-" + UUID.randomUUID().toString();
+        File directory = null;
+        try {
+            File root = intakeRoot();
+            directory = new File(root, UUID.randomUUID().toString());
+            if (!directory.mkdirs() || !ShareIntakePolicy.isWithinDirectory(root, directory)) {
+                throw new IntakeFailure(ERROR_READ_FAILED);
+            }
+            File output = new File(directory, CAMERA_FILE_NAME);
+            if (!ShareIntakePolicy.isWithinDirectory(directory, output)) {
+                throw new IntakeFailure(ERROR_UNSUPPORTED);
+            }
+            Uri outputUri = FileProvider.getUriForFile(
+                    getContext(),
+                    getContext().getPackageName() + ".fileprovider",
+                    output
+            );
+            Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, outputUri);
+            intent.setClipData(ClipData.newRawUri("", outputUri));
+            intent.addFlags(
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                            | Intent.FLAG_GRANT_READ_URI_PERMISSION
+            );
+            cameraPending = true;
+            cameraIntakeId = id;
+            cameraDirectory = directory;
+            cameraFile = output;
+            startActivityForResult(call, intent, "cameraResult");
+        } catch (Exception error) {
+            resetCamera();
+            deleteDirectory(directory);
+            call.reject("Unable to open camera");
+        }
+    }
+
+    @ActivityCallback
+    private void cameraResult(PluginCall call, ActivityResult result) {
+        String id = cameraIntakeId;
+        File directory = cameraDirectory;
+        File file = cameraFile;
+        resetCamera();
+        if (call == null) {
+            deleteDirectory(directory);
+            return;
+        }
+        if (result.getResultCode() != Activity.RESULT_OK) {
+            deleteDirectory(directory);
+            call.resolve();
+            return;
+        }
+        if (id == null || file == null || !file.isFile() || file.length() <= 0) {
+            deleteDirectory(directory);
+            publish(failurePayload(id == null ? "intake-" + UUID.randomUUID() : id, ERROR_READ_FAILED));
+            call.resolve();
+            return;
+        }
+        long size = file.length();
+        if (ShareIntakePolicy.exceedsFileSize(size)) {
+            deleteDirectory(directory);
+            publish(failurePayload(id, ERROR_FILE_TOO_LARGE));
+            call.resolve();
+            return;
+        }
+        JSObject payload = basePayload(id, "share");
+        payload.put("text", "");
+        JSArray files = new JSArray();
+        JSObject entry = new JSObject();
+        entry.put("uri", Uri.fromFile(file).toString());
+        entry.put("name", CAMERA_FILE_NAME);
+        entry.put("mimeType", CAMERA_MIME_TYPE);
+        entry.put("size", size);
+        files.put(entry);
+        payload.put("files", files);
+        synchronized (lock) {
+            intakeDirectories.put(id, directory);
+        }
+        if (!publish(payload)) {
+            synchronized (lock) {
+                intakeDirectories.remove(id);
+            }
+            deleteDirectory(directory);
+        }
+        call.resolve();
+    }
+
+    private void resetCamera() {
+        cameraPending = false;
+        cameraIntakeId = null;
+        cameraDirectory = null;
+        cameraFile = null;
     }
 
     private void submit(Runnable task) {

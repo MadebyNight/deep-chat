@@ -17,6 +17,7 @@ const officialBrowser = registerPlugin<{ open(options: { url: string }): Promise
 const shareIntake = registerPlugin<{
   consumePendingIntake(): Promise<{ intake?: NativeIntake | null }>
   releaseIntake(options: { id: string }): Promise<void>
+  openCamera(): Promise<void>
   addListener(
     eventName: 'intake',
     listener: (intake: NativeIntake) => void
@@ -29,6 +30,8 @@ export const subscribeShareIntake = (listener: (intake: NativeIntake) => void) =
   shareIntake.addListener('intake', listener)
 
 export const releaseShareIntake = (id: string) => shareIntake.releaseIntake({ id })
+
+export const openCameraIntake = () => shareIntake.openCamera()
 
 export const openOfficialPage = async (url: string) => {
   if (Capacitor.getPlatform() === 'android') {

@@ -214,6 +214,7 @@ export const en = {
   shareIntakeTotalTooLarge: 'Shared content exceeds the total limit ({size} MB).',
   shareIntakeTextTooLong: 'Shared text is too long (maximum {size} KB).',
   shareIntakeReadFailed: 'Could not read the shared content. Please try again.',
+  shareIntakeCameraFailed: 'Could not open the camera. Please try again.',
   shareIntakeBusy: 'Another operation is still running. Please try again shortly.',
   dragFileToUpload: 'Drop files here to upload',
   dragFileDesc: 'Up to {count} files, {size} MB each',
