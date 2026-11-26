@@ -20,7 +20,9 @@ export const closeSettings = () => useSettingsDialog.setState({ open: false })
 export const ensureChatConnection = () => {
   const { enabled, provider } = useCustomProvider.getState()
   if (enabled) {
-    if (provider) return true
+    if (provider) {
+      return true
+    }
     openSettings('provider')
     return false
   }
