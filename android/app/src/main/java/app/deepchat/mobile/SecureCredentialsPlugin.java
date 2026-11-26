@@ -38,6 +38,12 @@ public class SecureCredentialsPlugin extends Plugin {
         if ("webdav".equals(slot)) {
             return context.getSharedPreferences("secure_webdav", Context.MODE_PRIVATE);
         }
+        if ("mcp".equals(slot)) {
+            return context.getSharedPreferences("secure_mcp", Context.MODE_PRIVATE);
+        }
+        if ("externalSearch".equals(slot)) {
+            return context.getSharedPreferences("secure_external_search", Context.MODE_PRIVATE);
+        }
         throw new IllegalArgumentException("Unknown credential slot");
     }
 

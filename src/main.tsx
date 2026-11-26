@@ -5,6 +5,7 @@ import { setupTheme } from './app/theme.js'
 import { ensureKatex } from './services/markdown/katex.js'
 import { initializeCredentials } from './services/settings.js'
 import { initializeCustomProvider } from './services/customProvider.js'
+import { initializeExternalTools } from './services/tools/config.js'
 import { initializeDrafts } from './services/chat/drafts.js'
 import { initializeNative } from './app/nativeLifecycle.js'
 import { showToast } from './components/base/toastState.js'
@@ -66,6 +67,7 @@ const start = async () => {
   const credentials = await withStorageDeadline((deadline) => Promise.allSettled([
     initializeCredentials(deadline),
     initializeCustomProvider(deadline),
+    initializeExternalTools(deadline),
   ]))
   let storageError = credentials.some((result) => result.status === 'rejected')
   startup.startupStage = 'DRAFT_STORAGE'

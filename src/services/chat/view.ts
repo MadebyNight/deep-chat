@@ -66,7 +66,32 @@ export type ThinkingStep = { type: 'thinking'; key: string; blocks: ThinkingPart
 /** 工具调用前输出的说明文字 */
 export type PreambleStep = { type: 'text'; key: string; markdown: string }
 
-export type Step = SearchStep | OpenStep | FindStep | ReadLinkStep | ThinkingStep | PreambleStep
+export type ClientToolStatus =
+  | 'wip'
+  | 'awaiting_confirmation'
+  | 'done'
+  | 'failed'
+  | 'denied'
+  | 'cancelled'
+
+export type ClientToolStep = {
+  type: 'client_tool'
+  key: string
+  name: string
+  serverName?: string
+  input: Record<string, unknown>
+  status: ClientToolStatus
+  result?: string
+}
+
+export type Step =
+  | SearchStep
+  | OpenStep
+  | FindStep
+  | ReadLinkStep
+  | ThinkingStep
+  | PreambleStep
+  | ClientToolStep
 
 export type ReplyView = {
   steps: Step[]
@@ -175,9 +200,12 @@ const joinTextBlocks = (
 
 export const buildReplyView = (reply: AssistantMessage, streaming: boolean): ReplyView => {
   const results = new Map<string, WebSearchToolResultBlock | WebFetchToolResultBlock>()
+  const clientResults = new Map<string, { content: string; isError: boolean; denied?: boolean }>()
   for (const block of reply.blocks) {
     if (block.type === 'web_search_tool_result' || block.type === 'web_fetch_tool_result') {
       results.set(block.tool_use_id, block)
+    } else if (block.type === 'client_tool_result') {
+      clientResults.set(block.tool_use_id, block)
     }
   }
 
@@ -226,6 +254,37 @@ export const buildReplyView = (reply: AssistantMessage, streaming: boolean): Rep
   reply.blocks.forEach((block, index) => {
     // 模板统一由 describeReply 展示，不能混入模型正文或工具步骤前的说明文字。
     if (block.type === 'text' && block.isTemplate) {
+      return
+    }
+    if (block.type === 'client_tool_result') {
+      return
+    }
+    if (block.type === 'client_tool_use') {
+      mergedThinking = null
+      flushPreamble()
+      const result = clientResults.get(block.id)
+      const status: ClientToolStatus = result
+        ? result.denied
+          ? 'denied'
+          : result.isError
+            ? 'failed'
+            : 'done'
+        : block.status === 'awaiting_confirmation'
+          ? 'awaiting_confirmation'
+          : streaming && block.status !== 'complete'
+            ? 'wip'
+            : reply.status === 'stopped'
+              ? 'cancelled'
+              : 'failed'
+      steps.push({
+        type: 'client_tool',
+        key: block.id,
+        name: block.name,
+        ...(block.serverName ? { serverName: block.serverName } : {}),
+        input: block.input,
+        status,
+        ...(result ? { result: result.content } : {}),
+      })
       return
     }
     if (block.type !== 'thinking') {
@@ -395,6 +454,9 @@ export const getAreaTitle = (
   }
   if (last?.type === 'read_link' && last.links.some((link) => link.status === 'wip')) {
     return translate('readingLink')
+  }
+  if (last?.type === 'client_tool' && last.status === 'wip') {
+    return translate('mcpToolRunning')
   }
   return translate('messageThinking')
 }

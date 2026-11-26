@@ -37,6 +37,7 @@ import { showToast } from '../base/toastState.js'
 import { ConnectionSetting } from './ConnectionDialog.js'
 import { CustomProviderSetting } from './CustomProviderSetting.js'
 import { MemoryManagerModal } from './MemoryManager.js'
+import { ExternalToolsSetting } from './ExternalToolsSetting.js'
 import { GenerationSettingsItem } from './GenerationSettings.js'
 import { UsageChart } from './UsageChart.js'
 import { VersionSetting } from './UpdateDialog.js'
@@ -160,9 +161,14 @@ const SettingsContent = () => {
         </section>
       ),
       provider: (
-        <section className={styles.settingsGroup}>
-          <CustomProviderSetting />
-        </section>
+        <>
+          <section className={styles.settingsGroup}>
+            <CustomProviderSetting />
+          </section>
+          <section className={styles.settingsGroup}>
+            <ExternalToolsSetting />
+          </section>
+        </>
       ),
       font: <FontSizeSetting />,
       personalization: (
@@ -244,7 +250,12 @@ const SettingsContent = () => {
               <VersionSetting />
             </>
           ) : section === 'provider' ? (
-            <CustomProviderSetting />
+            <>
+              <CustomProviderSetting />
+              <div className={styles.settingsGroup}>
+                <ExternalToolsSetting />
+              </div>
+            </>
           ) : (
             <>
               <ConnectionSetting />

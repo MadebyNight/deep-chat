@@ -210,15 +210,63 @@ export async function* streamMessage(
   yield* readMessageStream(response.body, signal, reportUsage)
 }
 
-export type CustomMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+export type CustomToolCall = {
+  id: string
+  type: 'function'
+  function: { name: string; arguments: string }
+}
+
+export type CustomToolDefinition = {
+  type: 'function'
+  function: {
+    name: string
+    description?: string
+    parameters: Record<string, unknown>
+  }
+}
+
+export type CustomMessage =
+  | { role: 'system' | 'user'; content: string }
+  | { role: 'assistant'; content: string | null; tool_calls?: CustomToolCall[] }
+  | { role: 'tool'; tool_call_id: string; content: string }
+
+const MAX_TOOL_CALLS = 32
+const MAX_TOOL_ID_LENGTH = 256
+const MAX_TOOL_NAME_LENGTH = 128
+const MAX_TOOL_ARGUMENT_BYTES = 64 * 1024
+const MAX_TOTAL_TOOL_ARGUMENT_BYTES = 256 * 1024
+
+type CustomToolState = {
+  blockIndex: number | null
+  id: string
+  name: string
+  arguments: string
+  argumentBytes: number
+  sent: number
+}
+
 type CustomChunk = {
   model?: string
   error?: unknown
   choices?: {
-    delta?: { content?: unknown; reasoning_content?: unknown; reasoning?: unknown }
+    delta?: {
+      content?: unknown
+      reasoning_content?: unknown
+      reasoning?: unknown
+      tool_calls?: {
+        index?: unknown
+        id?: unknown
+        type?: unknown
+        function?: { name?: unknown; arguments?: unknown }
+      }[]
+    }
     finish_reason?: string | null
   }[]
-  usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } }
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    prompt_tokens_details?: { cached_tokens?: number }
+  }
 }
 
 function customUsage(value: CustomChunk['usage']): MessageUsage | undefined {
@@ -232,11 +280,15 @@ function customUsage(value: CustomChunk['usage']): MessageUsage | undefined {
 
 type RejectionError = { param?: string | null; code?: string | null; message?: string }
 
-function rejectsParameter(target: 'stream_options' | 'reasoning_effort', rejection?: RejectionError) {
+function rejectsParameter(
+  target: 'stream_options' | 'reasoning_effort' | 'tools',
+  rejection?: RejectionError
+) {
   const { param, code, message } = rejection ?? {}
   const matchesTarget =
     param === target ||
     (target === 'stream_options' && param === 'stream_options.include_usage') ||
+    (target === 'tools' && param === 'tool_choice') ||
     (typeof message === 'string' && message.toLowerCase().includes(target))
   if (!matchesTarget) {
     return false
@@ -256,13 +308,21 @@ export async function* streamCustomMessage(
   messages: CustomMessage[],
   signal: AbortSignal,
   rates?: TokenRates,
-  options?: { thinking?: boolean; system?: string; generation?: GenerationParams }
+  options?: {
+    thinking?: boolean
+    system?: string
+    generation?: GenerationParams
+    tools?: CustomToolDefinition[]
+    onToolsUnsupported?: () => void
+  }
 ): AsyncGenerator<MessageStreamEvent> {
   signal.throwIfAborted()
   const failure = { key: 'customProviderRequestFailed' } as const
   let report: ReturnType<typeof recordChatRequest>
   let includeUsage = true
   let includeReasoning = options?.thinking !== undefined
+  let includeTools = !!options?.tools?.length
+  let notifiedToolsUnsupported = false
   const reasoningEffort = options?.thinking ? 'high' : 'none'
   const system = options?.system?.trim()
   const requestMessages: CustomMessage[] = system
@@ -280,6 +340,9 @@ export async function* streamCustomMessage(
         ...(includeUsage ? { stream_options: { include_usage: true } } : {}),
         ...(includeReasoning ? { reasoning_effort: reasoningEffort } : {}),
         ...(options?.generation ? customGenerationFields(options.generation) : {}),
+        ...(includeTools && options?.tools?.length
+          ? { tools: options.tools, tool_choice: 'auto' }
+          : {}),
       }),
       signal,
     })
@@ -295,6 +358,12 @@ export async function* streamCustomMessage(
         includeUsage = false
       } else if (includeReasoning && rejectsParameter('reasoning_effort', rejection?.error)) {
         includeReasoning = false
+      } else if (includeTools && rejectsParameter('tools', rejection?.error)) {
+        includeTools = false
+        if (!notifiedToolsUnsupported) {
+          notifiedToolsUnsupported = true
+          options?.onToolsUnsupported?.()
+        }
       } else {
         break
       }
@@ -316,10 +385,60 @@ export async function* streamCustomMessage(
   let started = false
   let blockIndex = 0
   let openBlock: 'thinking' | 'text' | null = null
+  let openContentIndex: number | null = null
+  const openStops: number[] = []
+  const toolBlocks = new Map<number, CustomToolState>()
+  let totalToolArgumentBytes = 0
   let finished = false
   let stop: StopReason | undefined
   let usage: MessageUsage | undefined
   let matchingModel = true
+  function* closeOpenContent(): Generator<MessageStreamEvent> {
+    if (openContentIndex === null) {
+      return
+    }
+    yield { type: 'content_block_stop', index: openContentIndex }
+    const position = openStops.indexOf(openContentIndex)
+    if (position >= 0) {
+      openStops.splice(position, 1)
+    }
+    openContentIndex = null
+    openBlock = null
+  }
+  function* emitToolBlock(state: CustomToolState): Generator<MessageStreamEvent> {
+    if (
+      !state.id ||
+      state.id.length > MAX_TOOL_ID_LENGTH ||
+      !/^[A-Za-z0-9_.-]{1,128}$/.test(state.name)
+    ) {
+      throw new ApiError('protocol', failure)
+    }
+    if (state.blockIndex === null) {
+      yield* closeOpenContent()
+      state.blockIndex = blockIndex++
+      started = true
+      openStops.push(state.blockIndex)
+      yield {
+        type: 'content_block_start',
+        index: state.blockIndex,
+        content_block: {
+          type: 'tool_use',
+          id: state.id,
+          name: state.name,
+          input: {},
+        },
+      }
+    }
+    if (state.arguments.length > state.sent) {
+      const partial = state.arguments.slice(state.sent)
+      state.sent = state.arguments.length
+      yield {
+        type: 'content_block_delta',
+        index: state.blockIndex,
+        delta: { type: 'input_json_delta', partial_json: partial },
+      }
+    }
+  }
   try {
     for await (const { event, data } of readServerSentEvents(response.body, signal)) {
       signal.throwIfAborted()
@@ -346,32 +465,99 @@ export async function* streamCustomMessage(
             : ''
       if (reasoning) {
         if (openBlock === 'text') {
-          yield { type: 'content_block_stop', index: blockIndex++ }
-          openBlock = null
+          yield* closeOpenContent()
         }
         if (openBlock === null) {
           started = true
           openBlock = 'thinking'
+          openContentIndex = blockIndex++
+          openStops.push(openContentIndex)
           yield {
             type: 'content_block_start',
-            index: blockIndex,
+            index: openContentIndex,
             content_block: { type: 'thinking', thinking: '', signature: '' },
           }
         }
-        yield { type: 'content_block_delta', index: blockIndex, delta: { type: 'thinking_delta', thinking: reasoning } }
+        yield {
+          type: 'content_block_delta',
+          index: openContentIndex as number,
+          delta: { type: 'thinking_delta', thinking: reasoning },
+        }
       }
       const text = choice?.delta?.content
       if (typeof text === 'string' && text) {
         if (openBlock === 'thinking') {
-          yield { type: 'content_block_stop', index: blockIndex++ }
-          openBlock = null
+          yield* closeOpenContent()
         }
         if (openBlock === null) {
           started = true
           openBlock = 'text'
-          yield { type: 'content_block_start', index: blockIndex, content_block: { type: 'text', text: '' } }
+          openContentIndex = blockIndex++
+          openStops.push(openContentIndex)
+          yield {
+            type: 'content_block_start',
+            index: openContentIndex,
+            content_block: { type: 'text', text: '' },
+          }
         }
-        yield { type: 'content_block_delta', index: blockIndex, delta: { type: 'text_delta', text } }
+        yield {
+          type: 'content_block_delta',
+          index: openContentIndex as number,
+          delta: { type: 'text_delta', text },
+        }
+      }
+      const toolDeltas = choice?.delta?.tool_calls
+      if (Array.isArray(toolDeltas)) {
+        for (const delta of toolDeltas) {
+          const index =
+            typeof delta.index === 'number' && Number.isSafeInteger(delta.index) && delta.index >= 0
+              ? delta.index
+              : Math.max(0, toolBlocks.size - 1)
+          const id = typeof delta.id === 'string' && delta.id ? delta.id : undefined
+          const name =
+            typeof delta.function?.name === 'string' && delta.function.name
+              ? delta.function.name
+              : undefined
+          const args = typeof delta.function?.arguments === 'string' ? delta.function.arguments : ''
+          let state = toolBlocks.get(index)
+          if (!state) {
+            if (toolBlocks.size >= MAX_TOOL_CALLS) {
+              throw new ApiError('protocol', failure)
+            }
+            state = {
+              blockIndex: null,
+              id: '',
+              name: '',
+              arguments: '',
+              argumentBytes: 0,
+              sent: 0,
+            }
+            toolBlocks.set(index, state)
+          }
+          if (id && state.id && id !== state.id) {
+            throw new ApiError('protocol', failure)
+          }
+          state.id ||= id ?? ''
+          if (name) {
+            state.name += name
+            if (state.name.length > MAX_TOOL_NAME_LENGTH || !/^[A-Za-z0-9_.-]*$/.test(state.name)) {
+              throw new ApiError('protocol', failure)
+            }
+          }
+          const argumentBytes = new TextEncoder().encode(args).byteLength
+          state.argumentBytes += argumentBytes
+          totalToolArgumentBytes += argumentBytes
+          if (
+            state.argumentBytes > MAX_TOOL_ARGUMENT_BYTES ||
+            totalToolArgumentBytes > MAX_TOTAL_TOOL_ARGUMENT_BYTES
+          ) {
+            throw new ApiError('protocol', failure)
+          }
+          state.arguments += args
+          if (state.blockIndex !== null || (state.id && state.name && state.arguments.length > 0)) {
+            yield* emitToolBlock(state)
+          }
+        }
       }
       switch (choice?.finish_reason) {
         case 'length':
@@ -390,16 +576,39 @@ export async function* streamCustomMessage(
       }
     }
     signal.throwIfAborted()
+    const toolIds = new Set<string>()
+    for (const state of [...toolBlocks.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([, state]) => state)) {
+      if (toolIds.has(state.id)) {
+        throw new ApiError('protocol', failure)
+      }
+      toolIds.add(state.id)
+      if (state.blockIndex === null) {
+        yield* emitToolBlock(state)
+      }
+    }
     if (!finished && !stop) {
       throw new ApiError('interrupted', failure)
     }
-    if (stop === 'tool_use' || (!started && stop !== 'refusal')) {
+    if (toolBlocks.size > 0 && (stop === undefined || stop === 'end_turn')) {
+      stop = 'tool_use'
+    }
+    if (
+      (!started && stop !== 'refusal') ||
+      (stop === 'tool_use' && toolBlocks.size === 0) ||
+      (stop !== 'tool_use' && toolBlocks.size > 0)
+    ) {
       throw new ApiError('protocol', failure)
     }
-    if (openBlock !== null) {
-      yield { type: 'content_block_stop', index: blockIndex }
+    for (const index of openStops) {
+      yield { type: 'content_block_stop', index }
     }
-    yield { type: 'message_delta', delta: { stop_reason: stop ?? 'end_turn', stop_sequence: null }, usage }
+    yield {
+      type: 'message_delta',
+      delta: { stop_reason: stop ?? 'end_turn', stop_sequence: null },
+      usage,
+    }
     yield { type: 'message_stop' }
   } catch (error) {
     signal.throwIfAborted()

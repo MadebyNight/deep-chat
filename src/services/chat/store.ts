@@ -10,7 +10,7 @@ import {
   streamOfficialMessage,
   type CustomMessage,
 } from '../api/client.js'
-import type { ChatModel, CreateMessageRequest, MessageStreamEvent } from '../api/types.js'
+import type { CreateMessageRequest, MessageStreamEvent } from '../api/types.js'
 import {
   deepSeekRates,
   OFFICIAL_API_ORIGIN,
@@ -90,13 +90,36 @@ import {
   type Folder,
   type Message,
   type MessageRoute,
+  type ReplyBlock,
   type Session,
   type SessionSummary,
   type UserMessage,
 } from './types.js'
+import { searchExternal } from '../search/externalSearch.js'
+import { isExternalSearchConfigured, useExternalTools } from '../tools/config.js'
+import {
+  buildMcpToolCatalog,
+  externalSearchTool,
+  executeMcpTool,
+  EXTERNAL_SEARCH_TOOL,
+  toolRequiresConfirmation,
+  validateToolArguments,
+} from '../tools/runtime.js'
+import { clearToolConfirmations, requestToolConfirmation } from '../tools/confirmation.js'
+import {
+  assistantToolMessage,
+  collectToolCalls,
+  externalSearchFailureBlock,
+  externalSearchResultBlock,
+  externalSearchUseBlock,
+  formatSearchToolResult,
+  MAX_TOOL_ROUNDS,
+  roundText,
+  toCustomToolCall,
+  toolErrorMessage,
+  toolResultMessage,
+} from './toolCalling.js'
 
-/** deepseek-flash 同时支持深度思考与图片输入 */
-const MODEL: ChatModel = 'deepseek-flash'
 /** 保留最近打开的详情；当前会话、生成中及尚未成功保存的会话不淘汰。 */
 const SESSION_CACHE_LIMIT = 5
 /** 安全审核固定开启，所有请求都走扩展模式 */
@@ -390,6 +413,10 @@ export const refreshChatAfterSync = async (): Promise<void> => {
 /** 按当前开关创建回复：深度思考对应 thinking，智能搜索控制 deepseek_web_search。 */
 const createReply = (connection: ChatConnection, generation: GenerationParams): AssistantMessage => {
   const { thinking, search } = useSettings.getState()
+  const externalSearch =
+    connection.kind === 'custom' &&
+    search &&
+    isExternalSearchConfigured(useExternalTools.getState().search)
   return {
     id: createId(),
     role: 'assistant',
@@ -397,7 +424,7 @@ const createReply = (connection: ChatConnection, generation: GenerationParams): 
     model: connection.kind === 'deepseek' ? generation.model : connection.provider.model,
     generation,
     thinking,
-    search: connection.kind === 'deepseek' && search,
+    search: connection.kind === 'deepseek' ? search : externalSearch,
     prefix: connection.kind === 'deepseek',
     status: 'pending',
     blocks: [],
@@ -1295,7 +1322,7 @@ export const createSummaryHandoff = async (sessionId: string): Promise<SummaryHa
     const summary = await summarizeContext(
       { ...context, summary: prior || undefined },
       {
-        model: isChatModel(lastReply?.model) ? lastReply.model : MODEL,
+        model: isChatModel(lastReply?.model) ? lastReply.model : generationFor(source).model,
         safety_check: SAFETY_CHECK,
       },
       connection.kind === 'custom'
@@ -1650,6 +1677,40 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
     signal.addEventListener('abort', onAbort, { once: true })
   })
 
+const updateClientTool = (
+  reply: AssistantMessage,
+  toolUseId: string,
+  update: (block: Extract<ReplyBlock, { type: 'client_tool_use' }>) => ReplyBlock
+): AssistantMessage => ({
+  ...reply,
+  blocks: reply.blocks.map((block) =>
+    block.type === 'client_tool_use' && block.id === toolUseId ? update(block) : block
+  ),
+})
+
+const appendReplyBlock = (reply: AssistantMessage, block: ReplyBlock): AssistantMessage => ({
+  ...reply,
+  blocks: [...reply.blocks, block],
+})
+
+const appendClientToolResult = (
+  reply: AssistantMessage,
+  toolUseId: string,
+  content: string,
+  isError: boolean,
+  denied = false
+): AssistantMessage =>
+  appendReplyBlock(reply, {
+    type: 'client_tool_result',
+    tool_use_id: toolUseId,
+    content,
+    isError,
+    ...(denied ? { denied: true } : {}),
+  })
+
+const searchQuery = (input: Record<string, unknown>) =>
+  typeof input.query === 'string' ? input.query.trim().slice(0, 1000) : ''
+
 /**
  * 请求并消费流：先补齐附件的 serverId，再发请求；流式增量按动画帧刷新内存，完成、失败或停止后落盘。
  * 补传失败时回复记为 upload 错误，可重试。
@@ -1659,6 +1720,7 @@ const streamReply = async (
   sessionId: string, initial: AssistantMessage, request: Request, chatConnection: ChatConnection
 ) => {
   const controller = new AbortController()
+  const confirmationOwner = initial.id
   const connection = chatConnection.kind === 'deepseek' ? chatConnection.attachment : undefined
   if (chatConnection.kind === 'deepseek' && !getSession(sessionId)?.title) {
     titleRequests.add(controller)
@@ -1767,86 +1829,278 @@ const streamReply = async (
             ])
           )
           messages.push({ role: 'user', content: request.question.content })
-          let completed = false
-          for (let index = 0; index < chatConnection.routes.length; index++) {
-            const route = chatConnection.routes[index]
-            const fallback = route.provider.id !== chatConnection.provider.id
-            usedRates = route.rates
-            reply = {
-              ...reply,
-              model: route.provider.model,
-              route: routeInfo(route.provider, fallback, chatConnection.provider),
-              retry: undefined,
-            }
-            updateReply(sessionId, reply)
-            let emittedContent = false
-            try {
-              for await (const event of streamWithPreContentRetry({
-                signal: controller.signal,
-                createStream: (signal) => {
-                  blockIndexes.clear()
-                  return streamCustomMessage(
-                    route.provider,
-                    messages,
-                    signal,
-                    route.rates,
-                    { thinking: !!initial.thinking, system, generation }
-                  )
-                },
-                isContentEvent: (event) => event.type === 'content_block_start',
-                onRetry: showRetry,
-              })) {
-                emittedContent ||= event.type === 'content_block_start'
-                receivedContent ||= emittedContent
-                apply(event)
-              }
-              reply = settleReply(reply, 'done', Date.now())
-              if (
-                chatConnection.stickyProvider &&
-                getSession(sessionId)?.pinnedProviderId !== route.provider.id
-              ) {
-                updateSession(sessionId, (session) => ({
-                  ...session,
-                  pinnedProviderId: route.provider.id,
-                }))
-                persist(sessionId)
-              }
-              completed = true
-              break
-            } catch (error) {
-              if (controller.signal.aborted) {
-                throw error
-              }
-              const next = chatConnection.routes[index + 1]
-              if (
-                emittedContent ||
-                !next ||
-                !isTransientChatError(error)
-              ) {
-                throw error
-              }
+          const externalTools = useExternalTools.getState()
+          const searchEnabled = !!initial.search && isExternalSearchConfigured(externalTools.search)
+          const catalog = buildMcpToolCatalog(externalTools.mcp)
+          const toolDefinitions = [
+            ...(searchEnabled ? [externalSearchTool] : []),
+            ...catalog.definitions,
+          ]
+          let toolsUnsupported = false
+          const usedToolIds = new Set<string>()
+          let routeIndex = 0
+          for (let round = 0; ; round++) {
+            controller.signal.throwIfAborted()
+            const roundStart = reply.blocks.length
+            let streamed = false
+            let activeRoute: CustomProviderRoute | undefined
+            let lastError: unknown
+            for (let index = routeIndex; index < chatConnection.routes.length; index++) {
+              const route = chatConnection.routes[index]
+              const fallback = route.provider.id !== chatConnection.provider.id
+              usedRates = route.rates
               reply = {
                 ...reply,
-                retry: {
-                  attempt: 1,
-                  maxAttempts: 1,
-                  phase: 'fallback',
-                  target: providerLabel(next.provider),
-                },
+                model: route.provider.model,
+                route: routeInfo(route.provider, fallback, chatConnection.provider),
+                retry: undefined,
               }
               updateReply(sessionId, reply)
-              showToast({
-                key: 'customProviderFallback',
-                params: { provider: providerLabel(next.provider) },
-              })
-              await waitForChannel(CHAT_RETRY_BASE_DELAY_MS, controller.signal)
-              if (controller.signal.aborted) {
-                throw new DOMException('Cancelled', 'AbortError')
+              let emittedContent = false
+              try {
+                for await (const event of streamWithPreContentRetry({
+                  signal: controller.signal,
+                  createStream: (signal) => {
+                    blockIndexes.clear()
+                    return streamCustomMessage(route.provider, messages, signal, route.rates, {
+                      thinking: !!initial.thinking,
+                      system,
+                      generation,
+                      tools: toolDefinitions,
+                      onToolsUnsupported: () => {
+                        if (!toolsUnsupported) {
+                          toolsUnsupported = true
+                          showToast({ key: 'mcpToolUnsupported' })
+                        }
+                      },
+                    })
+                  },
+                  isContentEvent: (event) => event.type === 'content_block_start',
+                  onRetry: showRetry,
+                })) {
+                  emittedContent ||= event.type === 'content_block_start'
+                  receivedContent ||= emittedContent
+                  apply(event)
+                }
+                routeIndex = index
+                activeRoute = route
+                streamed = true
+                break
+              } catch (error) {
+                lastError = error
+                if (controller.signal.aborted) {
+                  throw error
+                }
+                const next = chatConnection.routes[index + 1]
+                if (emittedContent || !next || !isTransientChatError(error)) {
+                  throw error
+                }
+                reply = {
+                  ...reply,
+                  retry: {
+                    attempt: 1,
+                    maxAttempts: 1,
+                    phase: 'fallback',
+                    target: providerLabel(next.provider),
+                  },
+                }
+                updateReply(sessionId, reply)
+                showToast({
+                  key: 'customProviderFallback',
+                  params: { provider: providerLabel(next.provider) },
+                })
+                await waitForChannel(CHAT_RETRY_BASE_DELAY_MS, controller.signal)
+                if (controller.signal.aborted) {
+                  throw new DOMException('Cancelled', 'AbortError')
+                }
               }
             }
-          }
-          if (!completed) {
-            throw new ApiError('http', { key: 'customProviderRequestFailed' }, 503)
+            if (!streamed || !activeRoute) {
+              throw lastError ?? new ApiError('http', { key: 'customProviderRequestFailed' }, 503)
+            }
+            const activeProviderId = activeRoute.provider.id
+            if (
+              chatConnection.stickyProvider &&
+              getSession(sessionId)?.pinnedProviderId !== activeProviderId
+            ) {
+              updateSession(sessionId, (session) => ({
+                ...session,
+                pinnedProviderId: activeProviderId,
+              }))
+              persist(sessionId)
+            }
+            if (reply.stopReason !== 'tool_use') {
+              reply = settleReply(reply, 'done', Date.now())
+              break
+            }
+            const calls = collectToolCalls(reply.blocks, roundStart)
+            if (calls.length === 0) {
+              throw new ApiError('protocol', { key: 'customProviderRequestFailed' })
+            }
+            for (const call of calls) {
+              if (usedToolIds.has(call.id)) {
+                throw new ApiError('protocol', { key: 'customProviderRequestFailed' })
+              }
+              usedToolIds.add(call.id)
+            }
+            if (round >= MAX_TOOL_ROUNDS) {
+              throw new ApiError('protocol', { key: 'mcpToolLimit' })
+            }
+            messages.push(
+              assistantToolMessage(roundText(reply.blocks, roundStart), calls.map(toCustomToolCall))
+            )
+            for (const call of calls) {
+              controller.signal.throwIfAborted()
+              if (call.name === EXTERNAL_SEARCH_TOOL) {
+                const valid =
+                  !call.invalid &&
+                  validateToolArguments(
+                    { inputSchema: externalSearchTool.function.parameters },
+                    call.input
+                  )
+                const query = valid ? searchQuery(call.input) : ''
+                reply = {
+                  ...reply,
+                  blocks: reply.blocks.map((block) =>
+                    block.type === 'client_tool_use' && block.id === call.id
+                      ? externalSearchUseBlock(call.id, query)
+                      : block
+                  ),
+                }
+                updateReply(sessionId, reply)
+                flush()
+                let content: string
+                if (!valid) {
+                  reply = appendReplyBlock(reply, externalSearchFailureBlock(call.id))
+                  content = 'Invalid tool arguments.'
+                } else if (!query) {
+                  reply = appendReplyBlock(reply, externalSearchFailureBlock(call.id))
+                  content = 'External search query is empty.'
+                } else {
+                  try {
+                    const results = await searchExternal(
+                      externalTools.search,
+                      query,
+                      controller.signal
+                    )
+                    controller.signal.throwIfAborted()
+                    reply = appendReplyBlock(reply, externalSearchResultBlock(call.id, results))
+                    content = formatSearchToolResult(query, results)
+                  } catch (error) {
+                    controller.signal.throwIfAborted()
+                    reply = appendReplyBlock(reply, externalSearchFailureBlock(call.id))
+                    content = `External search failed: ${toolErrorMessage(error)}`
+                  }
+                }
+                updateReply(sessionId, reply)
+                flush()
+                messages.push(toolResultMessage(call.id, content))
+                continue
+              }
+              const target = catalog.byAlias.get(call.name)
+              if (!target) {
+                reply = updateClientTool(reply, call.id, (block) => ({
+                  ...block,
+                  status: 'complete',
+                }))
+                reply = appendClientToolResult(reply, call.id, 'Unknown tool.', true)
+                updateReply(sessionId, reply)
+                flush()
+                messages.push(toolResultMessage(call.id, 'Unknown tool.'))
+                continue
+              }
+              if (call.invalid || !validateToolArguments(target.tool, call.input)) {
+                reply = updateClientTool(reply, call.id, (block) => ({
+                  ...block,
+                  name: target.tool.name,
+                  serverId: target.server.id,
+                  serverName: target.server.name,
+                  status: 'complete',
+                }))
+                reply = appendClientToolResult(reply, call.id, 'Invalid tool arguments.', true)
+                updateReply(sessionId, reply)
+                flush()
+                messages.push(toolResultMessage(call.id, 'Invalid tool arguments.'))
+                continue
+              }
+              const confirm = toolRequiresConfirmation(target.tool)
+              reply = updateClientTool(reply, call.id, (block) => ({
+                ...block,
+                name: target.tool.name,
+                serverId: target.server.id,
+                serverName: target.server.name,
+                status: confirm ? 'awaiting_confirmation' : 'running',
+                requiresConfirmation: confirm,
+              }))
+              updateReply(sessionId, reply)
+              flush()
+              if (confirm) {
+                const allowed = await requestToolConfirmation(
+                  confirmationOwner,
+                  call.id,
+                  {
+                    name: target.tool.name,
+                    serverName: target.server.name,
+                    input: call.input,
+                  },
+                  controller.signal
+                )
+                controller.signal.throwIfAborted()
+                if (!allowed) {
+                  reply = updateClientTool(reply, call.id, (block) => ({
+                    ...block,
+                    status: 'complete',
+                  }))
+                  reply = appendClientToolResult(
+                    reply,
+                    call.id,
+                    `User denied execution of ${target.tool.name}.`,
+                    true,
+                    true
+                  )
+                  updateReply(sessionId, reply)
+                  flush()
+                  messages.push(
+                    toolResultMessage(call.id, `User denied execution of ${target.tool.name}.`)
+                  )
+                  continue
+                }
+                reply = updateClientTool(reply, call.id, (block) => ({
+                  ...block,
+                  status: 'running',
+                }))
+                updateReply(sessionId, reply)
+                flush()
+              }
+              try {
+                const result = await executeMcpTool(target, call.input, controller.signal)
+                controller.signal.throwIfAborted()
+                reply = updateClientTool(reply, call.id, (block) => ({
+                  ...block,
+                  status: 'complete',
+                }))
+                reply = appendClientToolResult(reply, call.id, result.content, result.isError)
+                updateReply(sessionId, reply)
+                flush()
+                messages.push(
+                  toolResultMessage(
+                    call.id,
+                    result.isError ? `Tool returned an error: ${result.content}` : result.content
+                  )
+                )
+              } catch (error) {
+                controller.signal.throwIfAborted()
+                const detail = toolErrorMessage(error)
+                reply = updateClientTool(reply, call.id, (block) => ({
+                  ...block,
+                  status: 'complete',
+                }))
+                reply = appendClientToolResult(reply, call.id, detail, true)
+                updateReply(sessionId, reply)
+                flush()
+                messages.push(toolResultMessage(call.id, `Tool execution failed: ${detail}`))
+              }
+            }
           }
           break
         }
@@ -2015,6 +2269,7 @@ const streamReply = async (
   } finally {
     titleRequests.delete(controller)
     streamFlushes.delete(sessionId)
+    clearToolConfirmations(confirmationOwner)
     cancelAnimationFrame(frame)
     reply = withUsageCost(reply, usedRates)
     updateReply(sessionId, reply)

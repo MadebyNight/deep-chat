@@ -423,6 +423,190 @@ test('preserves upstream HTTP status so only transient custom-provider failures 
   }
 })
 
+test('streams fragmented tool calls and caps untrusted arguments', async (t) => {
+  Object.assign(globalThis, { __API_ORIGIN__: 'https://api.deepseek.com' })
+  const { streamCustomMessage } = await import('./client.js')
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: { setItem: () => undefined },
+  })
+  t.after(() => {
+    Reflect.deleteProperty(globalThis, 'localStorage')
+  })
+
+  let oversized = false
+  const fetchMock = t.mock.method(
+    globalThis,
+    'fetch',
+    async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as {
+        tools?: { function: { name: string } }[]
+        tool_choice?: string
+      }
+      assert.equal(body.tools?.[0]?.function.name, 'external_web_search')
+      assert.equal(body.tool_choice, 'auto')
+      if (oversized) {
+        return sse(
+          {
+            choices: [{
+              delta: {
+                tool_calls: [{
+                  index: 0,
+                  id: 'call-large',
+                  function: {
+                    name: 'external_web_search',
+                    arguments: `{"query":"${'x'.repeat(65 * 1024)}"}`,
+                  },
+                }],
+              },
+            }],
+          },
+          { choices: [{ finish_reason: 'tool_calls' }] },
+          '[DONE]'
+        )
+      }
+      return sse(
+        {
+          choices: [{
+            delta: {
+              tool_calls: [{
+                index: 0,
+                id: 'call-1',
+                function: { name: 'external_', arguments: '' },
+              }],
+            },
+          }],
+        },
+        {
+          choices: [{
+            delta: {
+              tool_calls: [{
+                index: 0,
+                function: { name: 'web_search', arguments: '{"query":"wea' },
+              }],
+            },
+          }],
+        },
+        {
+          choices: [
+            {
+              delta: {
+                tool_calls: [{
+                  index: 0,
+                  function: { arguments: 'ther"}' },
+                }],
+              },
+              finish_reason: 'tool_calls',
+            },
+          ],
+        },
+        '[DONE]'
+      )
+    }
+  )
+  const tools = [
+    {
+      type: 'function' as const,
+      function: {
+        name: 'external_web_search',
+        parameters: { type: 'object', properties: {} },
+      },
+    },
+  ]
+  const events = await Array.fromAsync(
+    streamCustomMessage(provider, messages, new AbortController().signal, undefined, {
+      tools,
+    })
+  )
+  assert.deepEqual(
+    events.map((event) =>
+      event.type === 'content_block_start'
+        ? [event.index, event.content_block.type, event.content_block]
+        : event.type === 'content_block_delta'
+          ? [event.index, event.delta]
+          : event.type
+    ),
+    [
+      [
+        0,
+        'tool_use',
+        {
+          type: 'tool_use',
+          id: 'call-1',
+          name: 'external_web_search',
+          input: {},
+        },
+      ],
+      [0, { type: 'input_json_delta', partial_json: '{"query":"wea' }],
+      [0, { type: 'input_json_delta', partial_json: 'ther"}' }],
+      'content_block_stop',
+      'message_delta',
+      'message_stop',
+    ]
+  )
+
+  oversized = true
+  await assert.rejects(
+    Array.fromAsync(
+      streamCustomMessage(provider, messages, new AbortController().signal, undefined, {
+        tools,
+      })
+    ),
+    { kind: 'protocol' }
+  )
+  assert.equal(fetchMock.mock.callCount(), 2)
+})
+
+test('retries once without tools when a custom provider rejects tool definitions', async (t) => {
+  Object.assign(globalThis, { __API_ORIGIN__: 'https://api.deepseek.com' })
+  const { streamCustomMessage } = await import('./client.js')
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: { setItem: () => undefined },
+  })
+  t.after(() => {
+    Reflect.deleteProperty(globalThis, 'localStorage')
+  })
+  let unsupported = 0
+  t.mock.method(globalThis, 'fetch', async (_url: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { tools?: unknown[] }
+    if (body.tools) {
+      return Response.json(
+        {
+          error: {
+            code: 'unsupported_parameter',
+            param: 'tools',
+            message: 'tools are not supported',
+          },
+        },
+        { status: 400 }
+      )
+    }
+    return sse(
+      { choices: [{ delta: { content: 'answer' }, finish_reason: 'stop' }] },
+      '[DONE]'
+    )
+  })
+  const events = await Array.fromAsync(
+    streamCustomMessage(provider, messages, new AbortController().signal, undefined, {
+      tools: [
+        {
+          type: 'function',
+          function: {
+            name: 'external_web_search',
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      ],
+      onToolsUnsupported: () => {
+        unsupported++
+      },
+    })
+  )
+  assert.equal(unsupported, 1)
+  assert.equal(events.at(-1)?.type, 'message_stop')
+})
+
 test('streams custom provider reasoning blocks and falls back when reasoning_effort is rejected', async (t) => {
   Object.assign(globalThis, { __API_ORIGIN__: 'https://api.deepseek.com' })
   const { streamCustomMessage } = await import('./client.js')

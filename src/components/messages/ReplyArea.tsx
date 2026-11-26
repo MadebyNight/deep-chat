@@ -2,7 +2,7 @@ import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo, useEffect, useState, type ReactNode } from 'react'
 import { useSettings } from '../../services/settings.js'
-import { IconBrowseOutline16, IconBrowseWarningOutline16, IconChevronRightOutline14, IconCheckedOutline14, IconCloseFill14, IconLinkOutline16, IconRightUpOutline14, IconSearchOutline16, IconSearchWarningOutline16, IconThinkOutline16, Tooltip } from "../base/index.js"
+import { IconBrowseOutline16, IconBrowseWarningOutline16, IconChevronRightOutline14, IconCheckedOutline14, IconCloseFill14, IconLinkOutline16, IconRightUpOutline14, IconSearchOutline16, IconSearchWarningOutline16, IconSettingsOutline16, IconThinkOutline16, Tooltip } from "../base/index.js"
 import type { AssistantMessage } from '../../services/chat/types.js'
 import {
   getAreaTitle,
@@ -16,6 +16,7 @@ import {
   type SearchStep,
   type Source,
   type Step,
+  type ClientToolStep,
 } from '../../services/chat/view.js'
 
 import { Markdown } from '../markdown/Markdown.js'
@@ -161,6 +162,8 @@ const StepItem = ({
       return <FindRow step={step} isLast={isLast} />
     case 'read_link':
       return <ReadLinkRow step={step} isLast={isLast} />
+    case 'client_tool':
+      return <ClientToolRow step={step} isLast={isLast} />
     default:
       return null
   }
@@ -389,6 +392,40 @@ const ReadLinkRow = ({ step, isLast }: { step: ReadLinkStep; isLast: boolean }) 
       {step.links.map((link) => (
         <PageLink key={link.id} page={link} />
       ))}
+    </ToolRow>
+  )
+}
+
+const ClientToolRow = ({ step, isLast }: { step: ClientToolStep; isLast: boolean }) => {
+  const t = useTranslate()
+  const label = step.serverName ? `${step.serverName} · ${step.name}` : step.name
+  if (step.status === 'awaiting_confirmation') {
+    return (
+      <ToolRow icon={<IconSettingsOutline16 />} isLast={isLast}>
+        <span className={styles.intro}>{label}</span>
+        <span>{t('mcpToolAwaiting')}</span>
+      </ToolRow>
+    )
+  }
+  return (
+    <ToolRow icon={<IconSettingsOutline16 />} isLast={isLast}>
+      <span className={styles.intro}>{label}</span>
+      <span className={step.status === 'wip' ? styles.shimmer : undefined}>
+        {t(
+          step.status === 'wip'
+            ? 'mcpToolRunning'
+            : step.status === 'done'
+              ? 'mcpToolDone'
+              : step.status === 'denied'
+                ? 'mcpToolDenied'
+                : step.status === 'cancelled'
+                  ? 'mcpToolCancelled'
+                  : 'mcpToolFailed'
+        )}
+      </span>
+      {step.status === 'failed' && step.result ? (
+        <code className={styles.toolArguments}>{step.result}</code>
+      ) : null}
     </ToolRow>
   )
 }
