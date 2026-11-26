@@ -1,18 +1,29 @@
+import clsx from 'clsx'
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { memo, useEffect, useRef, useState } from 'react'
 import { useTheme } from '../../app/theme.js'
 import { renderMermaid } from '../../services/markdown/mermaid.js'
+import { sanitizeSvgMarkup, svgToDataUrl } from '../../services/markdown/artifactUtils.js'
 import { useMarkdownTheme } from './MarkdownThemeContext.js'
 
-/** 流式绘制最新内容、保留上次有效图；回答结束后才显示渲染错误。 */
-export const MermaidDiagram = memo(function MermaidDiagram({
-  code,
-  loading,
-}: {
-  code: string
-  loading: boolean
-}) {
-  const t = useTranslate()
+export type MermaidRenderState = 'empty' | 'loading' | 'error' | 'ready'
+
+export type MermaidRenderResult = {
+  svg: string
+  state: MermaidRenderState
+}
+
+const EMPTY_RESULT: MermaidRenderResult = { svg: '', state: 'empty' }
+
+/**
+ * 流式绘制最新内容、保留上次有效图；回答结束后才显示渲染错误。
+ * 代码块和外层工具条共用此结果，避免为了导出重复渲染。
+ */
+export const useMermaidRender = (
+  code: string,
+  loading: boolean,
+  enabled = true
+): MermaidRenderResult => {
   const dark = useMarkdownTheme(useTheme()) === 'dark'
   const [result, setResult] = useState({
     svg: '',
@@ -26,6 +37,9 @@ export const MermaidDiagram = memo(function MermaidDiagram({
   const finalCode = loading ? null : code
 
   useEffect(() => {
+    if (!enabled) {
+      return
+    }
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | undefined
     let previousCode: string | undefined
@@ -85,28 +99,59 @@ export const MermaidDiagram = memo(function MermaidDiagram({
       cancelled = true
       clearTimeout(timer)
     }
-  }, [dark, loading, finalCode])
+  }, [dark, enabled, loading, finalCode])
 
-  if (!code.trim() || !result.svg) {
-    const state = !code.trim() ? 'empty' : !loading && result.failedCode === code ? 'error' : 'loading'
+  if (!enabled) {
+    return EMPTY_RESULT
+  }
+  const state: MermaidRenderState = !code.trim()
+    ? loading
+      ? 'loading'
+      : 'empty'
+    : result.failedCode === code && !loading
+      ? 'error'
+      : result.svg && result.renderedCode === code && result.renderedDark === dark
+        ? 'ready'
+        : 'loading'
+  return { svg: result.svg, state }
+}
+
+/** 将 Mermaid 结果净化后放进图片上下文，脚本和事件无法在主页面执行。 */
+export const MermaidDiagram = memo(function MermaidDiagram({
+  result,
+  className,
+  imageStyle,
+}: {
+  result: MermaidRenderResult
+  className?: string
+  imageStyle?: CSSProperties
+}) {
+  const t = useTranslate()
+  const markup = useMemo(
+    () => (result.svg ? sanitizeSvgMarkup(result.svg) : ''),
+    [result.svg]
+  )
+  const src = useMemo(() => (markup ? svgToDataUrl(markup) : ''), [markup])
+  if (!src) {
+    const state: MermaidRenderState =
+      result.state === 'ready' || result.state === 'error' ? 'error' : result.state
     return (
-      <div className="md-mermaid-status" role="status" data-mermaid-state={state}>
-        {!loading && !code.trim()
+      <div
+        className={clsx('md-mermaid-status', className)}
+        role={state === 'error' ? 'alert' : 'status'}
+        data-mermaid-state={state}
+      >
+        {state === 'empty'
           ? t('mermaidEmpty')
-          : !loading && result.failedCode === code
+          : state === 'error'
             ? t('mermaidRenderFail')
             : t('mermaidLoading')}
       </div>
     )
   }
-
   return (
-    <div
-      className="md-mermaid-diagram"
-      data-mermaid-state={
-        result.renderedCode === code && result.renderedDark === dark ? 'ready' : 'loading'
-      }
-      dangerouslySetInnerHTML={{ __html: result.svg }}
-    />
+    <div className={clsx('md-mermaid-diagram', className)} data-mermaid-state={result.state}>
+      <img src={src} alt={t('artifactTitleMermaid')} style={imageStyle} draggable={false} />
+    </div>
   )
 })

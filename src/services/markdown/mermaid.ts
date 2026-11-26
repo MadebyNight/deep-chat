@@ -36,6 +36,9 @@ export const renderMermaid = (
     mermaid.initialize({
       theme: dark ? 'dark' : 'default',
       securityLevel: 'strict',
+      htmlLabels: false,
+      flowchart: { htmlLabels: false },
+      class: { htmlLabels: false },
       startOnLoad: false,
       suppressErrorRendering: true,
     })

@@ -1,4 +1,4 @@
-import type { Node as MdAstNode, Nodes, Parent, RootContent, Root, Text } from 'mdast'
+import type { Code, Node as MdAstNode, Nodes, Parent, RootContent, Root, Text } from 'mdast'
 import { findAndReplace } from 'mdast-util-find-and-replace'
 import { fromMarkdown } from 'mdast-util-from-markdown'
 import { gfmFromMarkdown } from 'mdast-util-gfm'
@@ -6,6 +6,7 @@ import { mathFromMarkdown } from 'mdast-util-math'
 import { gfm } from 'micromark-extension-gfm'
 import { math } from 'micromark-extension-llm-math'
 import type { Source } from '../chat/view.js'
+import { hasOpenCodeFence } from './artifactUtils.js'
 
 /** 正文里的 [citation:N]，已换成对应来源 */
 export interface CitationNode extends MdAstNode {
@@ -20,6 +21,11 @@ declare module 'mdast' {
 
   interface PhrasingContentMap {
     citation: CitationNode
+  }
+
+  interface Code {
+    /** 当前代码围栏仍在流式输出，尚未出现闭合行 */
+    streaming?: boolean
   }
 }
 
@@ -43,6 +49,8 @@ export function toMdAst(
     ],
     mdastExtensions: [gfmFromMarkdown(), mathFromMarkdown()],
   })
+  const openFence = hasOpenCodeFence(input)
+  const codeBlocks: Code[] = []
   if (sources) {
     const sourcesByIndex = new Map(sources.map((source) => [source.index, source]))
     findAndReplace(
@@ -78,10 +86,19 @@ export function toMdAst(
       case 'footnoteDefinition':
       case 'definition':
         return [{ type: 'paragraph', children: [text(raw(node))] }]
+      case 'code':
+        codeBlocks.push(node)
+        return [node]
       default:
         return [node]
     }
   }
   simplify(ast)
+  if (openFence) {
+    const lastCode = codeBlocks.at(-1)
+    if (lastCode) {
+      lastCode.streaming = true
+    }
+  }
   return ast
 }

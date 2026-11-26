@@ -198,6 +198,7 @@ const MarkdownBlockContentOrDefinitionContent = memo(
               code={node.value}
               infostring={node.lang || 'text'}
               loading={loading}
+              unclosed={node.streaming}
             />
           )
         case 'table':

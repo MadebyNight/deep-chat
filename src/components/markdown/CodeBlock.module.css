@@ -3,7 +3,22 @@
   width: 100%;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   padding: 6px;
+}
+
+.leading {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
 }
 
 .name {
@@ -12,6 +27,7 @@
   font-family: var(--ds-font-family-code);
   font-size: 12px;
   line-height: 18px;
+  white-space: nowrap;
 }
 
 .button {
@@ -30,6 +46,11 @@
   cursor: pointer;
   user-select: none;
 
+  &:disabled {
+    cursor: not-allowed;
+    color: var(--dsw-alias-label-caption);
+  }
+
   &[data-pressed] {
     background-color: var(--dsw-alias-interactive-bg-hover);
   }
@@ -43,5 +64,11 @@
   svg {
     width: 14px;
     height: 14px;
+  }
+}
+
+@media (max-width: 420px) {
+  .copyLabel {
+    display: none;
   }
 }

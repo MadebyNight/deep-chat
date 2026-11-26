@@ -115,6 +115,18 @@ export const IconEditOutline16 = () => (
   </svg>
 )
 
+export const IconExpandOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M6.5 2.25H2.25V6.5M9.5 2.25H13.75V6.5M6.5 13.75H2.25V9.5M9.5 13.75H13.75V9.5"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
 export const IconEllipsisOutline16 = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path

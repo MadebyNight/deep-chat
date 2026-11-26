@@ -89,6 +89,7 @@
       "IconDownloadOutline16",
       "IconEditOutline16",
       "IconEllipsisOutline16",
+      "IconExpandOutline16",
       "IconFollowsystemOutline16",
       "IconGlobeLanguageOutline14",
       "IconLightOutline16",
@@ -176,6 +177,15 @@
       "PdfIcon",
       "PptFileIcon",
       "TableFileIcon"
+    ]
+  },
+  {
+    "file": "src/components/markdown/ArtifactPreview.tsx",
+    "group": "messages",
+    "components": [
+      "ArtifactPreview",
+      "HtmlArtifactFrame",
+      "SvgArtifactImage"
     ]
   },
   {
