@@ -5,7 +5,7 @@ import { Share } from '@capacitor/share'
 
 export const isNative = Capacitor.isNativePlatform()
 
-export type CredentialSlot = 'customProvider' | 'webdav'
+export type CredentialSlot = 'customProvider' | 'webdav' | 'mcp' | 'externalSearch'
 
 export const credentials = registerPlugin<{
   read(options?: { slot?: CredentialSlot }): Promise<{ value: string | null }>
@@ -28,6 +28,25 @@ export const webDavHttp = registerPlugin<{
     timeoutMs?: number
   }): Promise<WebDavNativeResponse>
 }>('WebDavHttp')
+
+export type ExternalHttpResponse = {
+  status: number
+  headers?: Record<string, string>
+  body?: string
+}
+
+/** 第三方 MCP / 搜索请求的受控 Android 原生通路；不读取任何官方账号凭据。 */
+export const externalHttp = registerPlugin<{
+  request(options: {
+    id: string
+    url: string
+    method: 'GET' | 'POST'
+    headers?: Record<string, string>
+    body?: string
+    timeoutMs?: number
+  }): Promise<ExternalHttpResponse>
+  cancel(options: { id: string }): Promise<void>
+}>('ExternalHttp')
 
 const officialBrowser = registerPlugin<{ open(options: { url: string }): Promise<void> }>(
   'OfficialBrowser'

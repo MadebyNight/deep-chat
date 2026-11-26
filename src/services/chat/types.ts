@@ -64,8 +64,36 @@ export type TextPart = {
   isTemplate?: boolean
 }
 
+/** 客户端工具调用：参数流式拼接，执行完成后再追加结果块。 */
+export type ClientToolUseBlock = {
+  type: 'client_tool_use'
+  id: string
+  name: string
+  serverId?: string
+  serverName?: string
+  input: Record<string, unknown>
+  /** 原始 JSON 参数，用于流式累积与解析失败诊断；只在本地保存。 */
+  arguments: string
+  status: 'streaming' | 'awaiting_confirmation' | 'running' | 'complete'
+  invalid?: boolean
+  requiresConfirmation?: boolean
+}
+
+export type ClientToolResultBlock = {
+  type: 'client_tool_result'
+  tool_use_id: string
+  content: string
+  isError: boolean
+  denied?: boolean
+}
+
 /** 服务端工具调用与结果块按协议原样保存；历史请求只回传 read_link 调用与结果 */
-export type ReplyBlock = ThinkingPart | TextPart | ServerToolBlock
+export type ReplyBlock =
+  | ThinkingPart
+  | TextPart
+  | ServerToolBlock
+  | ClientToolUseBlock
+  | ClientToolResultBlock
 
 /**
  * pending：已发出请求，还没收到事件；streaming：正在接收；

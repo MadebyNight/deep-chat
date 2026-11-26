@@ -236,6 +236,22 @@
   font-variant: tabular-nums;
 }
 
+.toolArguments {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 120px;
+  margin: 0;
+  padding: 6px 8px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--dsw-alias-markdown-tag);
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xs-13);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .page {
   display: inline-flex;
   align-items: center;

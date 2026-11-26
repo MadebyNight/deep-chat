@@ -475,6 +475,102 @@
 
 .settingsMenu[role='menu'] { z-index: 1050; }
 
+.toolSettings {
+  display: grid;
+  min-inline-size: 0;
+}
+
+.toolSection {
+  display: grid;
+  gap: 10px;
+  min-inline-size: 0;
+  padding-block: 12px;
+  border-top: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
+}
+
+.toolSection:first-child {
+  border-top: 0;
+}
+
+.toolSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-inline-size: 0;
+}
+
+.toolSectionHeader strong {
+  min-inline-size: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 0.9375rem;
+  overflow-wrap: anywhere;
+}
+
+.toolActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.toolActions button {
+  min-height: 44px;
+}
+
+.mcpList {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mcpList li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+  padding-block: 10px;
+  border-top: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
+}
+
+.mcpList li:first-child {
+  border-top: 0;
+}
+
+.mcpIdentity {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.mcpTools {
+  display: grid;
+  min-inline-size: 0;
+}
+
+.mcpToolRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-inline-size: 0;
+  padding-block: 6px;
+  border-top: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
+  font-size: 0.875rem;
+}
+
+.mcpToolRow:first-child {
+  border-top: 0;
+}
+
+.mcpToolRow > span {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
 .providerList {
   display: grid;
   gap: 10px;

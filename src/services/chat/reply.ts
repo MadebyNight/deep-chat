@@ -46,6 +46,15 @@ const toReplyBlock = (block: OutputBlockStart, now: number): ReplyBlock | null =
     case 'web_search_tool_result':
     case 'web_fetch_tool_result':
       return block
+    case 'tool_use':
+      return {
+        type: 'client_tool_use',
+        id: block.id,
+        name: block.name,
+        input: {},
+        arguments: '',
+        status: 'streaming',
+      }
     default:
       return null
   }
@@ -84,11 +93,14 @@ export const applyEvent = (
       blockIndexes.delete(event.index)
       const block = toReplyBlock(event.content_block, now)
       if (!block) {
-        // 客户端工具内容不保存；未完成的工具往返也不能作为续写前缀。
-        return event.content_block.type === 'tool_use' ? { ...next, prefix: false } : next
+        return next
       }
       blockIndexes.set(event.index, next.blocks.length)
-      return { ...next, blocks: [...next.blocks, block] }
+      return {
+        ...next,
+        prefix: event.content_block.type === 'tool_use' ? false : next.prefix,
+        blocks: [...next.blocks, block],
+      }
     }
     case 'content_block_delta': {
       const index = blockIndexes.get(event.index)
@@ -109,6 +121,9 @@ export const applyEvent = (
         if (block.type === 'text' && delta.type === 'citations_delta') {
           return { ...block, citations: [...(block.citations ?? []), delta.citation] }
         }
+        if (block.type === 'client_tool_use' && delta.type === 'input_json_delta') {
+          return { ...block, arguments: block.arguments + delta.partial_json }
+        }
         return block
       })
     }
@@ -118,11 +133,31 @@ export const applyEvent = (
         return next
       }
       blockIndexes.delete(event.index)
-      return updateBlock(next, index, (block) =>
-        block.type === 'thinking' && block.startedAt !== undefined && block.endedAt === undefined
-          ? { ...block, endedAt: now }
-          : block
-      )
+      return updateBlock(next, index, (block) => {
+        if (
+          block.type === 'thinking' &&
+          block.startedAt !== undefined &&
+          block.endedAt === undefined
+        ) {
+          return { ...block, endedAt: now }
+        }
+        if (block.type === 'client_tool_use') {
+          let input: Record<string, unknown> = {}
+          let invalid = false
+          try {
+            const parsed: unknown = JSON.parse(block.arguments || '{}')
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              input = parsed as Record<string, unknown>
+            } else {
+              invalid = true
+            }
+          } catch {
+            invalid = true
+          }
+          return { ...block, input, ...(invalid ? { invalid: true } : {}) }
+        }
+        return block
+      })
     }
     case 'message_delta':
       return {
@@ -154,6 +189,14 @@ export const settleReply = (
     if (reply.stopReason === 'refusal' && (block.type === 'thinking' || block.type === 'text')) {
       return []
     }
+    if (
+      block.type === 'client_tool_use' &&
+      (block.status === 'streaming' ||
+        block.status === 'awaiting_confirmation' ||
+        block.status === 'running')
+    ) {
+      return [{ ...block, status: 'complete' }]
+    }
     return block.type === 'thinking' && block.startedAt !== undefined && block.endedAt === undefined
       ? [{ ...block, endedAt: now }]
       : [block]
@@ -180,6 +223,8 @@ export const canContinueReply = (reply: AssistantMessage): boolean => {
         block.type === 'server_tool_use' ||
         block.type === 'web_search_tool_result' ||
         block.type === 'web_fetch_tool_result' ||
+        block.type === 'client_tool_use' ||
+        block.type === 'client_tool_result' ||
         (block.type === 'text' && block.isTemplate)
     )
   ) {
@@ -275,6 +320,8 @@ const toAssistantParam = (
       !unsignedReadLinks.has(block.tool_use_id)
     ) {
       content.push(block)
+    } else if (block.type === 'client_tool_use' || block.type === 'client_tool_result') {
+      // 第三方客户端工具只保存在本机，绝不复用到官方账号请求。
     }
   }
   return {

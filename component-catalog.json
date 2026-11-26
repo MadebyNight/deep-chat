@@ -289,6 +289,7 @@
     "file": "src/components/messages/ReplyArea.tsx",
     "group": "messages",
     "components": [
+      "ClientToolRow",
       "ContentItem",
       "FindRow",
       "OpenRow",
@@ -298,6 +299,13 @@
       "SearchRow",
       "StepItem",
       "ToolRow"
+    ]
+  },
+  {
+    "file": "src/components/messages/ToolConfirmationDialog.tsx",
+    "group": "messages",
+    "components": [
+      "ToolConfirmationDialog"
     ]
   },
   {
@@ -402,6 +410,16 @@
     "components": [
       "CustomProviderSetting",
       "ProviderEditor"
+    ]
+  },
+  {
+    "file": "src/components/settings/ExternalToolsSetting.tsx",
+    "group": "settings",
+    "components": [
+      "ExternalSearchSetting",
+      "ExternalToolsSetting",
+      "McpServerEditor",
+      "McpServersSetting"
     ]
   },
   {

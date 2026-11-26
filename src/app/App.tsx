@@ -17,6 +17,7 @@ import { MobileHeader } from '../components/session/MobileHeader.js'
 import { Welcome } from '../components/session/Welcome.js'
 import { ConnectionDialog } from '../components/settings/ConnectionDialog.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
+import { ToolConfirmationDialog } from '../components/messages/ToolConfirmationDialog.js'
 import { UpdateDialog } from '../components/settings/UpdateDialog.js'
 import { initializeUpdates } from '../services/updates.js'
 import { Toast, Button } from "../components/base/index.js"
@@ -298,6 +299,7 @@ export const App = () => {
         <SearchPanel />
       </div>
       <SettingsDialog />
+      <ToolConfirmationDialog />
       <ConnectionDialog />
       <UpdateDialog allowAutomatic={ready && !streaming && !importingHistory && !mobileSiderOpen} />
       <Toast />

@@ -18,7 +18,11 @@ import {
   useDrafts,
 } from '../../services/chat/drafts.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
-import { ensureChatConnection } from '../settings/settingsDialogState.js'
+import { ensureChatConnection, openSettings } from '../settings/settingsDialogState.js'
+import {
+  isExternalSearchConfigured,
+  useExternalTools,
+} from '../../services/tools/config.js'
 import { GenerationEntryButton } from '../settings/GenerationSettings.js'
 import { PromptPicker } from '../session/PromptPicker.js'
 import { DragMask, useFileDrop } from './DragMask.js'
@@ -77,6 +81,9 @@ const Composer = ({ sessionId, showPrompt }: { sessionId: string | null; showPro
   const importingHistory = useChatStore((state) => state.importingHistory)
   const isMobile = useIsMobile()
   const search = useSettings((state) => state.search)
+  const externalSearch = useExternalTools((state) => state.search)
+  const externalSearchReady = isExternalSearchConfigured(externalSearch)
+  const searchActive = custom ? search && externalSearchReady : search
   const [attachmentPicker, setAttachmentPicker] = useState(false)
   const showAttachmentPicker = isMobile && attachmentPicker && !importingHistory && !custom
   const attachmentPanelId = useId()
@@ -329,15 +336,27 @@ const Composer = ({ sessionId, showPrompt }: { sessionId: string | null; showPro
                 <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
               </ActionButton>
             </Tooltip>
-            <Tooltip content={t(custom ? 'customProviderSearchUnavailable' : 'deactivatedSearchTooltip')}>
+            <Tooltip
+              content={t(
+                custom
+                  ? externalSearchReady
+                    ? 'search'
+                    : 'externalSearchMissing'
+                  : 'deactivatedSearchTooltip'
+              )}
+            >
               <ActionButton
                 type="button"
-                className={clsx(styles.toggle, !custom && search && styles.selected)}
+                className={clsx(styles.toggle, searchActive && styles.selected)}
                 aria-label={t('search')}
-                aria-pressed={!custom && search}
+                aria-pressed={searchActive}
                 onClick={() => {
-                  if (useCustomProvider.getState().enabled) {
-                    showToast({ key: 'customProviderSearchUnavailable' })
+                  if (
+                    useCustomProvider.getState().enabled &&
+                    !isExternalSearchConfigured(useExternalTools.getState().search)
+                  ) {
+                    showToast({ key: 'externalSearchMissing' })
+                    openSettings('provider')
                     return
                   }
                   triggerHaptic('light')
