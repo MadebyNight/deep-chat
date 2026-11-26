@@ -1,0 +1,60 @@
+.dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.create {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.create input {
+  min-width: 0;
+  flex: 1;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(48vh, 360px);
+  margin: 14px -6px 0;
+  padding: 0 6px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 4px 2px 4px 8px;
+  border-radius: 12px;
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      background-color: var(--dsw-alias-interactive-bg-hover);
+    }
+  }
+}
+
+.folderIcon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--dsw-alias-label-primary);
+}
+
+.rename {
+  min-width: 0;
+  flex: 1;
+}

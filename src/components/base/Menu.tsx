@@ -10,6 +10,7 @@ export type MenuOption = {
   label: string
   icon?: ReactNode
   danger?: boolean
+  disabled?: boolean
   onSelect: () => void
 }
 
@@ -50,6 +51,7 @@ export const Menu = ({
                   key={option.key}
                   role="menuitem"
                   className={clsx(styles.option, option.danger && styles.danger)}
+                  disabled={option.disabled}
                   onClick={() => {
                     setOpen(false)
                     option.onSelect()

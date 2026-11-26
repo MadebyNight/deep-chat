@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import {
   appendBranch,
   buildMessageVersions,
+  forkVisibleBranch,
   getVisibleMessages,
   getVisibleTurns,
   removeTurns,
@@ -125,4 +126,62 @@ test('removeTurns invalidates contextCheckpoint only when deleted turns affect i
 
   const boundaryDeleted = removeTurns(session, new Set(['u2']))
   assert.equal(boundaryDeleted.contextCheckpoint, undefined)
+})
+
+test('forkVisibleBranch copies only the visible path through an assistant node', () => {
+  const session = makeSession()
+  const before = structuredClone(session)
+  const fork = forkVisibleBranch(session, 'a1')
+  assert.ok(fork)
+  assert.deepEqual(
+    fork.messages.map((message) => message.id),
+    ['u1', 'a1']
+  )
+  assert.equal(fork.rootMessageId, 'u1')
+  assert.deepEqual(
+    fork.messages.map((message) => [message.parentId, message.selectedChildId]),
+    [
+      [null, 'a1'],
+      ['u1', undefined],
+    ]
+  )
+  assert.deepEqual(session, before)
+})
+
+test('forkVisibleBranch includes the selected reply when given a user node', () => {
+  const fork = forkVisibleBranch(makeSession(), 'u2')
+  assert.ok(fork)
+  assert.deepEqual(
+    fork.messages.map((message) => message.id),
+    ['u1', 'a1', 'u2', 'a2-regen']
+  )
+  assert.equal(
+    fork.messages.some((message) => message.id === 'a2'),
+    false
+  )
+})
+
+test('forkVisibleBranch shares attachment ids without sharing message objects', () => {
+  const session = makeSession()
+  const fork = forkVisibleBranch(session, 'a3')
+  assert.ok(fork)
+  const sourceUser = session.messages.find((message) => message.id === 'u1')
+  const forkUser = fork.messages.find((message) => message.id === 'u1')
+  assert.ok(sourceUser?.role === 'user' && forkUser?.role === 'user')
+  assert.equal(forkUser.files[0].id, sourceUser.files[0].id)
+  assert.notEqual(forkUser.files[0], sourceUser.files[0])
+  assert.notEqual(forkUser, sourceUser)
+})
+
+test('forkVisibleBranch rejects unanswered user nodes and unknown ids', () => {
+  const unanswered: Session = {
+    id: 's',
+    title: '',
+    createdAt: 1,
+    updatedAt: 1,
+    rootMessageId: 'u1',
+    messages: [user('u1', 'pending')],
+  }
+  assert.equal(forkVisibleBranch(unanswered, 'u1'), null)
+  assert.equal(forkVisibleBranch(makeSession(), 'missing'), null)
 })

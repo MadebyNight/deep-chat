@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { CreateMessageRequest, MessageStreamEvent } from '../api/types.js'
-import { compactContext, estimateMessages, estimateRequest, selectContext } from './compaction.js'
+import {
+  compactContext,
+  estimateMessages,
+  estimateRequest,
+  selectContext,
+  summarizeContext,
+} from './compaction.js'
 import { toRequestMessages } from './reply.js'
 import type { AssistantMessage, Message, UserMessage } from './types.js'
 
@@ -67,6 +73,7 @@ test('short conversation stays byte-for-byte equivalent and does not invoke the 
       20_000,
       async function* () {
         assert.fail('unexpected summary')
+        yield { type: 'message_stop' }
       },
       controller().signal
     ),
@@ -188,7 +195,11 @@ test('rejects interrupted, cancelled and output-limited summaries without changi
       body,
       20_000,
       async function* () {
-        for await (const event of summaryStream()) if (event.type !== 'message_stop') yield event
+        for await (const event of summaryStream()) {
+          if (event.type !== 'message_stop') {
+            yield event
+          }
+        }
       },
       controller().signal
     ),
@@ -218,6 +229,75 @@ test('an explicit overflow can shrink a history that is below the estimate thres
   await assert.rejects(
     compactContext(await selectContext([]), body, 96_000, summaryStream, controller().signal, true),
     { reason: 'tooLong' }
+  )
+})
+
+test('summarizeContext summarizes all remaining rounds without changing history', async () => {
+  const history = structuredClone(original)
+  const context = await selectContext(history)
+  let input = ''
+  const summary = await summarizeContext(
+    context,
+    { model: 'deepseek-flash', safety_check: { level: 'high' } },
+    20_000,
+    async function* (request) {
+      input = String(request.messages[0].content)
+      yield* summaryStream()
+    },
+    controller().signal
+  )
+  assert.equal(summary, '编号 WX-42。')
+  assert.match(input, /Turn first, part/u)
+  assert.match(input, /最新问题/u)
+  assert.deepEqual(history, original)
+})
+
+test('summarizeContext reuses an existing checkpoint and only sends newer rounds', async () => {
+  const initial = await selectContext(original)
+  const checkpoint = await compactContext(initial, body, 20_000, summaryStream, controller().signal)
+  assert.ok(checkpoint)
+  const newer: Message[] = [
+    ...original,
+    user('newer', '补充约束 NEW-7'),
+    assistant('newer-reply', '已记录 NEW-7'),
+  ]
+  const context = await selectContext(newer, checkpoint)
+  const input = await summarizeContext(
+    context,
+    { model: 'deepseek-flash', safety_check: { level: 'high' } },
+    20_000,
+    async function* (request) {
+      const text = String(request.messages[0].content)
+      assert.match(text, /Previous summary:\n编号 WX-42。/u)
+      assert.doesNotMatch(text, /保留编号|chart\.png/u)
+      assert.match(text, /最新问题/u)
+      assert.match(text, /NEW-7/u)
+      yield* summaryStream()
+    },
+    controller().signal
+  )
+  assert.equal(input, '编号 WX-42。')
+})
+
+test('summarizeContext returns a checkpoint with no uncovered rounds and no model call', async () => {
+  const context = {
+    rounds: [],
+    masked: 0,
+    history: [],
+    summary: '已有背景',
+  }
+  assert.equal(
+    await summarizeContext(
+      context,
+      { model: 'deepseek-flash', safety_check: { level: 'high' } },
+      20_000,
+      async function* () {
+        assert.fail('unexpected summary request')
+        yield { type: 'message_stop' }
+      },
+      controller().signal
+    ),
+    '已有背景'
   )
 })
 

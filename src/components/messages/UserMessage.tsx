@@ -1,9 +1,9 @@
-import { Textarea, IconEditOutline16, IconTrashOutline16, Button, IconButton } from "../base/index.js"
+import { Textarea, IconEditOutline16, IconForkOutline16, IconTrashOutline16, Button, IconButton } from "../base/index.js"
 import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo, useLayoutEffect, useRef, useState } from 'react'
 import { useIsMobile } from '../../app/viewport.js'
-import { editMessage, retryUpload } from '../../services/chat/store.js'
+import { editMessage, forkSession, retryUpload } from '../../services/chat/store.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
 import type { UserMessage as UserMessageType } from '../../services/chat/types.js'
 import { ensureChatConnection } from '../settings/settingsDialogState.js'
@@ -127,6 +127,13 @@ export const UserMessage = memo(function UserMessage({
                   setDraft(message.content)
                   setEditing(true)
                 }}
+              />
+              <IconButton
+                icon={<IconForkOutline16 />}
+                tooltip={t('forkChatAction')}
+                tooltipPlacement="bottom"
+                disabled={busy || selecting}
+                onClick={() => forkSession(sessionId, message.id)}
               />
               {onStartTurnDeletion && !selecting ? (
                 <IconButton
