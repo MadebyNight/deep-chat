@@ -196,6 +196,15 @@
     ]
   },
   {
+    "file": "src/components/markdown/ArtifactPreview.tsx",
+    "group": "messages",
+    "components": [
+      "ArtifactPreview",
+      "HtmlArtifactFrame",
+      "SvgArtifactImage"
+    ]
+  },
+  {
     "file": "src/components/markdown/CodeBlock.tsx",
     "group": "messages",
     "components": [

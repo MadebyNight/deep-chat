@@ -3,7 +3,27 @@
   width: 100%;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   padding: 6px;
+}
+
+.leading {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.switch {
+  flex: 0 0 auto;
 }
 
 .name {
@@ -12,6 +32,7 @@
   font-family: var(--ds-font-family-code);
   font-size: 12px;
   line-height: 18px;
+  white-space: nowrap;
 }
 
 .button {
@@ -29,6 +50,12 @@
   line-height: 20px;
   cursor: pointer;
   user-select: none;
+  white-space: nowrap;
+
+  &:disabled {
+    cursor: not-allowed;
+    color: var(--dsw-alias-label-caption);
+  }
 
   &[data-pressed] {
     background-color: var(--dsw-alias-interactive-bg-hover);
@@ -43,5 +70,17 @@
   svg {
     width: 14px;
     height: 14px;
+  }
+}
+
+@media (max-width: 420px) {
+  .copyLabel {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .artifactName {
+    display: none;
   }
 }
