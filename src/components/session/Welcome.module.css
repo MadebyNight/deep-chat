@@ -35,6 +35,40 @@
   height: auto;
 }
 
+.subtitle {
+  max-width: min(30rem, 100%);
+  margin: -9px 0 18px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.templateCard {
+  box-sizing: border-box;
+  width: min(100%, 27rem);
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.templateCard strong {
+  display: block;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+.templateCard p {
+  margin: 4px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
 .prompt {
   align-self: stretch;
   flex-shrink: 0;

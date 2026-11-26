@@ -5,6 +5,9 @@ import { Share } from '@capacitor/share'
 import type { NativeIntake } from './intakeProtocol.js'
 
 export const isNative = Capacitor.isNativePlatform()
+export type LauncherIconId = 'default' | 'ocean' | 'forest' | 'sunset'
+export type AppShortcutAction = 'new' | 'voice' | 'camera'
+export const hasNativeAppIdentity = Capacitor.getPlatform() === 'android'
 export const credentials = registerPlugin<{
   read(options?: { slot: 'customProvider' }): Promise<{ value: string | null }>
   write(options: { value: string | null; slot?: 'customProvider' }): Promise<void>
@@ -24,6 +27,20 @@ const shareIntake = registerPlugin<{
   ): Promise<PluginListenerHandle>
 }>('ShareIntake')
 
+const appIdentity = registerPlugin<{
+  getCapabilities(): Promise<{ currentIcon: LauncherIconId; requestPinShortcut: boolean }>
+  setLauncherIcon(options: { icon: LauncherIconId }): Promise<{ icon: LauncherIconId }>
+  createShortcut(options: {
+    type: AppShortcutAction
+    label: string
+    icon: LauncherIconId
+  }): Promise<{ requested: boolean; id: string }>
+  addListener(
+    eventName: 'shortcutPinned',
+    listener: (event: { id: string; type: AppShortcutAction; icon: LauncherIconId }) => void
+  ): Promise<PluginListenerHandle>
+}>('AppIdentity')
+
 export const consumePendingIntake = async () => (await shareIntake.consumePendingIntake()).intake
 
 export const subscribeShareIntake = (listener: (intake: NativeIntake) => void) =>
@@ -32,6 +49,20 @@ export const subscribeShareIntake = (listener: (intake: NativeIntake) => void) =
 export const releaseShareIntake = (id: string) => shareIntake.releaseIntake({ id })
 
 export const openCameraIntake = () => shareIntake.openCamera()
+
+export const getAppIdentityCapabilities = () => appIdentity.getCapabilities()
+
+export const applyLauncherIcon = (icon: LauncherIconId) => appIdentity.setLauncherIcon({ icon })
+
+export const requestAppShortcut = (options: {
+  type: AppShortcutAction
+  label: string
+  icon: LauncherIconId
+}) => appIdentity.createShortcut(options)
+
+export const subscribeShortcutPinned = (
+  listener: (event: { id: string; type: AppShortcutAction; icon: LauncherIconId }) => void
+) => appIdentity.addListener('shortcutPinned', listener)
 
 export const openOfficialPage = async (url: string) => {
   if (Capacitor.getPlatform() === 'android') {
@@ -56,7 +87,7 @@ export const shareText = async (title: string, text: string) => {
   throw new Error('share unsupported')
 }
 
-export const saveArchive = async (name: string, blob: Blob) => {
+export const saveArchive = async (name: string, blob: Blob, title = '保存聊天记录') => {
   if (isNative) {
     const data = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader()
@@ -65,7 +96,7 @@ export const saveArchive = async (name: string, blob: Blob) => {
       reader.readAsDataURL(blob)
     })
     const { uri } = await Filesystem.writeFile({ path: name, data, directory: Directory.Cache })
-    await Share.share({ title: '保存聊天记录', files: [uri] })
+    await Share.share({ title, files: [uri] })
     return
   }
   const url = URL.createObjectURL(blob)

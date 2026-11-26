@@ -10,7 +10,10 @@
   line-height: var(--line-height);
   border-radius: 24px;
   border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
-  background: var(--dsw-specific-input-major);
+  background-color: var(--dsw-specific-input-major);
+  background-image: var(--deepchat-theme-bubble-image, none);
+  background-position: center;
+  background-size: cover;
   overflow: hidden;
 }
 
@@ -476,15 +479,23 @@
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: var(--dsw-alias-button-primary-fill);
+  background-color: var(--dsw-alias-button-primary-fill);
+  background-image: var(--deepchat-theme-brand-image, none);
+  background-position: center;
+  background-size: cover;
   color: var(--dsw-static-neutral-bluish-00);
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: filter 0.2s ease;
 
   @media (hover: hover) and (pointer: fine) {
     &:not(.disabled):hover {
-      background: var(--dsw-alias-button-primary-hover);
+      background-color: var(--dsw-alias-button-primary-hover);
+      filter: brightness(1.06);
     }
+  }
+
+  &:active {
+    filter: brightness(0.94);
   }
 
   &.disabled {

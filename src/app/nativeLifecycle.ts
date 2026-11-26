@@ -86,4 +86,5 @@ export const initializeNative = () => {
     attributes: true,
     attributeFilter: ['data-ds-dark-theme'],
   })
+  window.addEventListener('deepchat:theme-applied', updateBars)
 }

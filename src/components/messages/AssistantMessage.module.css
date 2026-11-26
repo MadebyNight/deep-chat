@@ -128,6 +128,9 @@
   border-radius: 100px;
   border: 1px solid var(--dsw-alias-border-l2);
   background-color: var(--dsw-alias-bg-base);
+  background-image: var(--deepchat-theme-background-image, none);
+  background-position: center;
+  background-size: cover;
   color: var(--dsw-alias-label-primary);
   font: var(--dsw-font-markdown-small);
   cursor: pointer;

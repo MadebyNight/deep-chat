@@ -14,11 +14,26 @@
     ]
   },
   {
+    "file": "src/components/base/ColorField.tsx",
+    "group": "shared",
+    "components": [
+      "ColorField"
+    ]
+  },
+  {
+    "file": "src/components/base/ColorPicker.tsx",
+    "group": "shared",
+    "components": [
+      "ColorPicker"
+    ]
+  },
+  {
     "file": "src/components/base/Control.tsx",
     "group": "shared",
     "components": [
       "ActionButton",
       "Input",
+      "Slider",
       "Textarea"
     ]
   },
@@ -399,6 +414,13 @@
     ]
   },
   {
+    "file": "src/components/settings/GradientEditor.tsx",
+    "group": "settings",
+    "components": [
+      "GradientEditor"
+    ]
+  },
+  {
     "file": "src/components/settings/SettingsDialog.tsx",
     "group": "settings",
     "components": [
@@ -421,6 +443,14 @@
       "ThemeSetting",
       "ThinkingCollapseSetting",
       "TtsVoiceSetting"
+    ]
+  },
+  {
+    "file": "src/components/settings/ThemeStudioModal.tsx",
+    "group": "settings",
+    "components": [
+      "ThemeStudioEntry",
+      "ThemeStudioModal"
     ]
   },
   {

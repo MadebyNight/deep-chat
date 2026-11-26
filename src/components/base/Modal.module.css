@@ -108,6 +108,12 @@
   margin-top: 20px;
 }
 
+.footerAlert {
+  flex-basis: 100%;
+  min-width: 0;
+  text-align: start;
+}
+
 .confirm {
   width: min(328px, calc(100vw - 40px));
   padding: 20px 20px 18px;
@@ -146,5 +152,9 @@
       height: 40px;
       border-radius: 14px;
     }
+  }
+
+  .footer .footerAlert {
+    grid-column: 1 / -1;
   }
 }

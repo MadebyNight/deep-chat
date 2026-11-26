@@ -37,6 +37,14 @@ declare const styles: {
   readonly "themeOptions": string;
   readonly "themeOption": string;
   readonly "themeOptionSelected": string;
+  readonly "themeStudioDialog": string;
+  readonly "themeStudioMain": string;
+  readonly "themeStudioForm": string;
+  readonly "themeStudioField": string;
+  readonly "themeStudioGrid": string;
+  readonly "themeStudioPalette": string;
+  readonly "themeStudioActions": string;
+  readonly "themeStudioError": string;
   readonly "description": string;
   readonly "error": string;
   readonly "apiKey": string;

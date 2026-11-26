@@ -4,6 +4,9 @@
   display: flex;
   overflow: hidden;
   background-color: var(--dsw-alias-bg-base);
+  background-image: var(--deepchat-theme-background-image, none);
+  background-position: center;
+  background-size: cover;
 }
 
 .frameDrawerOpen {
@@ -46,9 +49,13 @@
   justify-content: center;
   flex-wrap: wrap;
   gap: 12px;
-  padding: calc(12px + var(--app-safe-top)) calc(16px + var(--app-safe-right)) 12px calc(16px + var(--app-safe-left));
+  padding: calc(12px + var(--app-safe-top)) calc(16px + var(--app-safe-right)) 12px
+    calc(16px + var(--app-safe-left));
   color: var(--dsw-alias-label-primary);
   background-color: var(--dsw-alias-bg-base);
+  background-image: var(--deepchat-theme-background-image, none);
+  background-position: center;
+  background-size: cover;
   font-size: 14px;
 }
 

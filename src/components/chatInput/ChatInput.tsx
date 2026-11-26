@@ -41,12 +41,24 @@ import { initializeOfficialAccount, useOfficialAccount } from '../../services/of
 import styles from './ChatInput.module.css'
 
 /** 输入框：自适应高度的文本框 + 文件 + 深度思考与智能搜索开关 + 语音输入 + 发送 / 停止 */
-export const ChatInput = memo(function ChatInput({ sessionId }: { sessionId: string | null }) {
+export const ChatInput = memo(function ChatInput({
+  sessionId,
+  placeholder,
+}: {
+  sessionId: string | null
+  placeholder?: string
+}) {
   // 切换目标时释放录音、转写和 DOM 状态；文字与附件由草稿服务保留。
-  return <Composer key={sessionId === null ? 'new' : `session:${sessionId}`} sessionId={sessionId} />
+  return (
+    <Composer
+      key={sessionId === null ? 'new' : `session:${sessionId}`}
+      sessionId={sessionId}
+      placeholder={placeholder}
+    />
+  )
 })
 
-const Composer = ({ sessionId }: { sessionId: string | null }) => {
+const Composer = ({ sessionId, placeholder }: { sessionId: string | null; placeholder?: string }) => {
   const t = useTranslate()
   const attachmentScope = useAttachmentScope()
   const custom = useCustomProvider((state) => state.enabled)
@@ -273,7 +285,7 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
           <Textarea
             ref={textareaRef}
             className={clsx(styles.textarea, recording && isMobile && styles.textareaHidden)}
-            placeholder={t('chatInputPlaceholderChat')}
+            placeholder={placeholder ?? t('chatInputPlaceholderChat')}
             rows={2}
             // 移动端不自动聚焦，避免一打开就弹出键盘
             autoFocus={!isMobile}

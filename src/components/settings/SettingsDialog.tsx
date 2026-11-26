@@ -34,6 +34,7 @@ import { ConnectionSetting } from './ConnectionDialog.js'
 import { CustomProviderSetting } from './CustomProviderSetting.js'
 import { UsageChart } from './UsageChart.js'
 import { VersionSetting } from './UpdateDialog.js'
+import { ThemeStudioEntry } from './ThemeStudioModal.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import styles from './Settings.module.css'
 
@@ -124,6 +125,7 @@ const SettingsContent = () => {
             aria-label={t('settingDialogAsideGeneralOptionLabel')}
           >
             <MobilePreferences onFont={() => setPage('font')} />
+            <ThemeStudioEntry />
             <SettingsPageLink
               label={t('settingsPersonalization')}
               onClick={() => setPage('personalization')}
@@ -214,6 +216,7 @@ const SettingsContent = () => {
           {section === 'general' ? (
             <>
               <ThemeSetting />
+              <ThemeStudioEntry />
               <LocaleSetting />
               <TtsVoiceSetting />
               <ThinkingCollapseSetting />
@@ -351,13 +354,14 @@ const MobilePreferences = ({ onFont }: { onFont: () => void }) => {
 const AboutSettings = () => {
   const t = useTranslate()
   const version = useUpdates((state) => state.version)
+  const appName = useSettings((state) => state.themePackage?.identity?.appName)
   const [panel, setPanel] = useState<'app' | 'thirdParty' | null>(null)
   const notices = __OPEN_SOURCE_NOTICES__.filter(({ androidOnly }) => !androidOnly || isNative)
   return (
     <>
       <div className={styles.aboutBrand}>
         <img src={whaleLogo} width={48} height={38} alt="" />
-        <h2>Deep Chat</h2>
+        <h2>{appName ?? t('appName')}</h2>
         <p>{t('settingsAboutSubtitle')}{version ? ` · v${version}` : ''}</p>
       </div>
       <section className={styles.settingsGroup}>

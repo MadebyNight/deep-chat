@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { credentials, isNative } from './native.js'
 import type { TtsVoice } from './api/speech.js'
+import { parseThemePackage, type ThemePackageV2 } from './themePackages.js'
 
 export type Locale = 'zh-CN' | 'en-US'
 
@@ -15,6 +16,7 @@ type Settings = {
   apiKey: string | null
   locale: Locale
   themePreference: ThemePreference
+  themePackage: ThemePackageV2 | null
   chatFontSize: number | null
   ttsVoice: TtsVoice
   autoReadAloud: boolean
@@ -32,6 +34,7 @@ const KEYS = {
   apiKey: 'chat-demo:api-key',
   locale: 'chat-demo:locale',
   themePreference: 'chat-demo:theme-preference',
+  themePackage: 'deepchat:theme-package-v2',
   chatFontSize: 'deepchat:chat-font-size',
   ttsVoice: 'chat-demo:tts-voice',
   autoReadAloud: 'chat-demo:auto-read-aloud',
@@ -84,13 +87,35 @@ const initialThemePreference = (): ThemePreference => {
   return saved === 'light' || saved === 'dark' ? saved : 'system'
 }
 
+const initialThemePackage = (): ThemePackageV2 | null => {
+  const current = readPreference(KEYS.themePackage)
+  const legacy = current === null ? readPreference('deepchat:theme-package-v1') : null
+  const raw = current ?? legacy
+  if (raw === null) {
+    return null
+  }
+  try {
+    const parsed = parseThemePackage(JSON.parse(raw))
+    if (!parsed.ok) {
+      return null
+    }
+    if (legacy !== null) {
+      writePreference(KEYS.themePackage, JSON.stringify(parsed.value))
+    }
+    return parsed.value
+  } catch {
+    return null
+  }
+}
+
 const initialChatFontSize = () => {
   const value = Number(readPreference(KEYS.chatFontSize))
   return Number.isInteger(value) && value >= 14 && value <= 22 ? value : null
 }
 
 /** 未保存过时使用服务端默认音色 stella（海星） */
-const initialTtsVoice = (): TtsVoice => (readPreference(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
+const initialTtsVoice = (): TtsVoice =>
+  readPreference(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella'
 
 const initialPrompts = (): PromptPreferences => {
   const raw = readPreference(KEYS.prompts)
@@ -98,12 +123,17 @@ const initialPrompts = (): PromptPreferences => {
     try {
       const stored = JSON.parse(raw) as Partial<PromptPreferences> | null
       if (Array.isArray(stored?.presets)) {
-        const presets = stored.presets.filter((item) =>
-          typeof item?.id === 'string' && typeof item.title === 'string' &&
-          typeof item.body === 'string' && item.title.trim() && item.body.trim()
+        const presets = stored.presets.filter(
+          (item) =>
+            typeof item?.id === 'string' &&
+            typeof item.title === 'string' &&
+            typeof item.body === 'string' &&
+            item.title.trim() &&
+            item.body.trim()
         )
         const selectedId = presets.some((item) => item.id === stored.selectedId)
-          ? stored.selectedId ?? null : null
+          ? (stored.selectedId ?? null)
+          : null
         return { presets, selectedId }
       }
     } catch {
@@ -115,7 +145,9 @@ const initialPrompts = (): PromptPreferences => {
     return { presets: [], selectedId: null }
   }
   const migrated = {
-    presets: [{ id: 'legacy', title: initialLocale() === 'zh-CN' ? '自定义提示词' : 'Custom prompt', body }],
+    presets: [
+      { id: 'legacy', title: initialLocale() === 'zh-CN' ? '自定义提示词' : 'Custom prompt', body },
+    ],
     selectedId: 'legacy',
   }
   if (writePreference(KEYS.prompts, JSON.stringify(migrated))) {
@@ -128,6 +160,7 @@ export const useSettings = create<Settings>(() => ({
   apiKey: null,
   locale: initialLocale(),
   themePreference: initialThemePreference(),
+  themePackage: initialThemePackage(),
   chatFontSize: initialChatFontSize(),
   ttsVoice: initialTtsVoice(),
   autoReadAloud: readPreference(KEYS.autoReadAloud) === 'true',
@@ -149,6 +182,11 @@ export const setLocale = (locale: Locale) => {
 export const setThemePreference = (themePreference: ThemePreference) => {
   writePreference(KEYS.themePreference, themePreference)
   useSettings.setState({ themePreference })
+}
+
+export const setThemePackage = (themePackage: ThemePackageV2 | null) => {
+  writePreference(KEYS.themePackage, themePackage ? JSON.stringify(themePackage) : null)
+  useSettings.setState({ themePackage })
 }
 
 export const setChatFontSize = (chatFontSize: number | null) => {
