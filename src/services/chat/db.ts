@@ -111,6 +111,91 @@ export const loadFolders = async (): Promise<Folder[]> =>
 export const loadSession = async (id: string): Promise<Session | undefined> =>
   (await getDB()).get('sessions', id)
 
+export const loadAllSessions = async (): Promise<Session[]> =>
+  (await getDB()).getAll('sessions')
+
+export type SyncDbChanges = {
+  sessions: Session[]
+  deleteSessionIds: string[]
+  folders: Folder[]
+  deleteFolderIds: string[]
+  files?: StoredFile[]
+}
+
+/**
+ * 同步引擎的原子应用入口：会话、摘要、分组和附件原件在同一事务内提交。
+ * 删除分组只解除会话归属；删除会话时仍按摘要引用释放无人使用的原件。
+ */
+export const applySyncChanges = async ({
+  sessions: changedSessions,
+  deleteSessionIds,
+  folders,
+  deleteFolderIds,
+  files = [],
+}: SyncDbChanges): Promise<void> => {
+  const tx = (await getDB()).transaction(
+    ['sessions', 'sessionSummaries', 'folders', 'files'],
+    'readwrite'
+  )
+  await Promise.all([
+    (async () => {
+      try {
+        const sessions = tx.objectStore('sessions')
+        const summaries = tx.objectStore('sessionSummaries')
+        const candidates = new Set<string>()
+        for (const id of new Set(deleteSessionIds)) {
+          const summary = await summaries.get(id)
+          for (const fileId of summary?.fileIds ?? []) {
+            candidates.add(fileId)
+          }
+          await sessions.delete(id)
+          await summaries.delete(id)
+        }
+        for (const folderId of new Set(deleteFolderIds)) {
+          const keys = await summaries.index('folderId').getAllKeys(folderId)
+          for (const key of keys) {
+            const id = String(key)
+            const summary = await summaries.get(id)
+            const session = await sessions.get(id)
+            if (summary) {
+              await summaries.put({ ...summary, folderId: null })
+            }
+            if (session) {
+              await sessions.put({ ...session, folderId: null })
+            }
+          }
+          await tx.objectStore('folders').delete(folderId)
+        }
+        for (const folder of folders) {
+          await tx.objectStore('folders').put(folder)
+        }
+        for (const file of files) {
+          await tx.objectStore('files').put(file)
+        }
+        for (const session of changedSessions) {
+          const nextSummary = storedSummary(session)
+          const previous = await summaries.get(session.id)
+          for (const fileId of previous?.fileIds ?? []) {
+            if (!nextSummary.fileIds.includes(fileId)) {
+              candidates.add(fileId)
+            }
+          }
+          await sessions.put(session)
+          await summaries.put(nextSummary)
+        }
+        const released = unreferencedFileIds(candidates, await summaries.getAll())
+        for (const id of released) {
+          await tx.objectStore('files').delete(id)
+        }
+      } catch (error) {
+        abortTransaction(tx)
+        throw error
+      }
+    })(),
+    tx.done,
+  ])
+}
+
 export const saveSession = async (session: Session, files: StoredFile[] = []): Promise<void> => {
   const summary = storedSummary(session)
   const tx = (await getDB()).transaction(['sessions', 'sessionSummaries', 'files'], 'readwrite')

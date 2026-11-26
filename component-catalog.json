@@ -442,6 +442,13 @@
     ]
   },
   {
+    "file": "src/components/settings/WebDavSyncSection.tsx",
+    "group": "settings",
+    "components": [
+      "WebDavSyncSection"
+    ]
+  },
+  {
     "file": "src/components/sider/CollapsedSider.tsx",
     "group": "sessions",
     "components": [

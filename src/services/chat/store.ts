@@ -152,6 +152,7 @@ const pendingFiles = new Map<string, db.StoredFile[]>()
 const deletingSessions = new Set<string>()
 const deletionTasks = new Set<Promise<boolean>>()
 const streamFlushes = new Map<string, () => void>()
+const sessionSaveTasks = new Map<string, Promise<void>>()
 let accessSequence = 0
 let historyEpoch = 0
 let initTask: Promise<void> | undefined
@@ -228,7 +229,7 @@ const persist = (sessionId: string) => {
     }
     const epoch = historyEpoch
     const files = pendingFiles.get(sessionId)
-    void db
+    const saving = db
       .saveSession(session, files)
       .then(() => {
         if (epoch !== historyEpoch || !getSession(sessionId)) {
@@ -255,6 +256,12 @@ const persist = (sessionId: string) => {
           }))
         }
       })
+    sessionSaveTasks.set(sessionId, saving)
+    void saving.finally(() => {
+      if (sessionSaveTasks.get(sessionId) === saving) {
+        sessionSaveTasks.delete(sessionId)
+      }
+    })
   }
 }
 
@@ -265,21 +272,23 @@ export const retrySaveSessions = () => {
 }
 
 /** 离开前先合并尚未绘制的增量；隐藏期间浏览器可能暂停动画帧。 */
-export const bindChatPersistence = () => {
-  const save = () => {
-    if (get().importingHistory) {
-      return
-    }
-    for (const [id, flush] of streamFlushes) {
-      flush()
+const flushPendingChat = () => {
+  if (get().importingHistory) {
+    return
+  }
+  for (const [id, flush] of streamFlushes) {
+    flush()
+    persist(id)
+  }
+  for (const id of unsavedSessions) {
+    if (!streamFlushes.has(id)) {
       persist(id)
     }
-    for (const id of unsavedSessions) {
-      if (!streamFlushes.has(id)) {
-        persist(id)
-      }
-    }
   }
+}
+
+export const bindChatPersistence = () => {
+  const save = () => flushPendingChat()
   const onVisibilityChange = () => {
     if (document.visibilityState === 'hidden') {
       save()
@@ -290,6 +299,61 @@ export const bindChatPersistence = () => {
   return () => {
     document.removeEventListener('visibilitychange', onVisibilityChange)
     window.removeEventListener('pagehide', save)
+  }
+}
+
+/** 同步前把流式增量与待保存会话落盘；生成中返回 false。 */
+export const flushChatForSync = async (): Promise<boolean> => {
+  if (Object.keys(get().streaming).length > 0) {
+    return false
+  }
+  while (deletionTasks.size > 0) {
+    await Promise.allSettled([...deletionTasks])
+  }
+  flushPendingChat()
+  while (sessionSaveTasks.size > 0) {
+    await Promise.allSettled([...sessionSaveTasks.values()])
+  }
+  return unsavedSessions.size === 0 && Object.keys(get().streaming).length === 0
+}
+
+/** 借用历史替换的全局写锁，避免同步导入与发送/分组修改交错。 */
+export const acquireChatStorageLock = (): boolean => {
+  if (get().importingHistory || Object.keys(get().streaming).length > 0) {
+    return false
+  }
+  set({ importingHistory: true })
+  return true
+}
+
+export const releaseChatStorageLock = () => {
+  set({ importingHistory: false })
+  retrySaveSessions()
+}
+
+/**
+ * 同步写入数据库后重建列表与已加载会话缓存。
+ * 必须持有 acquireChatStorageLock 返回的锁；这里不检查 importingHistory。
+ */
+export const refreshChatAfterSync = async (): Promise<void> => {
+  historyEpoch += 1
+  sessionLoads.clear()
+  sessionAccess.clear()
+  const [summaries, folders] = await Promise.all([db.loadSessionSummaries(), db.loadFolders()])
+  set({
+    ready: true,
+    initError: false,
+    sessions: sortSessions(summaries),
+    folders: sortFolders(folders),
+    sessionCache: {},
+    sessionLoadErrors: {},
+    sessionSaveErrors: {},
+  })
+  const activeId = get().activeId
+  if (activeId !== null && !summaries.some((session) => session.id === activeId)) {
+    set({ activeId: null })
+  } else if (activeId !== null) {
+    void ensureSessionLoaded(activeId)
   }
 }
 
