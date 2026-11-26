@@ -16,7 +16,7 @@ type Stream = (body: CreateMessageRequest, signal: AbortSignal) => AsyncIterable
 
 export const estimateTokens = (text: string): number => {
   let tokens = 0
-  for (const match of text.matchAll(/[a-zA-Z0-9]+|[\t\n\r ]+|[^\x00-\x7f]|./gu)) {
+  for (const match of text.matchAll(/[a-zA-Z0-9]+|[\t\n\r ]+|[^\p{ASCII}]|./gu)) {
     const part = match[0]
     tokens += part.charCodeAt(0) > 127 ? 2 : Math.ceil(part.length / 3)
   }
@@ -118,8 +118,11 @@ export const selectContext = async (history: Message[], checkpoint?: ContextChec
 type Context = Awaited<ReturnType<typeof selectContext>>
 
 export class ContextPreparationError extends Error {
-  constructor(readonly reason: 'tooLong' | 'summaryFailed') {
+  readonly reason: 'tooLong' | 'summaryFailed'
+
+  constructor(reason: 'tooLong' | 'summaryFailed') {
     super(reason)
+    this.reason = reason
   }
 }
 
@@ -146,6 +149,117 @@ export const estimateMessages = (
   )
 }
 
+type SummaryOptions = Pick<CreateMessageRequest, 'model' | 'safety_check'>
+
+/** 复用分批、输出校验和取消边界，只产出摘要正文，不写入会话。 */
+const summarizeRounds = async (
+  rounds: Round[],
+  previousSummary: string,
+  options: SummaryOptions,
+  budget: number,
+  stream: Stream,
+  signal: AbortSignal
+): Promise<string> => {
+  const batchBudget = Math.min(SUMMARY_INPUT_TOKENS, budget - SUMMARY_OUTPUT_TOKENS * 5)
+  if (batchBudget < 1_000) {
+    throw new ContextPreparationError('tooLong')
+  }
+  const fragmentSize = Math.floor(batchBudget / 3)
+  const fragmentPattern = new RegExp(`[\\s\\S]{1,${fragmentSize}}`, 'gu')
+  const inputs = rounds.flatMap((round) => {
+    const turn = JSON.stringify(transcript(round))
+    if (estimateTokens(turn) + 4 <= batchBudget) {
+      return [turn]
+    }
+    // An unusually large completed turn may need several summary requests of its own.
+    return (turn.match(fragmentPattern) ?? []).map(
+      (part, index) => `Turn ${round[0].id}, part ${index + 1}: ${part}`
+    )
+  })
+  const sizes = inputs.map((turn) => estimateTokens(turn) + 4)
+  let summary = previousSummary
+  for (let start = 0; start < inputs.length; ) {
+    signal.throwIfAborted()
+    const overhead =
+      estimateTokens(instruction) +
+      estimateTokens(JSON.stringify(summary)) +
+      SUMMARY_OUTPUT_TOKENS +
+      128
+    const allowance = Math.min(budget - overhead, SUMMARY_INPUT_TOKENS)
+    let end = start
+    let tokens = 0
+    while (end < inputs.length && tokens + sizes[end] <= allowance) {
+      tokens += sizes[end++]
+    }
+    if (end === start) {
+      throw new ContextPreparationError('tooLong')
+    }
+    const body: CreateMessageRequest = {
+      model: options.model,
+      system: instruction,
+      messages: [
+        {
+          role: 'user',
+          content: `Previous summary:\n${summary}\n\nTranscript:\n${inputs.slice(start, end).join('\n')}`,
+        },
+      ],
+      thinking: { type: 'disabled' },
+      safety_check: options.safety_check,
+      tools: [],
+      max_tokens: SUMMARY_OUTPUT_TOKENS,
+    }
+    let text = ''
+    let finished = false
+    let stopped = false
+    for await (const event of stream(body, signal)) {
+      if (event.type === 'content_block_start' && event.content_block.type === 'text') {
+        text += event.content_block.text
+      }
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        text += event.delta.text
+      }
+      if (text.length > SUMMARY_OUTPUT_TOKENS * 8) {
+        throw new ContextPreparationError('summaryFailed')
+      }
+      if (event.type === 'message_delta') {
+        finished = event.delta.stop_reason === 'end_turn'
+      }
+      if (event.type === 'message_stop') {
+        stopped = true
+      }
+    }
+    signal.throwIfAborted()
+    summary = text.trim()
+    if (!summary || !finished || !stopped) {
+      throw new ContextPreparationError('summaryFailed')
+    }
+    start = end
+  }
+  return summary
+}
+
+/**
+ * 总结整个可见上下文，供手动摘要续聊使用；沿用自动压缩的分批、校验和取消行为。
+ * 已有 checkpoint/续聊摘要作为前置背景，只发送尚未覆盖的轮次。
+ */
+export const summarizeContext = async (
+  context: Context,
+  options: SummaryOptions,
+  budget: number,
+  stream: Stream,
+  signal: AbortSignal
+): Promise<string> => {
+  signal.throwIfAborted()
+  const rounds = context.rounds.slice(context.masked)
+  if (rounds.length === 0) {
+    if (context.summary?.trim()) {
+      return context.summary
+    }
+    throw new ContextPreparationError('tooLong')
+  }
+  return summarizeRounds(rounds, context.summary ?? '', options, budget, stream, signal)
+}
+
 export const compactContext = async (
   context: Context,
   request: (history: Message[], summary?: string) => CreateMessageRequest,
@@ -156,7 +270,9 @@ export const compactContext = async (
 ): Promise<ContextCheckpoint | undefined> => {
   const current = request(context.history, context.summary)
   const currentSize = estimateRequest(current)
-  if (!force && currentSize <= budget) return undefined
+  if (!force && currentSize <= budget) {
+    return undefined
+  }
   const base = estimateRequest(request([], context.summary))
   if (estimateRequest(request([])) > budget || context.rounds.length === context.masked) {
     throw new ContextPreparationError('tooLong')
@@ -172,79 +288,44 @@ export const compactContext = async (
   let retained = 0
   for (; cutoff > context.masked; cutoff--) {
     const round = context.rounds[cutoff - 1]
-    const messages = estimateMessages(round, { ...round[0], content: '', files: [] }, undefined, false)
+    const messages = estimateMessages(
+      round,
+      { ...round[0], content: '', files: [] },
+      undefined,
+      false
+    )
     messages.pop() // The empty question only serves as the serializer's final message.
     const size = estimateRequest({ ...current, system: '', tools: [], messages })
-    if (retained + size > target) break
+    if (retained + size > target) {
+      break
+    }
     retained += size
   }
   // Once overflow is known, leave a smaller suffix even if every turn fit the normal tail budget.
-  if (cutoff === context.masked) cutoff++
-  const covered = context.rounds.slice(0, cutoff)
-  const batchBudget = Math.min(SUMMARY_INPUT_TOKENS, budget - SUMMARY_OUTPUT_TOKENS * 5)
-  if (batchBudget < 1_000) throw new ContextPreparationError('tooLong')
-  const fragmentSize = Math.floor(batchBudget / 3)
-  const fragmentPattern = new RegExp(`[\\s\\S]{1,${fragmentSize}}`, 'gu')
-  const inputs = covered.slice(context.masked).flatMap((round) => {
-    const turn = JSON.stringify(transcript(round))
-    if (estimateTokens(turn) + 4 <= batchBudget) return [turn]
-    // An unusually large completed turn may need several summary requests of its own.
-    return (turn.match(fragmentPattern) ?? []).map(
-      (part, index) => `Turn ${round[0].id}, part ${index + 1}: ${part}`
-    )
-  })
-  const sizes = inputs.map((turn) => estimateTokens(turn) + 4)
-  let summary = context.summary ?? ''
-  for (let start = 0; start < inputs.length; ) {
-    signal.throwIfAborted()
-    const overhead =
-      estimateTokens(instruction) +
-      estimateTokens(JSON.stringify(summary)) +
-      SUMMARY_OUTPUT_TOKENS +
-      128
-    const allowance = Math.min(budget - overhead, SUMMARY_INPUT_TOKENS)
-    let end = start
-    let tokens = 0
-    while (end < inputs.length && tokens + sizes[end] <= allowance) tokens += sizes[end++]
-    if (end === start) throw new ContextPreparationError('tooLong')
-    const body: CreateMessageRequest = {
-      model: current.model,
-      system: instruction,
-      messages: [
-        {
-          role: 'user',
-          content: `Previous summary:\n${summary}\n\nTranscript:\n${inputs.slice(start, end).join('\n')}`,
-        },
-      ],
-      thinking: { type: 'disabled' },
-      safety_check: current.safety_check,
-      tools: [],
-      max_tokens: SUMMARY_OUTPUT_TOKENS,
-    }
-    let text = ''
-    let finished = false
-    let stopped = false
-    for await (const event of stream(body, signal)) {
-      if (event.type === 'content_block_start' && event.content_block.type === 'text')
-        text += event.content_block.text
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta')
-        text += event.delta.text
-      if (text.length > SUMMARY_OUTPUT_TOKENS * 8)
-        throw new ContextPreparationError('summaryFailed')
-      if (event.type === 'message_delta') finished = event.delta.stop_reason === 'end_turn'
-      if (event.type === 'message_stop') stopped = true
-    }
-    signal.throwIfAborted()
-    summary = text.trim()
-    if (!summary || !finished || !stopped) throw new ContextPreparationError('summaryFailed')
-    start = end
+  if (cutoff === context.masked) {
+    cutoff++
   }
+  const covered = context.rounds.slice(0, cutoff)
+  const summary = await summarizeRounds(
+    covered.slice(context.masked),
+    context.summary ?? '',
+    { model: current.model, safety_check: current.safety_check },
+    budget,
+    stream,
+    signal
+  )
 
   const compacted = estimateRequest(request(context.rounds.slice(cutoff).flat(), summary))
-  if (compacted > budget || compacted >= currentSize) throw new ContextPreparationError('tooLong')
+  if (compacted > budget || compacted >= currentSize) {
+    throw new ContextPreparationError('tooLong')
+  }
+  const lastCovered = covered.at(-1)
+  if (!lastCovered) {
+    throw new ContextPreparationError('tooLong')
+  }
   return {
     version: 1,
-    throughReplyId: covered.at(-1)![1].id,
+    throughReplyId: lastCovered[1].id,
     fingerprint: await fingerprint(covered),
     summary,
   }

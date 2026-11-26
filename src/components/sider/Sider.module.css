@@ -88,6 +88,10 @@
   margin-top: 24px;
 }
 
+.listWrapWithFilters {
+  margin-top: 8px;
+}
+
 .list {
   height: 100%;
   margin: 0 -2px;
@@ -117,6 +121,55 @@
   color: var(--dsw-alias-label-tertiary);
   background-color: var(--dsw-specific-sidebar-fill);
   user-select: none;
+}
+
+.folderBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-top: 16px;
+  padding: 2px 2px 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.folderChip {
+  flex-shrink: 0;
+  box-sizing: border-box;
+  max-width: 140px;
+  height: 30px;
+  padding: 0 11px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
+  border-radius: 100px;
+  background-color: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+
+  &[aria-pressed='true'] {
+    border-color: transparent;
+    background-color: var(--dsw-alias-button-ghost-active-fill);
+    color: var(--dsw-alias-brand-text);
+  }
+
+  &[data-pressed]:not([aria-pressed='true']) {
+    background-color: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.manageFolders {
+  flex-shrink: 0;
+  margin-left: 2px;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .bottom {
@@ -295,6 +348,10 @@
     margin-top: 16px;
   }
 
+  .listWrapWithFilters {
+    margin-top: 8px;
+  }
+
   .list {
     padding: 0 10px;
   }
@@ -304,6 +361,17 @@
     font-size: 0.8125rem;
     line-height: 1.5;
     background-color: var(--dsw-alias-bg-layer-2);
+  }
+
+  .folderBar {
+    margin: 12px 10px 0;
+    padding-bottom: 2px;
+  }
+
+  .folderChip {
+    height: 34px;
+    padding: 0 13px;
+    font-size: 13px;
   }
 }
 
@@ -352,6 +420,17 @@
   box-sizing: border-box;
   height: calc(64px + var(--app-safe-bottom));
   padding: 0 17px var(--app-safe-bottom);
+}
+
+.selectionActions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+
+  > button {
+    min-width: 0;
+    flex: 1;
+  }
 }
 
 .accountRow {

@@ -1,11 +1,11 @@
-import { ActionButton, IconRefreshOutline16, IconShareOutline16, IconWarningOutline16, IconButton, Button } from "../base/index.js"
+import { ActionButton, IconRefreshOutline16, IconShareOutline16, IconWarningOutline16, IconForkOutline16, IconButton, Button } from "../base/index.js"
 import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo } from 'react'
 
 import { describeReply } from '../../services/chat/describe.js'
 import { canContinueReply } from '../../services/chat/reply.js'
-import { continueReply, regenerateReply } from '../../services/chat/store.js'
+import { continueReply, forkSession, regenerateReply } from '../../services/chat/store.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
 import { shareText } from '../../services/native.js'
 import type { AssistantMessage as AssistantMessageType } from '../../services/chat/types.js'
@@ -227,6 +227,13 @@ export const AssistantMessage = memo(function AssistantMessage({
                 }}
               />
             ) : null}
+            <IconButton
+              icon={<IconForkOutline16 />}
+              tooltip={t('forkChatAction')}
+              tooltipPlacement="bottom"
+              disabled={busy || refused}
+              onClick={() => forkSession(sessionId, message.id)}
+            />
             <IconButton
               icon={<IconRefreshOutline16 />}
               tooltip={t('regenerate')}

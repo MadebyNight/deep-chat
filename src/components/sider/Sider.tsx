@@ -1,11 +1,20 @@
-import { ActionButton, Input, IconCloseOutline16, IconPanelLeftOutline16, IconSearchOutline16, IconSettingsOutline16, NewChatIcon, Button, IconButton, Modal } from "../base/index.js"
+import { ActionButton, Input, IconCloseOutline16, IconPanelLeftOutline16, IconSearchOutline16, IconSettingsOutline16, NewChatIcon, Button, IconFolderPlusOutline16, IconButton, Modal, Select } from "../base/index.js"
 import clsx from 'clsx'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { setSiderCollapsed } from '../../services/settings.js'
 import { useOfficialAccount } from '../../services/officialAccount.js'
-import { groupSessions } from '../../services/chat/sessionGroups.js'
-import { newChat, removeSession, useChatStore } from '../../services/chat/store.js'
+import {
+  ALL_SESSIONS,
+  groupSessions,
+  type SessionFilter,
+} from '../../services/chat/sessionGroups.js'
+import {
+  moveSessionsToFolder,
+  newChat,
+  removeSession,
+  useChatStore,
+} from '../../services/chat/store.js'
 import { showToast } from '../base/toastState.js'
 import { openSettings } from '../settings/settingsDialogState.js'
 import {
@@ -15,6 +24,7 @@ import {
   useMobileSider,
 } from './mobileSiderState.js'
 import { SessionItem } from './SessionItem.js'
+import { FolderDialog } from './FolderDialog.js'
 import styles from './Sider.module.css'
 
 const AccountAvatar = ({ url }: { url: string | null }) => {
@@ -46,7 +56,9 @@ const SiderSettings = ({ mobile }: { mobile: boolean }) => {
   const signedIn = useOfficialAccount((state) => state.active && state.signedIn)
   const profile = useOfficialAccount((state) => state.profile)
   const showSettings = () => {
-    if (mobile) closeMobileSider()
+    if (mobile) {
+      closeMobileSider()
+    }
     openSettings('general')
   }
   if (!signedIn) {
@@ -77,12 +89,18 @@ const SiderSettings = ({ mobile }: { mobile: boolean }) => {
 export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const t = useTranslate()
   const sessions = useChatStore((state) => state.sessions)
+  const folders = useChatStore((state) => state.folders)
   const activeId = useChatStore((state) => state.activeId)
   const mode = useMobileSider((state) => (mobile ? state.mode : 'list'))
   const [query, setQuery] = useState('')
   const [selection, setSelection] = useState<string[]>([])
   const [deleting, setDeleting] = useState<string[]>([])
   const [deletePending, setDeletePending] = useState(false)
+  const [folderFilter, setFolderFilter] = useState<SessionFilter>(ALL_SESSIONS)
+  const [foldersOpen, setFoldersOpen] = useState(false)
+  const [moving, setMoving] = useState<string[]>([])
+  const [moveTarget, setMoveTarget] = useState('ungrouped')
+  const [movePending, setMovePending] = useState(false)
   const [now, setNow] = useState(Date.now())
   const selecting = mode === 'select'
   const searching = mode === 'search'
@@ -96,9 +114,10 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
             )
           : sessions,
         now,
-        t
+        t,
+        folderFilter
       ),
-    [sessions, keyword, now, t]
+    [sessions, keyword, now, t, folderFilter]
   )
 
   useEffect(() => {
@@ -109,6 +128,15 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
       setSelection([])
     }
   }, [searching, selecting])
+
+  useEffect(() => {
+    if (
+      folderFilter.type === 'folder' &&
+      !folders.some((folder) => folder.id === folderFilter.folderId)
+    ) {
+      setFolderFilter(ALL_SESSIONS)
+    }
+  }, [folderFilter, folders])
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
@@ -170,6 +198,66 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
       setDeletePending(false)
     }
   }
+  const confirmMove = async () => {
+    if (moving.length === 0 || movePending) {
+      return
+    }
+    setMovePending(true)
+    try {
+      const folderId = moveTarget === 'ungrouped' ? null : moveTarget
+      if (await moveSessionsToFolder(moving, folderId)) {
+        showToast({ key: 'sessionsMoved', params: { count: moving.length } })
+        if (selecting) {
+          setSelection([])
+          setHistoryMode('list')
+        }
+        setMoving([])
+      } else {
+        showToast({ key: 'moveSessionsFailed', type: 'error' })
+      }
+    } finally {
+      setMovePending(false)
+    }
+  }
+
+  const folderBar = !selecting ? (
+    <div className={styles.folderBar} role="group" aria-label={t('manageFolders')}>
+      <ActionButton
+        type="button"
+        className={styles.folderChip}
+        aria-pressed={folderFilter.type === 'all'}
+        onClick={() => setFolderFilter(ALL_SESSIONS)}
+      >
+        {t('allChats')}
+      </ActionButton>
+      <ActionButton
+        type="button"
+        className={styles.folderChip}
+        aria-pressed={folderFilter.type === 'pinned'}
+        onClick={() => setFolderFilter({ type: 'pinned' })}
+      >
+        {t('pinnedChats')}
+      </ActionButton>
+      {folders.map((folder) => (
+        <ActionButton
+          key={folder.id}
+          type="button"
+          className={styles.folderChip}
+          aria-pressed={folderFilter.type === 'folder' && folderFilter.folderId === folder.id}
+          onClick={() => setFolderFilter({ type: 'folder', folderId: folder.id })}
+        >
+          {folder.name}
+        </ActionButton>
+      ))}
+      <IconButton
+        size="xs"
+        className={styles.manageFolders}
+        icon={<IconFolderPlusOutline16 />}
+        tooltip={t('manageFolders')}
+        onClick={() => setFoldersOpen(true)}
+      />
+    </div>
+  ) : null
 
   return (
     <div className={clsx(styles.sider, mobile && styles.mobile)}>
@@ -226,7 +314,8 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
           {newChatButton}
         </>
       )}
-      <div className={styles.listWrap}>
+      {folderBar}
+      <div className={clsx(styles.listWrap, !selecting && styles.listWrapWithFilters)}>
         <div className={styles.list}>
           {mobile && groups.length === 0 ? (
             <p className={styles.historyEmpty} role="status">
@@ -242,6 +331,10 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
                   session={session}
                   active={session.id === activeId}
                   onDelete={() => setDeleting([session.id])}
+                  onMove={() => {
+                    setMoveTarget('ungrouped')
+                    setMoving([session.id])
+                  }}
                   onStartSelection={
                     mobile && !searching
                       ? () => {
@@ -268,13 +361,25 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
         searching ? null : (
           <div className={styles.bottomMobile}>
             {selecting ? (
-              <Button
-                variant="dangerOutlined"
-                disabled={selection.length === 0 || deletePending}
-                onClick={() => setDeleting(selection)}
-              >
-                {t('delete')} ({selection.length})
-              </Button>
+              <div className={styles.selectionActions}>
+                <Button
+                  variant="outlined"
+                  disabled={selection.length === 0 || movePending || deletePending}
+                  onClick={() => {
+                    setMoveTarget('ungrouped')
+                    setMoving(selection)
+                  }}
+                >
+                  {t('move')}
+                </Button>
+                <Button
+                  variant="dangerOutlined"
+                  disabled={selection.length === 0 || deletePending || movePending}
+                  onClick={() => setDeleting(selection)}
+                >
+                  {t('delete')} ({selection.length})
+                </Button>
+              </div>
             ) : (
               <SiderSettings mobile />
             )}
@@ -313,6 +418,37 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
           {t('deleteSessionWithFilesDescription')}
         </Modal>
       ) : null}
+      {moving.length ? (
+        <Modal
+          title={t('moveSessionsTitle', { count: moving.length })}
+          onClose={() => {
+            if (!movePending) {
+              setMoving([])
+            }
+          }}
+          footer={
+            <>
+              <Button variant="outlined" disabled={movePending} onClick={() => setMoving([])}>
+                {t('cancel')}
+              </Button>
+              <Button disabled={movePending} onClick={() => void confirmMove()}>
+                {t('move')}
+              </Button>
+            </>
+          }
+        >
+          <Select
+            value={moveTarget}
+            ariaLabel={t('moveToFolder')}
+            options={[
+              { value: 'ungrouped', label: t('moveToUngrouped') },
+              ...folders.map((folder) => ({ value: folder.id, label: folder.name })),
+            ]}
+            onChange={setMoveTarget}
+          />
+        </Modal>
+      ) : null}
+      <FolderDialog open={foldersOpen} onClose={() => setFoldersOpen(false)} />
     </div>
   )
 }

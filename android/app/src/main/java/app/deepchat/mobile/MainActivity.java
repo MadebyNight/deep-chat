@@ -74,6 +74,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(StartupRecoveryPlugin.class);
         registerPlugin(SecureCredentialsPlugin.class);
+        registerPlugin(WebDavHttpPlugin.class);
         registerPlugin(OfficialBrowserPlugin.class);
         registerPlugin(DeepSeekAccountPlugin.class);
         registerPlugin(HistoryExportDownloadPlugin.class);

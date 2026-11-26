@@ -1,4 +1,4 @@
-import { ActionButton, Input, IconEditOutline16, IconEllipsisOutline16, IconTrashOutline16, IconButton, Menu } from "../base/index.js"
+import { ActionButton, Input, IconEditOutline16, IconEllipsisOutline16, IconFolderOutline16, IconTrashOutline16, IconButton, Menu } from "../base/index.js"
 import clsx from 'clsx'
 import { memo, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
@@ -11,6 +11,7 @@ export const SessionItem = memo(function SessionItem({
   session,
   active,
   onDelete,
+  onMove,
   onStartSelection,
   selected,
   onToggleSelection,
@@ -18,6 +19,7 @@ export const SessionItem = memo(function SessionItem({
   session: SessionSummary
   active: boolean
   onDelete: () => void
+  onMove: () => void
   onStartSelection?: () => void
   selected?: boolean
   onToggleSelection: () => void
@@ -84,6 +86,12 @@ export const SessionItem = memo(function SessionItem({
                 key: 'pin',
                 label: t(session.pinned ? 'unpinChat' : 'pinChat'),
                 onSelect: () => void toggleSessionPinned(session.id),
+              },
+              {
+                key: 'move',
+                label: t('moveToFolder'),
+                icon: <IconFolderOutline16 />,
+                onSelect: onMove,
               },
               ...(onStartSelection
                 ? [{ key: 'select', label: t('selectChats'), onSelect: onStartSelection }]

@@ -4,10 +4,30 @@ import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 
 export const isNative = Capacitor.isNativePlatform()
+
+export type CredentialSlot = 'customProvider' | 'webdav'
+
 export const credentials = registerPlugin<{
-  read(options?: { slot: 'customProvider' }): Promise<{ value: string | null }>
-  write(options: { value: string | null; slot?: 'customProvider' }): Promise<void>
+  read(options?: { slot?: CredentialSlot }): Promise<{ value: string | null }>
+  write(options: { value: string | null; slot?: CredentialSlot }): Promise<void>
 }>('SecureCredentials')
+
+export type WebDavNativeResponse = {
+  status: number
+  headers?: Record<string, string>
+  body?: string
+}
+
+export const webDavHttp = registerPlugin<{
+  request(options: {
+    baseUrl: string
+    path: string
+    method: 'PROPFIND' | 'MKCOL' | 'GET' | 'PUT' | 'DELETE'
+    headers?: Record<string, string>
+    body?: string
+    timeoutMs?: number
+  }): Promise<WebDavNativeResponse>
+}>('WebDavHttp')
 
 const officialBrowser = registerPlugin<{ open(options: { url: string }): Promise<void> }>(
   'OfficialBrowser'

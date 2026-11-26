@@ -210,7 +210,7 @@ export async function* streamMessage(
   yield* readMessageStream(response.body, signal, reportUsage)
 }
 
-type CustomMessage = { role: 'user' | 'assistant'; content: string }
+export type CustomMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 type CustomChunk = {
   model?: string
   error?: unknown

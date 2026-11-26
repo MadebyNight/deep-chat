@@ -1,8 +1,8 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
-import { toSessionSummary, type Session, type SessionSummary } from './types.js'
+import { toSessionSummary, type Folder, type Session, type SessionSummary } from './types.js'
 
 /** IndexedDB 存储结构版本；新增或调整存储、索引时递增。 */
-const DB_VERSION = 11
+export const DB_VERSION = 12
 
 /** 文件原件按附件的本地 id 存储，所有引用同一 id 的消息共用一份；用于缩略图、打开查看，以及没有 serverId 时补传。 */
 export type StoredFile = {
@@ -19,8 +19,10 @@ interface ChatDB extends DBSchema {
   sessionSummaries: {
     key: string
     value: StoredSessionSummary
-    indexes: { fileIds: string }
+    indexes: { fileIds: string; folderId: string }
   }
+  /** 本地会话分组；不写入官方历史导出。 */
+  folders: { key: string; value: Folder }
   /** 当前使用的文件原件 */
   files: { key: string; value: StoredFile }
   /**
@@ -44,6 +46,23 @@ const storedSummary = (session: Session): StoredSessionSummary => ({
   ],
 })
 
+/**
+ * 返回本次操作后已无任何会话摘要引用的原件 ID。
+ * 删除会话前先删摘要，再调用此函数；fork 共享的 file.id 会因另一份摘要仍引用而被保留。
+ */
+export const unreferencedFileIds = (
+  candidates: Iterable<string>,
+  summaries: Iterable<{ fileIds: readonly string[] }>
+): string[] => {
+  const referenced = new Set<string>()
+  for (const summary of summaries) {
+    for (const id of summary.fileIds) {
+      referenced.add(id)
+    }
+  }
+  return [...new Set(candidates)].filter((id) => !referenced.has(id))
+}
+
 const abortTransaction = (tx: { abort(): void }) => {
   try {
     tx.abort()
@@ -62,11 +81,17 @@ const getDB = () =>
           db.createObjectStore(name, { keyPath: 'id' })
         }
       }
+      if (!db.objectStoreNames.contains('folders')) {
+        db.createObjectStore('folders', { keyPath: 'id' })
+      }
       const summaries = db.objectStoreNames.contains('sessionSummaries')
         ? tx.objectStore('sessionSummaries')
         : db.createObjectStore('sessionSummaries', { keyPath: 'id' })
       if (!summaries.indexNames.contains('fileIds')) {
         summaries.createIndex('fileIds', 'fileIds', { multiEntry: true })
+      }
+      if (!summaries.indexNames.contains('folderId')) {
+        summaries.createIndex('folderId', 'folderId')
       }
     },
   }).catch((error: unknown) => {
@@ -78,8 +103,98 @@ const getDB = () =>
 export const loadSessionSummaries = async (): Promise<SessionSummary[]> =>
   (await (await getDB()).getAll('sessionSummaries')).map(toSessionSummary)
 
+export const loadFolders = async (): Promise<Folder[]> =>
+  (await (await getDB()).getAll('folders')).sort(
+    (a, b) => a.order - b.order || a.name.localeCompare(b.name)
+  )
+
 export const loadSession = async (id: string): Promise<Session | undefined> =>
   (await getDB()).get('sessions', id)
+
+export const loadAllSessions = async (): Promise<Session[]> =>
+  (await getDB()).getAll('sessions')
+
+export type SyncDbChanges = {
+  sessions: Session[]
+  deleteSessionIds: string[]
+  folders: Folder[]
+  deleteFolderIds: string[]
+  files?: StoredFile[]
+}
+
+/**
+ * 同步引擎的原子应用入口：会话、摘要、分组和附件原件在同一事务内提交。
+ * 删除分组只解除会话归属；删除会话时仍按摘要引用释放无人使用的原件。
+ */
+export const applySyncChanges = async ({
+  sessions: changedSessions,
+  deleteSessionIds,
+  folders,
+  deleteFolderIds,
+  files = [],
+}: SyncDbChanges): Promise<void> => {
+  const tx = (await getDB()).transaction(
+    ['sessions', 'sessionSummaries', 'folders', 'files'],
+    'readwrite'
+  )
+  await Promise.all([
+    (async () => {
+      try {
+        const sessions = tx.objectStore('sessions')
+        const summaries = tx.objectStore('sessionSummaries')
+        const candidates = new Set<string>()
+        for (const id of new Set(deleteSessionIds)) {
+          const summary = await summaries.get(id)
+          for (const fileId of summary?.fileIds ?? []) {
+            candidates.add(fileId)
+          }
+          await sessions.delete(id)
+          await summaries.delete(id)
+        }
+        for (const folderId of new Set(deleteFolderIds)) {
+          const keys = await summaries.index('folderId').getAllKeys(folderId)
+          for (const key of keys) {
+            const id = String(key)
+            const summary = await summaries.get(id)
+            const session = await sessions.get(id)
+            if (summary) {
+              await summaries.put({ ...summary, folderId: null })
+            }
+            if (session) {
+              await sessions.put({ ...session, folderId: null })
+            }
+          }
+          await tx.objectStore('folders').delete(folderId)
+        }
+        for (const folder of folders) {
+          await tx.objectStore('folders').put(folder)
+        }
+        for (const file of files) {
+          await tx.objectStore('files').put(file)
+        }
+        for (const session of changedSessions) {
+          const nextSummary = storedSummary(session)
+          const previous = await summaries.get(session.id)
+          for (const fileId of previous?.fileIds ?? []) {
+            if (!nextSummary.fileIds.includes(fileId)) {
+              candidates.add(fileId)
+            }
+          }
+          await sessions.put(session)
+          await summaries.put(nextSummary)
+        }
+        const released = unreferencedFileIds(candidates, await summaries.getAll())
+        for (const id of released) {
+          await tx.objectStore('files').delete(id)
+        }
+      } catch (error) {
+        abortTransaction(tx)
+        throw error
+      }
+    })(),
+    tx.done,
+  ])
+}
 
 export const saveSession = async (session: Session, files: StoredFile[] = []): Promise<void> => {
   const summary = storedSummary(session)
@@ -95,10 +210,12 @@ export const saveSession = async (session: Session, files: StoredFile[] = []): P
         await tx.objectStore('sessions').put(session)
         await summaries.put(summary)
         // 若会话内删除了包含附件的轮次，在同一事务中清理不再被任何会话引用的本地原件
-        for (const id of previousSummary?.fileIds ?? []) {
-          if (!summary.fileIds.includes(id) && (await summaries.index('fileIds').count(id)) === 0) {
-            await tx.objectStore('files').delete(id)
-          }
+        const released = unreferencedFileIds(
+          (previousSummary?.fileIds ?? []).filter((id) => !summary.fileIds.includes(id)),
+          await summaries.getAll()
+        )
+        for (const id of released) {
+          await tx.objectStore('files').delete(id)
         }
       } catch (error) {
         abortTransaction(tx)
@@ -112,7 +229,7 @@ export const saveSession = async (session: Session, files: StoredFile[] = []): P
 /** 原子更新未加载会话的详情与摘要。 */
 export const updateSessionMetadata = async (
   id: string,
-  patch: Partial<Pick<Session, 'title' | 'pinned'>>
+  patch: Partial<Pick<Session, 'title' | 'pinned' | 'folderId'>>
 ): Promise<void> => {
   const tx = (await getDB()).transaction(['sessions', 'sessionSummaries'], 'readwrite')
   await Promise.all([
@@ -134,6 +251,69 @@ export const updateSessionMetadata = async (
   ])
 }
 
+export const saveFolder = async (folder: Folder): Promise<void> => {
+  await (await getDB()).put('folders', folder)
+}
+
+/** 删除分组并把其下会话原子地移回未分组；不会删除会话、消息或附件。 */
+export const deleteFolder = async (folderId: string): Promise<void> => {
+  const tx = (await getDB()).transaction(['folders', 'sessions', 'sessionSummaries'], 'readwrite')
+  await Promise.all([
+    (async () => {
+      try {
+        const summaries = tx.objectStore('sessionSummaries')
+        const keys = await summaries.index('folderId').getAllKeys(folderId)
+        for (const key of keys) {
+          const id = String(key)
+          const summary = await summaries.get(id)
+          const session = await tx.objectStore('sessions').get(id)
+          if (summary) {
+            await summaries.put({ ...summary, folderId: null })
+          }
+          if (session) {
+            await tx.objectStore('sessions').put({ ...session, folderId: null })
+          }
+        }
+        await tx.objectStore('folders').delete(folderId)
+      } catch (error) {
+        abortTransaction(tx)
+        throw error
+      }
+    })(),
+    tx.done,
+  ])
+}
+
+/** 批量移动会话；只改分组元数据，不更新时间、不触碰消息与附件。 */
+export const moveSessionsToFolder = async (
+  ids: readonly string[],
+  folderId: string | null
+): Promise<void> => {
+  const tx = (await getDB()).transaction(['sessions', 'sessionSummaries'], 'readwrite')
+  await Promise.all([
+    (async () => {
+      try {
+        const sessions = tx.objectStore('sessions')
+        const summaries = tx.objectStore('sessionSummaries')
+        for (const id of new Set(ids)) {
+          const summary = await summaries.get(id)
+          const session = await sessions.get(id)
+          if (summary) {
+            await summaries.put({ ...summary, folderId })
+          }
+          if (session) {
+            await sessions.put({ ...session, folderId })
+          }
+        }
+      } catch (error) {
+        abortTransaction(tx)
+        throw error
+      }
+    })(),
+    tx.done,
+  ])
+}
+
 /** 删除会话，仅清理已无会话引用的本地原件；远端文件不删。 */
 export const deleteSession = async (sessionId: string): Promise<void> => {
   const tx = (await getDB()).transaction(['sessions', 'sessionSummaries', 'files'], 'readwrite')
@@ -144,10 +324,9 @@ export const deleteSession = async (sessionId: string): Promise<void> => {
         const summary = await summaries.get(sessionId)
         await tx.objectStore('sessions').delete(sessionId)
         await summaries.delete(sessionId)
-        for (const id of summary?.fileIds ?? []) {
-          if ((await summaries.index('fileIds').count(id)) === 0) {
-            await tx.objectStore('files').delete(id)
-          }
+        const released = unreferencedFileIds(summary?.fileIds ?? [], await summaries.getAll())
+        for (const id of released) {
+          await tx.objectStore('files').delete(id)
         }
       } catch (error) {
         abortTransaction(tx)

@@ -34,6 +34,51 @@ export const getVisibleMessages = (session: Session): Message[] => {
   return path
 }
 
+export type ForkedBranch = Pick<
+  Session,
+  'messages' | 'rootMessageId' | 'contextCheckpoint' | 'handoff'
+>
+
+/**
+ * 抽取当前可见分支中根到目标节点的线性路径，供新会话使用。
+ * 目标为用户消息时按一轮处理，连同当前选中的回答一起复制；没有回答的孤立提问不能作为终点。
+ * 消息对象和附件元数据会复制，但附件只保留同一个 file.id，不复制原件。
+ */
+export const forkVisibleBranch = (
+  original: Session,
+  targetMessageId: string
+): ForkedBranch | null => {
+  const session = normalizeSession(original)
+  const path = getVisibleMessages(session)
+  let end = path.findIndex((message) => message.id === targetMessageId)
+  if (end < 0) {
+    return null
+  }
+  if (path[end].role === 'user') {
+    if (path[end + 1]?.role !== 'assistant') {
+      return null
+    }
+    end += 1
+  }
+  const selected = path.slice(0, end + 1)
+  const messages = selected.map((message, index) => ({
+    ...structuredClone(message),
+    parentId: index === 0 ? null : selected[index - 1].id,
+    selectedChildId: index === selected.length - 1 ? undefined : selected[index + 1].id,
+  }))
+  const included = new Set(messages.map((message) => message.id))
+  const checkpoint =
+    session.contextCheckpoint && included.has(session.contextCheckpoint.throughReplyId)
+      ? structuredClone(session.contextCheckpoint)
+      : undefined
+  return {
+    messages,
+    rootMessageId: messages[0].id,
+    contextCheckpoint: checkpoint,
+    handoff: session.handoff ? structuredClone(session.handoff) : undefined,
+  }
+}
+
 export type MessageVersions = { ids: string[]; index: number }
 
 export type VisibleTurn = {

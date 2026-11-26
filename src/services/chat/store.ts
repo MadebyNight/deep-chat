@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { showToast } from '../../components/base/toastState.js'
+import { translate } from '../../i18n/index.js'
 import { createId } from '../../utils/id.js'
 import {
   API_ORIGIN,
@@ -7,6 +8,7 @@ import {
   streamCustomMessage,
   streamMessage,
   streamOfficialMessage,
+  type CustomMessage,
 } from '../api/client.js'
 import type { CreateMessageRequest, MessageStreamEvent } from '../api/types.js'
 import {
@@ -47,6 +49,7 @@ import {
 } from '../generation.js'
 import {
   appendBranch,
+  forkVisibleBranch,
   getVisibleMessages,
   normalizeSession,
   removeTurns as removeSessionTurns,
@@ -59,6 +62,7 @@ import {
   estimateMessages,
   inputBudget,
   selectContext,
+  summarizeContext,
 } from './compaction.js'
 import {
   clearAllDrafts,
@@ -68,6 +72,7 @@ import {
   prepareDraftMessage,
 } from './drafts.js'
 import { createLatestReminder } from './latestReminder.js'
+import { createHandoffSession, customSummaryMessages } from './handoff.js'
 import {
   applyEvent,
   canContinueReply,
@@ -80,6 +85,7 @@ import {
   toSessionSummary,
   type AssistantMessage,
   type FileAttachment,
+  type Folder,
   type Message,
   type MessageRoute,
   type Session,
@@ -119,6 +125,7 @@ type ChatState = {
   importingHistory: boolean
   /** 仅列表元数据，按 updatedAt 降序；流式消息更新不会改变此数组。 */
   sessions: SessionSummary[]
+  folders: Folder[]
   sessionCache: Record<string, Session>
   sessionLoadErrors: Record<string, boolean>
   sessionSaveErrors: Record<string, boolean>
@@ -133,6 +140,7 @@ export const useChatStore = create<ChatState>(() => ({
   initError: false,
   importingHistory: false,
   sessions: [],
+  folders: [],
   sessionCache: {},
   sessionLoadErrors: {},
   sessionSaveErrors: {},
@@ -144,6 +152,9 @@ const { getState: get, setState: set } = useChatStore
 
 const sortSessions = (sessions: SessionSummary[]) =>
   [...sessions].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updatedAt - a.updatedAt)
+
+const sortFolders = (folders: Folder[]) =>
+  [...folders].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
 
 const getSession = (id: string) => {
   const cache = get().sessionCache
@@ -159,7 +170,8 @@ const sameSummary = (a: SessionSummary, b: SessionSummary) =>
   a.title === b.title &&
   a.createdAt === b.createdAt &&
   a.updatedAt === b.updatedAt &&
-  !!a.pinned === !!b.pinned
+  !!a.pinned === !!b.pinned &&
+  (a.folderId ?? null) === (b.folderId ?? null)
 
 const sessionAccess = new Map<string, number>()
 const unsavedSessions = new Set<string>()
@@ -168,6 +180,7 @@ const pendingFiles = new Map<string, db.StoredFile[]>()
 const deletingSessions = new Set<string>()
 const deletionTasks = new Set<Promise<boolean>>()
 const streamFlushes = new Map<string, () => void>()
+const sessionSaveTasks = new Map<string, Promise<void>>()
 let accessSequence = 0
 let historyEpoch = 0
 let initTask: Promise<void> | undefined
@@ -244,7 +257,7 @@ const persist = (sessionId: string) => {
     }
     const epoch = historyEpoch
     const files = pendingFiles.get(sessionId)
-    void db
+    const saving = db
       .saveSession(session, files)
       .then(() => {
         if (epoch !== historyEpoch || !getSession(sessionId)) {
@@ -271,6 +284,12 @@ const persist = (sessionId: string) => {
           }))
         }
       })
+    sessionSaveTasks.set(sessionId, saving)
+    void saving.finally(() => {
+      if (sessionSaveTasks.get(sessionId) === saving) {
+        sessionSaveTasks.delete(sessionId)
+      }
+    })
   }
 }
 
@@ -281,21 +300,23 @@ export const retrySaveSessions = () => {
 }
 
 /** 离开前先合并尚未绘制的增量；隐藏期间浏览器可能暂停动画帧。 */
-export const bindChatPersistence = () => {
-  const save = () => {
-    if (get().importingHistory) {
-      return
-    }
-    for (const [id, flush] of streamFlushes) {
-      flush()
+const flushPendingChat = () => {
+  if (get().importingHistory) {
+    return
+  }
+  for (const [id, flush] of streamFlushes) {
+    flush()
+    persist(id)
+  }
+  for (const id of unsavedSessions) {
+    if (!streamFlushes.has(id)) {
       persist(id)
     }
-    for (const id of unsavedSessions) {
-      if (!streamFlushes.has(id)) {
-        persist(id)
-      }
-    }
   }
+}
+
+export const bindChatPersistence = () => {
+  const save = () => flushPendingChat()
   const onVisibilityChange = () => {
     if (document.visibilityState === 'hidden') {
       save()
@@ -306,6 +327,61 @@ export const bindChatPersistence = () => {
   return () => {
     document.removeEventListener('visibilitychange', onVisibilityChange)
     window.removeEventListener('pagehide', save)
+  }
+}
+
+/** 同步前把流式增量与待保存会话落盘；生成中返回 false。 */
+export const flushChatForSync = async (): Promise<boolean> => {
+  if (Object.keys(get().streaming).length > 0) {
+    return false
+  }
+  while (deletionTasks.size > 0) {
+    await Promise.allSettled([...deletionTasks])
+  }
+  flushPendingChat()
+  while (sessionSaveTasks.size > 0) {
+    await Promise.allSettled([...sessionSaveTasks.values()])
+  }
+  return unsavedSessions.size === 0 && Object.keys(get().streaming).length === 0
+}
+
+/** 借用历史替换的全局写锁，避免同步导入与发送/分组修改交错。 */
+export const acquireChatStorageLock = (): boolean => {
+  if (get().importingHistory || Object.keys(get().streaming).length > 0) {
+    return false
+  }
+  set({ importingHistory: true })
+  return true
+}
+
+export const releaseChatStorageLock = () => {
+  set({ importingHistory: false })
+  retrySaveSessions()
+}
+
+/**
+ * 同步写入数据库后重建列表与已加载会话缓存。
+ * 必须持有 acquireChatStorageLock 返回的锁；这里不检查 importingHistory。
+ */
+export const refreshChatAfterSync = async (): Promise<void> => {
+  historyEpoch += 1
+  sessionLoads.clear()
+  sessionAccess.clear()
+  const [summaries, folders] = await Promise.all([db.loadSessionSummaries(), db.loadFolders()])
+  set({
+    ready: true,
+    initError: false,
+    sessions: sortSessions(summaries),
+    folders: sortFolders(folders),
+    sessionCache: {},
+    sessionLoadErrors: {},
+    sessionSaveErrors: {},
+  })
+  const activeId = get().activeId
+  if (activeId !== null && !summaries.some((session) => session.id === activeId)) {
+    set({ activeId: null })
+  } else if (activeId !== null) {
+    void ensureSessionLoaded(activeId)
   }
 }
 
@@ -365,9 +441,9 @@ export const initChat = (): Promise<void> => {
   set({ initError: false })
   initTask = (async () => {
     try {
-      const summaries = await db.loadSessionSummaries()
+      const [summaries, folders] = await Promise.all([db.loadSessionSummaries(), db.loadFolders()])
       if (epoch === historyEpoch) {
-        set({ ready: true, sessions: sortSessions(summaries) })
+        set({ ready: true, sessions: sortSessions(summaries), folders: sortFolders(folders) })
       }
     } catch (error) {
       if (epoch === historyEpoch) {
@@ -596,6 +672,122 @@ export const toggleSessionPinned = async (id: string) => {
       }))
       showToast({ key: 'sessionSaveFailed', type: 'error' })
     }
+  }
+}
+
+export type FolderMutationResult = 'ok' | 'empty' | 'duplicate' | 'missing' | 'failed'
+
+const folderNameMatches = (folders: Folder[], name: string, exceptId?: string) => {
+  const normalized = name.toLocaleLowerCase()
+  return folders.some(
+    (folder) => folder.id !== exceptId && folder.name.trim().toLocaleLowerCase() === normalized
+  )
+}
+
+export const createFolder = async (name: string): Promise<FolderMutationResult> => {
+  const trimmed = name.trim()
+  if (!trimmed) {
+    return 'empty'
+  }
+  if (get().importingHistory || folderNameMatches(get().folders, trimmed)) {
+    return get().importingHistory ? 'failed' : 'duplicate'
+  }
+  const folder: Folder = {
+    id: createId(),
+    name: trimmed,
+    createdAt: Date.now(),
+    order: Math.max(-1, ...get().folders.map((item) => item.order)) + 1,
+  }
+  try {
+    await db.saveFolder(folder)
+    set((state) => ({ folders: sortFolders([...state.folders, folder]) }))
+    return 'ok'
+  } catch (error) {
+    db.reportStorageError('create folder')(error)
+    return 'failed'
+  }
+}
+
+export const renameFolder = async (id: string, name: string): Promise<FolderMutationResult> => {
+  const trimmed = name.trim()
+  if (!trimmed) {
+    return 'empty'
+  }
+  const folder = get().folders.find((item) => item.id === id)
+  if (!folder || get().importingHistory) {
+    return 'missing'
+  }
+  if (folderNameMatches(get().folders, trimmed, id)) {
+    return 'duplicate'
+  }
+  const next = { ...folder, name: trimmed }
+  try {
+    await db.saveFolder(next)
+    set((state) => ({
+      folders: sortFolders(state.folders.map((item) => (item.id === id ? next : item))),
+    }))
+    return 'ok'
+  } catch (error) {
+    db.reportStorageError('rename folder')(error)
+    return 'failed'
+  }
+}
+
+/** 删除分组只解除会话归属；会话、消息和附件均保留。 */
+export const deleteFolder = async (id: string): Promise<boolean> => {
+  if (get().importingHistory || !get().folders.some((folder) => folder.id === id)) {
+    return false
+  }
+  try {
+    await db.deleteFolder(id)
+    set((state) => ({
+      folders: state.folders.filter((folder) => folder.id !== id),
+      sessions: state.sessions.map((session) =>
+        session.folderId === id ? { ...session, folderId: null } : session
+      ),
+      sessionCache: Object.fromEntries(
+        Object.entries(state.sessionCache).map(([sessionId, session]) => [
+          sessionId,
+          session.folderId === id ? { ...session, folderId: null } : session,
+        ])
+      ),
+    }))
+    return true
+  } catch (error) {
+    db.reportStorageError('delete folder')(error)
+    return false
+  }
+}
+
+export const moveSessionsToFolder = async (
+  ids: readonly string[],
+  folderId: string | null
+): Promise<boolean> => {
+  if (
+    get().importingHistory ||
+    ids.length === 0 ||
+    (folderId !== null && !get().folders.some((folder) => folder.id === folderId))
+  ) {
+    return false
+  }
+  const selected = new Set(ids)
+  try {
+    await db.moveSessionsToFolder(ids, folderId)
+    set((state) => ({
+      sessions: state.sessions.map((session) =>
+        selected.has(session.id) ? { ...session, folderId } : session
+      ),
+      sessionCache: Object.fromEntries(
+        Object.entries(state.sessionCache).map(([sessionId, session]) => [
+          sessionId,
+          selected.has(sessionId) ? { ...session, folderId } : session,
+        ])
+      ),
+    }))
+    return true
+  } catch (error) {
+    db.reportStorageError('move sessions to folder')(error)
+    return false
   }
 }
 
@@ -941,6 +1133,191 @@ export const removeTurns = (sessionId: string, userIds: readonly string[]): bool
   updateSession(sessionId, () => ({ ...next, updatedAt: Date.now() }))
   persist(sessionId)
   return true
+}
+
+const insertSession = (session: Session) => {
+  touchSession(session.id)
+  set((state) => ({
+    sessions: sortSessions([toSessionSummary(session), ...state.sessions]),
+    sessionCache: { ...state.sessionCache, [session.id]: session },
+    activeId: session.id,
+  }))
+  persist(session.id)
+}
+
+/** 从当前可见消息节点创建独立会话；目标为用户消息时包含当前选中的回答。 */
+export const forkSession = (sessionId: string, messageId: string): boolean => {
+  if (get().importingHistory || deletingSessions.has(sessionId)) {
+    return false
+  }
+  const source = getSession(sessionId)
+  if (!source || getStreamController(sessionId)) {
+    return false
+  }
+  const branch = forkVisibleBranch(source, messageId)
+  if (!branch) {
+    showToast({ key: 'forkChatFailed', type: 'error' })
+    return false
+  }
+  const now = Date.now()
+  const session: Session = {
+    id: createId(),
+    title: translate('forkedChatTitle', {
+      title: source.title || translate('untitledChat'),
+    }),
+    createdAt: now,
+    updatedAt: now,
+    pinned: false,
+    folderId: source.folderId ?? null,
+    messages: branch.messages,
+    rootMessageId: branch.rootMessageId,
+    ...(branch.contextCheckpoint ? { contextCheckpoint: branch.contextCheckpoint } : {}),
+    ...(branch.handoff ? { handoff: branch.handoff } : {}),
+    ...(source.customProviderId ? { customProviderId: source.customProviderId } : {}),
+  }
+  insertSession(session)
+  showToast({ key: 'forkChatCreated' })
+  return true
+}
+
+export type SummaryHandoffResult =
+  | { ok: true; sessionId: string }
+  | {
+      ok: false
+      reason:
+        | 'busy'
+        | 'empty'
+        | 'connection'
+        | 'cancelled'
+        | 'changed'
+        | 'tooLong'
+        | 'summaryFailed'
+    }
+
+const summaryHandoffTasks = new Map<string, AbortController>()
+
+/** 取消正在进行的摘要续聊；只会中止摘要请求，原会话保持不变。 */
+export const cancelSummaryHandoff = (sessionId: string) => {
+  summaryHandoffTasks.get(sessionId)?.abort()
+}
+
+const summaryStreamFor = (connection: ChatConnection) => {
+  if (connection.kind === 'custom') {
+    return (body: CreateMessageRequest, signal: AbortSignal) =>
+      streamCustomMessage(
+        connection.provider,
+        customSummaryMessages(body),
+        signal,
+        connection.routes[0]?.rates,
+        { thinking: false }
+      )
+  }
+  if (!connection.attachment) {
+    return null
+  }
+  const attachment = connection.attachment
+  return attachment.apiKey === null
+    ? streamOfficialMessage
+    : (body: CreateMessageRequest, signal: AbortSignal) =>
+        streamMessage(attachment.apiKey ?? '', body, signal)
+}
+
+/**
+ * 手动总结当前可见对话并创建带摘要的新会话。
+ * 摘要复用 compaction 的分批和取消边界；只有完整成功后才会写入新会话，原会话不变。
+ */
+export const createSummaryHandoff = async (sessionId: string): Promise<SummaryHandoffResult> => {
+  if (
+    get().importingHistory ||
+    deletingSessions.has(sessionId) ||
+    summaryHandoffTasks.has(sessionId)
+  ) {
+    return { ok: false, reason: 'busy' }
+  }
+  const source = getSession(sessionId)
+  if (!source || getStreamController(sessionId)) {
+    return { ok: false, reason: 'busy' }
+  }
+  const path = getVisibleMessages(source)
+  if (getContextRounds(path).length === 0) {
+    return { ok: false, reason: 'empty' }
+  }
+  const connection = chatConnectionFor(source)
+  if (!connection) {
+    return { ok: false, reason: 'connection' }
+  }
+  if (connection.kind === 'deepseek' && !connection.attachment) {
+    ensureChatConnection()
+    return { ok: false, reason: 'connection' }
+  }
+  const stream = summaryStreamFor(connection)
+  if (!stream) {
+    return { ok: false, reason: 'connection' }
+  }
+
+  const controller = new AbortController()
+  summaryHandoffTasks.set(sessionId, controller)
+  const epoch = historyEpoch
+  try {
+    const context = await selectContext(path, source.contextCheckpoint)
+    const prior = [source.handoff?.summary, context.summary]
+      .map((summary) => summary?.trim())
+      .filter((summary): summary is string => !!summary)
+      .join('\n\n')
+    controller.signal.throwIfAborted()
+    const lastReply = [...path]
+      .reverse()
+      .find((message): message is AssistantMessage => message.role === 'assistant')
+    const summary = await summarizeContext(
+      { ...context, summary: prior || undefined },
+      {
+        model: isChatModel(lastReply?.model) ? lastReply.model : generationFor(source).model,
+        safety_check: SAFETY_CHECK,
+      },
+      connection.kind === 'custom'
+        ? inputBudget(true)
+        : inputBudget(connection.attachment?.apiKey === null),
+      stream,
+      controller.signal
+    )
+    controller.signal.throwIfAborted()
+    if (
+      epoch !== historyEpoch ||
+      get().importingHistory ||
+      deletingSessions.has(sessionId) ||
+      !getSession(sessionId)
+    ) {
+      return { ok: false, reason: 'changed' }
+    }
+    const now = Date.now()
+    const session = createHandoffSession(
+      source,
+      summary,
+      createId(),
+      translate('handoffChatTitle', {
+        title: source.title || translate('untitledChat'),
+      }),
+      now
+    )
+    insertSession(session)
+    return { ok: true, sessionId: session.id }
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return { ok: false, reason: 'cancelled' }
+    }
+    if (error instanceof ContextPreparationError) {
+      return {
+        ok: false,
+        reason: error.reason === 'tooLong' ? 'tooLong' : 'summaryFailed',
+      }
+    }
+    db.reportStorageError('summarize handoff')(error)
+    return { ok: false, reason: 'summaryFailed' }
+  } finally {
+    if (summaryHandoffTasks.get(sessionId) === controller) {
+      summaryHandoffTasks.delete(sessionId)
+    }
+  }
 }
 
 /** 继续最后一条未完成的回答：保留原消息与开关，仅将新流的内容追加到原块之后。 */
@@ -1306,6 +1683,11 @@ const streamReply = async (
     generation,
     { officialAccount: official, thinking: !!initial.thinking }
   )
+  const withHandoffSummary = (summary?: string) =>
+    [getSession(sessionId)?.handoff?.summary, summary]
+      .map((item) => item?.trim())
+      .filter((item): item is string => !!item)
+      .join('\n\n') || undefined
   const estimateBody = (history: Message[], summary?: string) => ({
     ...options,
     messages: estimateMessages(
@@ -1314,7 +1696,7 @@ const streamReply = async (
       request.prefix,
       !!initial.thinking,
       latestReminder,
-      summary
+      withHandoffSummary(summary)
     ),
   })
   const epoch = historyEpoch
@@ -1339,10 +1721,20 @@ const streamReply = async (
       let receivedContent = false
       try {
         if (chatConnection.kind === 'custom') {
-          const messages = getContextRounds(request.history).flatMap(([user, assistant]) => [
-            { role: 'user' as const, content: user.content },
-            { role: 'assistant' as const, content: getReplyText(assistant) },
-          ])
+          const messages: CustomMessage[] = []
+          const handoff = withHandoffSummary()
+          if (handoff) {
+            messages.push({
+              role: 'system',
+              content: `Use the following handoff summary as background from earlier conversation:\n\n${handoff}`,
+            })
+          }
+          messages.push(
+            ...getContextRounds(request.history).flatMap(([user, assistant]) => [
+              { role: 'user' as const, content: user.content },
+              { role: 'assistant' as const, content: getReplyText(assistant) },
+            ])
+          )
           messages.push({ role: 'user', content: request.question.content })
           let completed = false
           for (let index = 0; index < chatConnection.routes.length; index++) {
@@ -1485,7 +1877,7 @@ const streamReply = async (
           prepared.prefix,
           !!initial.thinking,
           latestReminder,
-          summary
+          withHandoffSummary(summary)
         )
         const messageBody: CreateMessageRequest = {
           ...options,

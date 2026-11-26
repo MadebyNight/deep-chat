@@ -143,15 +143,36 @@ export type ContextCheckpoint = {
   summary: string
 }
 
+/** 本地会话分组；不写入 DeepSeek 官方历史导出。 */
+export type Folder = {
+  id: string
+  name: string
+  createdAt: number
+  order: number
+}
+
+/** 摘要续聊带入新会话的背景，来源会话只用于追溯，不复制原消息。 */
+export type SessionHandoff = {
+  version: 1
+  summary: string
+  sourceSessionId: string
+  sourceTitle: string
+  createdAt: number
+}
+
 export type Session = {
   id: string
   title: string
   createdAt: number
   updatedAt: number
   pinned?: boolean
+  /** 缺省或 null 表示未分组；旧会话无需迁移即可继续展示。 */
+  folderId?: string | null
   /** 包含所有分支的消息，按创建顺序存储。 */
   messages: Message[]
   contextCheckpoint?: ContextCheckpoint
+  /** 手动摘要续聊写入的结构化背景；不进入官方历史导出。 */
+  handoff?: SessionHandoff
   customProviderId?: string
   /** 粘性会话当前优先使用自定义供应商线路；缺省表示使用主线路 */
   pinnedProviderId?: string
@@ -162,7 +183,10 @@ export type Session = {
 }
 
 /** 会话列表元数据；消息只在打开会话时加载。 */
-export type SessionSummary = Pick<Session, 'id' | 'title' | 'createdAt' | 'updatedAt' | 'pinned'>
+export type SessionSummary = Pick<
+  Session,
+  'id' | 'title' | 'createdAt' | 'updatedAt' | 'pinned' | 'folderId'
+>
 
 /** 显式提取字段，避免将完整会话的消息带进列表。 */
 export const toSessionSummary = (session: SessionSummary): SessionSummary => ({
@@ -171,4 +195,5 @@ export const toSessionSummary = (session: SessionSummary): SessionSummary => ({
   createdAt: session.createdAt,
   updatedAt: session.updatedAt,
   pinned: session.pinned ?? false,
+  folderId: session.folderId ?? null,
 })

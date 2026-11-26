@@ -990,6 +990,37 @@
 }
 
 .dataActions { width: 100%; }
+.syncSection { display: grid; gap: 12px; padding: 14px 0; }
+.syncTitle { margin: 0; font-size: 0.9375rem; line-height: 1.35; font-weight: 600; }
+.syncForm { display: grid; gap: 12px; }
+.syncField { display: grid; gap: 6px; min-width: 0; font-size: 0.875rem; line-height: 1.35; }
+.syncField input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-specific-login-input);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 1rem;
+}
+.syncField input:focus-visible { outline: 2px solid var(--dsw-alias-brand-text); outline-offset: 0; }
+.syncRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  font-size: 0.875rem;
+}
+.syncActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.syncActions button { flex: 1 1 140px; min-height: 44px; }
+.syncStatus { font-size: 0.875rem; line-height: 1.4; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
+.syncError { color: var(--dsw-alias-state-error-primary); }
+.syncLast { color: var(--dsw-alias-label-secondary); font-size: 0.875rem; line-height: 1.4; }
 .dataSource { color: var(--dsw-alias-label-primary); }
 
 .dataAction.settingsLink {

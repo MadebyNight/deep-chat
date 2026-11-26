@@ -11,11 +11,13 @@ import { backMobileSider, useMobileSider } from '../components/sider/mobileSider
 import { closeSearchPanel, useSearchPanel } from '../components/search/searchPanelState.js'
 import { clearTurnSelection, useTurnSelection } from '../components/messages/turnSelectionState.js'
 import { flushDrafts } from '../services/chat/drafts.js'
+import { requestAutoSync, scheduleInitialAutoSync } from '../services/sync/engine.js'
 
 export const initializeNative = () => {
   const onReturn = () => {
     if (document.visibilityState === 'visible') {
       resumeConnection()
+      requestAutoSync('foreground')
     }
   }
   onReturn()
@@ -31,8 +33,14 @@ export const initializeNative = () => {
   }
   run(initializeOfficialAccount)
   run(() => Browser.addListener('browserFinished', resumeConnection))
-  run(() => NativeApp.addListener('resume', resumeConnection))
-  run(() => NativeApp.addListener('pause', () => run(flushDrafts)))
+  run(() => NativeApp.addListener('resume', () => {
+    resumeConnection()
+    requestAutoSync('foreground')
+  }))
+  run(() => NativeApp.addListener('pause', () => {
+    run(flushDrafts)
+    requestAutoSync('background')
+  }))
   run(() => NativeApp.addListener('backButton', () => {
     if (document.body.classList.contains('keyboard-open')) {
       void Keyboard.hide().catch(() => {})
@@ -81,4 +89,5 @@ export const initializeNative = () => {
     attributes: true,
     attributeFilter: ['data-ds-dark-theme'],
   })
+  scheduleInitialAutoSync()
 }
