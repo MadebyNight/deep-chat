@@ -1,8 +1,27 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
+import type { MemoryEntry } from '../memory/types.js'
 import { toSessionSummary, type Session, type SessionSummary } from './types.js'
 
-/** IndexedDB 存储结构版本；新增或调整存储、索引时递增。 */
-const DB_VERSION = 11
+/**
+ * IndexedDB 存储结构版本；新增或调整存储、索引时递增。
+ * #23 的分组分支使用 v12，本分支基线为 v11，因此记忆存储取 v13。
+ * 合并后必须保留 v13，并同时保留 memories 与 folders 的 contains 升级块。
+ */
+export const DB_VERSION = 13
+
+export const CORE_STORES = [
+  'sessions',
+  'files',
+  'sessionsStaging',
+  'filesStaging',
+  'memories',
+] as const
+
+/** 升级时只创建缺失的 store；旧数据原样保留，便于与后续分支机械合并。 */
+export const missingStores = <T extends string>(
+  names: { contains(name: string): boolean },
+  required: readonly T[]
+): T[] => required.filter((name) => !names.contains(name))
 
 /** 文件原件按附件的本地 id 存储，所有引用同一 id 的消息共用一份；用于缩略图、打开查看，以及没有 serverId 时补传。 */
 export type StoredFile = {
@@ -29,6 +48,8 @@ interface ChatDB extends DBSchema {
    */
   sessionsStaging: { key: string; value: Session }
   filesStaging: { key: string; value: StoredFile }
+  /** 跨会话事实与偏好；只在本机使用，不进入官方历史导出。 */
+  memories: { key: string; value: MemoryEntry }
 }
 
 let dbPromise: Promise<IDBPDatabase<ChatDB>> | null = null
@@ -57,10 +78,8 @@ const getDB = () =>
   (dbPromise ??= openDB<ChatDB>('chat-demo', DB_VERSION, {
     upgrade(db, _oldVersion, _newVersion, tx) {
       // 初始化当前格式需要的存储与索引，不迁移旧消息。
-      for (const name of ['sessions', 'files', 'sessionsStaging', 'filesStaging'] as const) {
-        if (!db.objectStoreNames.contains(name)) {
-          db.createObjectStore(name, { keyPath: 'id' })
-        }
+      for (const name of missingStores(db.objectStoreNames, CORE_STORES)) {
+        db.createObjectStore(name, { keyPath: 'id' })
       }
       const summaries = db.objectStoreNames.contains('sessionSummaries')
         ? tx.objectStore('sessionSummaries')
@@ -167,6 +186,21 @@ export const saveFiles = (files: StoredFile[]): Promise<void> => putFiles('files
 
 export const loadFile = async (id: string): Promise<Blob | undefined> =>
   (await (await getDB()).get('files', id))?.blob
+
+export const loadMemoryEntries = async (): Promise<MemoryEntry[]> =>
+  (await getDB()).getAll('memories')
+
+export const putMemoryEntry = async (entry: MemoryEntry): Promise<void> => {
+  await (await getDB()).put('memories', entry)
+}
+
+export const deleteMemoryEntry = async (id: string): Promise<void> => {
+  await (await getDB()).delete('memories', id)
+}
+
+export const clearMemoryEntries = async (): Promise<void> => {
+  await (await getDB()).clear('memories')
+}
 
 /** 清空导入暂存：开始导入前清除上次中断（如关闭页面）遗留的数据，导入失败后清除本次写入。 */
 export const clearStaging = async (): Promise<void> => {

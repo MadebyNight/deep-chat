@@ -650,7 +650,9 @@
 }
 
 .usageSummary + .settingsLink,
-.settingsLink + .settingsLink {
+.settingsLink + .settingsLink,
+.cell + .settingsLink,
+.settingsLink + .cell {
   border-top: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
 }
 
@@ -855,6 +857,41 @@
 }
 
 .dataActions { width: 100%; }
+.memoryDialog { --modal-header-gap: 10px; width: min(560px, calc(100vw - 32px)); }
+.memoryForm { display: grid; gap: 10px; padding-bottom: 8px; }
+.memoryField { display: grid; gap: 6px; color: var(--dsw-alias-label-primary); font-size: 0.875rem; }
+.memoryInput {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 76px;
+  padding: 9px 11px;
+  resize: vertical;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-specific-login-input);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+.memoryInput:focus-visible { outline: 2px solid var(--dsw-alias-brand-text); outline-offset: 1px; }
+.memoryFormActions { display: flex; justify-content: flex-end; }
+.memoryList { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.memoryItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid var(--dsw-alias-border-l2-darkmode-thin);
+}
+.memoryContent { margin: 0; color: var(--dsw-alias-label-primary); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.memoryActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.memoryEdit { display: grid; grid-column: 1 / -1; gap: 8px; }
+.memoryEmpty { margin: 0; padding: 12px 0; color: var(--dsw-alias-label-secondary); }
+.memoryError { margin: 0; padding: 8px 0; color: var(--dsw-alias-state-error-primary); font-size: 0.8125rem; line-height: 1.45; }
+.memoryFooter { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; width: 100%; }
+.memoryFooter > :first-child:not(:last-child) { margin-inline-end: auto; }
 .dataSource { color: var(--dsw-alias-label-primary); }
 
 .dataAction.settingsLink {

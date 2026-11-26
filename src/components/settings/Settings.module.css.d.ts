@@ -67,6 +67,19 @@ declare const styles: {
   readonly "importConfirmText": string;
   readonly "deleteConfirm": string;
   readonly "deleteActions": string;
+  readonly "memoryDialog": string;
+  readonly "memoryForm": string;
+  readonly "memoryField": string;
+  readonly "memoryInput": string;
+  readonly "memoryFormActions": string;
+  readonly "memoryList": string;
+  readonly "memoryItem": string;
+  readonly "memoryContent": string;
+  readonly "memoryActions": string;
+  readonly "memoryEdit": string;
+  readonly "memoryEmpty": string;
+  readonly "memoryError": string;
+  readonly "memoryFooter": string;
 };
 export = styles;
 

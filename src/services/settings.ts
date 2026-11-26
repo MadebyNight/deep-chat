@@ -32,6 +32,8 @@ type Settings = {
   /** 思考内容自动折叠：生成结束后收起思考过程，只留标题行 */
   autoCollapseThinking: boolean
   autoCompactContext: boolean
+  /** 跨会话记忆总开关；默认关闭，不读取历史消息 */
+  memoryEnabled: boolean
   hapticsEnabled: boolean
   thinking: boolean
   search: boolean
@@ -48,6 +50,7 @@ const KEYS = {
   autoReadAloud: 'chat-demo:auto-read-aloud',
   autoCollapseThinking: 'chat-demo:auto-collapse-thinking',
   autoCompactContext: 'deepchat:auto-compact-context',
+  memoryEnabled: 'deepchat:memory-enabled',
   hapticsEnabled: 'deepchat:haptics-enabled',
   thinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
@@ -144,6 +147,7 @@ export const useSettings = create<Settings>(() => ({
   // 未保存过时默认开启，与官方「思考内容自动折叠」初始状态一致
   autoCollapseThinking: readPreference(KEYS.autoCollapseThinking) !== 'false',
   autoCompactContext: readPreference(KEYS.autoCompactContext) !== 'false',
+  memoryEnabled: readPreference(KEYS.memoryEnabled) === 'true',
   hapticsEnabled: readPreference(KEYS.hapticsEnabled) !== 'false',
   thinking: readPreference(KEYS.thinking) === 'true',
   search: readPreference(KEYS.search) === 'true',
@@ -184,6 +188,11 @@ export const setAutoCollapseThinking = (autoCollapseThinking: boolean) => {
 export const setAutoCompactContext = (autoCompactContext: boolean) => {
   writePreference(KEYS.autoCompactContext, String(autoCompactContext))
   useSettings.setState({ autoCompactContext })
+}
+
+export const setMemoryEnabled = (memoryEnabled: boolean) => {
+  writePreference(KEYS.memoryEnabled, String(memoryEnabled))
+  useSettings.setState({ memoryEnabled })
 }
 
 export const setHapticsEnabled = (hapticsEnabled: boolean) => {

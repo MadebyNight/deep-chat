@@ -1,12 +1,23 @@
-import { Textarea, IconEditOutline16, IconTrashOutline16, Button, IconButton } from "../base/index.js"
+import {
+  Textarea,
+  IconBookmarkOutline16,
+  IconEditOutline16,
+  IconTrashOutline16,
+  Button,
+  IconButton,
+} from '../base/index.js'
 import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo, useLayoutEffect, useRef, useState } from 'react'
 import { useIsMobile } from '../../app/viewport.js'
 import { editMessage, retryUpload } from '../../services/chat/store.js'
+import { memoryErrorMessage } from '../../services/memory/messages.js'
+import { rememberMemory } from '../../services/memory/store.js'
+import { useSettings } from '../../services/settings.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
 import type { UserMessage as UserMessageType } from '../../services/chat/types.js'
 import { ensureChatConnection } from '../settings/settingsDialogState.js'
+import { showToast } from '../base/toastState.js'
 import {
   BranchSwitcher,
   type MessageVersions,
@@ -43,8 +54,10 @@ export const UserMessage = memo(function UserMessage({
   const t = useTranslate()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(message.content)
+  const [remembering, setRemembering] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const isMobile = useIsMobile()
+  const memoryEnabled = useSettings((state) => state.memoryEnabled)
   const canSend = !busy && (draft.trim() !== '' || message.files.length > 0)
 
   useLayoutEffect(() => {
@@ -59,6 +72,21 @@ export const UserMessage = memo(function UserMessage({
     if (canSend && ensureChatConnection() && editMessage(sessionId, message.id, draft.trim())) {
       stopReadAloud()
       setEditing(false)
+    }
+  }
+
+  const remember = async () => {
+    if (remembering || !message.content) {
+      return
+    }
+    setRemembering(true)
+    try {
+      const result = await rememberMemory(message.content, { sourceSessionId: sessionId })
+      showToast(result.duplicate ? 'settingsMemoryAlreadySaved' : 'settingsMemorySaved')
+    } catch (failure) {
+      showToast(memoryErrorMessage(failure, 'settingsMemorySaveFailed'))
+    } finally {
+      setRemembering(false)
     }
   }
 
@@ -118,6 +146,16 @@ export const UserMessage = memo(function UserMessage({
           <div className={styles.bottom}>
             <div className={clsx(styles.actions, (isMobile || isLast) && styles.alwaysShow)}>
               {message.content ? <CopyButton text={message.content} /> : null}
+              {memoryEnabled && message.content ? (
+                <IconButton
+                  icon={<IconBookmarkOutline16 />}
+                  tooltip={t('rememberThisMessage')}
+                  tooltipPlacement="bottom"
+                  disabled={busy || selecting || remembering}
+                  aria-busy={remembering}
+                  onClick={() => void remember()}
+                />
+              ) : null}
               <IconButton
                 icon={<IconEditOutline16 />}
                 tooltip={t('editMessage')}

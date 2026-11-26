@@ -41,6 +41,7 @@ import {
 } from './drafts.js'
 import { createLatestReminder } from './latestReminder.js'
 import { buildSessionSystemPrompt } from './systemPrompt.js'
+import { loadMemoryPrompt } from '../memory/store.js'
 import {
   applyEvent,
   canContinueReply,
@@ -1164,8 +1165,12 @@ const streamReply = async (
 
   const settings = useSettings.getState()
   const session = getSession(sessionId)
-  // #17 取得长期记忆后从第三个参数的 memory 传入；固定为「会话人设」→「长期记忆」。
-  const system = buildSessionSystemPrompt(session, settings.prompts)
+  // 记忆只在本机读取；失败或超预算时静默退回纯人设，不阻断主对话。
+  const memory = settings.memoryEnabled
+    ? await loadMemoryPrompt(request.question.content).catch(() => null)
+    : null
+  // 固定为「会话人设」→「长期记忆」，不另建 System 拼装链。
+  const system = buildSessionSystemPrompt(session, settings.prompts, { memory })
   const official = connection?.apiKey === null
   const stream = official
     ? streamOfficialMessage
