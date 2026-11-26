@@ -27,6 +27,17 @@ export const IconChevronRightOutline14 = () => (
   </svg>
 )
 
+export const IconBookmarkOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M4.25 2.75c0-.414.336-.75.75-.75h6c.414 0 .75.336.75.75v10.5l-3.75-2.6-3.75 2.6V2.75Z"
+      stroke="currentColor"
+      strokeWidth={1.3}
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
 export const IconCloseFill14 = () => (
   <svg width={14} height={14} viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path

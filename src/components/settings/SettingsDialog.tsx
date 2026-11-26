@@ -23,6 +23,7 @@ import {
   setChatFontSize,
   setHapticsEnabled,
   setLocale,
+  setMemoryEnabled,
   setThemePreference,
   setTtsVoice,
   useSettings,
@@ -32,6 +33,7 @@ import { useTranslate, type TranslationKey, type TranslationMessage } from '../.
 import { showToast } from '../base/toastState.js'
 import { ConnectionSetting } from './ConnectionDialog.js'
 import { CustomProviderSetting } from './CustomProviderSetting.js'
+import { MemoryManagerModal } from './MemoryManager.js'
 import { UsageChart } from './UsageChart.js'
 import { VersionSetting } from './UpdateDialog.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
@@ -155,6 +157,7 @@ const SettingsContent = () => {
         <section className={styles.settingsGroup}>
           <ThinkingCollapseSetting />
           <ContextCompactionSetting />
+          <MemorySetting />
           {isNative ? <HapticsSetting /> : null}
         </section>
       ),
@@ -218,6 +221,7 @@ const SettingsContent = () => {
               <TtsVoiceSetting />
               <ThinkingCollapseSetting />
               <ContextCompactionSetting />
+              <MemorySetting />
               {isNative ? <HapticsSetting /> : null}
               <AutoReadSetting />
               <VersionSetting />
@@ -666,6 +670,35 @@ const HapticsSetting = () => {
         />
       }
     />
+  )
+}
+
+const MemorySetting = () => {
+  const t = useTranslate()
+  const enabled = useSettings((state) => state.memoryEnabled)
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <SettingCell
+        label={t('settingsMemory')}
+        status={null}
+        action={
+          <Switch
+            checked={enabled}
+            aria-label={t('settingsMemory')}
+            onClick={() => {
+              triggerHaptic('light')
+              setMemoryEnabled(!enabled)
+            }}
+          />
+        }
+      />
+      <ActionButton type="button" className={styles.settingsLink} onClick={() => setOpen(true)}>
+        {t('settingsMemoryManage')}
+        <IconChevronRightOutline14 />
+      </ActionButton>
+      {open ? <MemoryManagerModal onClose={() => setOpen(false)} /> : null}
+    </>
   )
 }
 

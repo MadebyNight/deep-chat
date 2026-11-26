@@ -75,6 +75,7 @@
     "file": "src/components/base/icons.tsx",
     "group": "shared",
     "components": [
+      "IconBookmarkOutline16",
       "IconBrowseOutline16",
       "IconBrowseWarningOutline16",
       "IconCheckOutline16",
@@ -409,6 +410,13 @@
     ]
   },
   {
+    "file": "src/components/settings/MemoryManager.tsx",
+    "group": "settings",
+    "components": [
+      "MemoryManagerModal"
+    ]
+  },
+  {
     "file": "src/components/settings/SettingsDialog.tsx",
     "group": "settings",
     "components": [
@@ -423,6 +431,7 @@
       "ImportConfirm",
       "ImportHistory",
       "LocaleSetting",
+      "MemorySetting",
       "MobilePreferences",
       "SettingCell",
       "SettingsContent",
