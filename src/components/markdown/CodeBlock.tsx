@@ -73,10 +73,12 @@ const CodeInfoRow = ({
   return (
     <div className={styles.container}>
       <div className={styles.leading}>
-        <span className={styles.name}>{label}</span>
+        <span className={artifactType ? `${styles.name} ${styles.artifactName}` : styles.name}>
+          {label}
+        </span>
         {artifactType ? (
           <div
-            className="md-code-block-switch"
+            className={`md-code-block-switch ${styles.switch}`}
             role="group"
             aria-label={t('artifactSwitchLabel')}
           >

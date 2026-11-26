@@ -16,9 +16,14 @@
 
 .actions {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 2px;
   margin-left: auto;
+}
+
+.switch {
+  flex: 0 0 auto;
 }
 
 .name {
@@ -45,6 +50,7 @@
   line-height: 20px;
   cursor: pointer;
   user-select: none;
+  white-space: nowrap;
 
   &:disabled {
     cursor: not-allowed;
@@ -69,6 +75,12 @@
 
 @media (max-width: 420px) {
   .copyLabel {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .artifactName {
     display: none;
   }
 }
