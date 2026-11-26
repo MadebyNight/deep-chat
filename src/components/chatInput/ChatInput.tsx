@@ -20,6 +20,7 @@ import {
 import { stopReadAloud } from '../../services/speech/readAloud.js'
 import { ensureChatConnection } from '../settings/settingsDialogState.js'
 import { GenerationEntryButton } from '../settings/GenerationSettings.js'
+import { PromptPicker } from '../session/PromptPicker.js'
 import { DragMask, useFileDrop } from './DragMask.js'
 import { showToast } from '../base/toastState.js'
 import {
@@ -34,14 +35,27 @@ import { VoiceButton } from './VoiceButton.js'
 import { Spectrum } from './Spectrum.js'
 import { useTranslate } from '../../i18n/index.js'
 import styles from './ChatInput.module.css'
+import promptStyles from '../session/Welcome.module.css'
 
-/** 输入框：自适应高度的文本框 + 文件 + 深度思考与智能搜索开关 + 语音输入 + 发送 / 停止 */
-export const ChatInput = memo(function ChatInput({ sessionId }: { sessionId: string | null }) {
+/** 输入框：框外提示词/参数入口 + 自适应高度的文本框 + 文件 + 深度思考与智能搜索开关 + 语音输入 + 发送 / 停止 */
+export const ChatInput = memo(function ChatInput({
+  sessionId,
+  showPrompt = false,
+}: {
+  sessionId: string | null
+  showPrompt?: boolean
+}) {
   // 切换目标时释放录音、转写和 DOM 状态；文字与附件由草稿服务保留。
-  return <Composer key={sessionId === null ? 'new' : `session:${sessionId}`} sessionId={sessionId} />
+  return (
+    <Composer
+      key={sessionId === null ? 'new' : `session:${sessionId}`}
+      sessionId={sessionId}
+      showPrompt={showPrompt}
+    />
+  )
 })
 
-const Composer = ({ sessionId }: { sessionId: string | null }) => {
+const Composer = ({ sessionId, showPrompt }: { sessionId: string | null; showPrompt: boolean }) => {
   const t = useTranslate()
   const attachmentScope = useAttachmentScope()
   const custom = useCustomProvider((state) => state.enabled)
@@ -212,6 +226,17 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
 
   return (
     <div className={styles.composer}>
+      <div className={styles.composerTools}>
+        <div className={styles.promptSlot}>
+          {showPrompt && !custom ? <PromptPicker /> : null}
+        </div>
+        <GenerationEntryButton
+          sessionId={sessionId}
+          className={promptStyles.promptToggle}
+          labelClassName={promptStyles.promptTitle}
+          disabled={importingHistory}
+        />
+      </div>
       <div
         ref={composerRef}
         className={clsx(styles.wrapper, sessionId === null ? styles.home : styles.session)}
@@ -287,7 +312,7 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
             }
           }}
         >
-          {/* 深度思考 / 生成参数 / 智能搜索，深度思考始终保留现有开关状态 */}
+          {/* 深度思考 / 智能搜索开关，tooltip 在按钮上方 */}
           <div ref={togglesRef} className={styles.toggles}>
             <Tooltip content={t('deactivatedThinkTooltip')}>
               <ActionButton
@@ -304,12 +329,6 @@ const Composer = ({ sessionId }: { sessionId: string | null }) => {
                 <span className={styles.toggleLabel}>{t('thinkingSwitch')}</span>
               </ActionButton>
             </Tooltip>
-            <GenerationEntryButton
-              sessionId={sessionId}
-              className={styles.toggle}
-              labelClassName={styles.toggleLabel}
-              disabled={importingHistory}
-            />
             <Tooltip content={t(custom ? 'customProviderSearchUnavailable' : 'deactivatedSearchTooltip')}>
               <ActionButton
                 type="button"

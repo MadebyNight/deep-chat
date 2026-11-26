@@ -1,10 +1,8 @@
 import { useIsMobile } from '../../app/viewport.js'
 import { useTranslate, type TranslationKey } from '../../i18n/index.js'
-import { useCustomProvider } from '../../services/customProvider.js'
 import whaleLogo from '../../assets/whale.png'
 import { ChatInput } from '../chatInput/ChatInput.js'
 import { MobileHeader } from './MobileHeader.js'
-import { PromptPicker } from './PromptPicker.js'
 import styles from './Welcome.module.css'
 
 /** 官方欢迎语随时段变化；无法归类的时段用中性问候 */
@@ -26,7 +24,6 @@ const greetingKey = (): TranslationKey => {
 export const Welcome = () => {
   const t = useTranslate()
   const isMobile = useIsMobile()
-  const custom = useCustomProvider((state) => state.enabled)
   return (
     <div className={styles.container}>
       {isMobile ? <MobileHeader /> : null}
@@ -35,8 +32,7 @@ export const Welcome = () => {
           <img className={styles.brandMark} src={whaleLogo} width={44} height={34} alt="" />
           <span>{t(greetingKey())}</span>
         </div>
-        {custom ? null : <PromptPicker />}
-        <ChatInput sessionId={null} />
+        <ChatInput sessionId={null} showPrompt />
         {isMobile ? <div className={styles.caveat}>Deep Chat · DeepSeek 第三方客户端</div> : null}
       </div>
     </div>

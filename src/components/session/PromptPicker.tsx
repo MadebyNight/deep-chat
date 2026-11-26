@@ -91,7 +91,9 @@ export function PromptPicker() {
         onClick={() => setExpanded(!expanded)}
       >
         <span className={styles.promptTitle}>{selected?.title ?? t('prompt')}</span>
-        <IconChevronDownOutline14 />
+        <span className={styles.promptChevron}>
+          <IconChevronDownOutline14 />
+        </span>
       </ActionButton>
       <div id={listId} className={styles.promptList} hidden={!expanded}>
         <div className={styles.promptRow}>

@@ -15,7 +15,6 @@ import { setGenerationParams, useSettings } from '../../services/settings.js'
 import { useCustomProvider } from '../../services/customProvider.js'
 import { setSessionGeneration, useChatStore } from '../../services/chat/store.js'
 import { triggerHaptic } from '../../services/haptics.js'
-import { useIsMobile } from '../../app/viewport.js'
 import {
   ActionButton,
   Button,
@@ -89,7 +88,6 @@ export const GenerationEntryButton = ({
   )
   const custom = useCustomProvider((state) => state.enabled)
   const customModel = useCustomProvider((state) => state.provider?.model)
-  const isMobile = useIsMobile()
   const params = normalizeGenerationParams(sessionParams ?? defaults, defaults)
   const [open, setOpen] = useState(false)
   const summary = generationSummary(t, params, custom ? customModel : undefined)
@@ -109,7 +107,7 @@ export const GenerationEntryButton = ({
       >
         <IconSlidersOutline16 />
         <span className={clsx(styles.generationEntryLabel, labelClassName)}>
-          {isMobile ? t('generationParametersShort') : summary}
+          {t('generationParametersShort')}
         </span>
       </ActionButton>
       {open ? (
@@ -214,7 +212,7 @@ const GenerationDialog = ({
         </>
       }
     >
-      <form id={formId} className={styles.generationForm} onSubmit={submit}>
+      <form id={formId} className={styles.generationForm} noValidate onSubmit={submit}>
         {customModel ? null : (
           <label className={styles.generationField}>
             {t('generationModel')}

@@ -58,7 +58,8 @@
 }
 
 .promptToggle svg { flex-shrink: 0; }
-.promptToggle[aria-expanded='true'] svg { transform: rotate(180deg); }
+.promptChevron { display: flex; flex-shrink: 0; }
+.promptToggle[aria-expanded='true'] .promptChevron { transform: rotate(180deg); }
 .promptTitle {
   min-width: 0;
   overflow: hidden;
