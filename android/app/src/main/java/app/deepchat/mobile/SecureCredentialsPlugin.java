@@ -11,11 +11,13 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.KeyStore;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
+import org.json.JSONObject;
 
 @CapacitorPlugin(name = "SecureCredentials")
 public class SecureCredentialsPlugin extends Plugin {
@@ -23,13 +25,30 @@ public class SecureCredentialsPlugin extends Plugin {
 
     private SharedPreferences preferences(PluginCall call) {
         String slot = call.getString("slot", "deepseek");
+        return preferences(getContext(), slot);
+    }
+
+    private static SharedPreferences preferences(Context context, String slot) {
         if ("deepseek".equals(slot)) {
-            return getContext().getSharedPreferences("secure_credentials", Context.MODE_PRIVATE);
+            return context.getSharedPreferences("secure_credentials", Context.MODE_PRIVATE);
         }
         if ("customProvider".equals(slot)) {
-            return getContext().getSharedPreferences("secure_custom_provider", Context.MODE_PRIVATE);
+            return context.getSharedPreferences("secure_custom_provider", Context.MODE_PRIVATE);
+        }
+        if ("webdav".equals(slot)) {
+            return context.getSharedPreferences("secure_webdav", Context.MODE_PRIVATE);
         }
         throw new IllegalArgumentException("Unknown credential slot");
+    }
+
+    static String webDavUrlHash(String url) throws Exception {
+        byte[] digest = MessageDigest.getInstance("SHA-256")
+            .digest(url.getBytes(StandardCharsets.UTF_8));
+        StringBuilder output = new StringBuilder(digest.length * 2);
+        for (byte value : digest) {
+            output.append(String.format("%02x", value & 0xff));
+        }
+        return output.toString();
     }
 
     private SecretKey key() throws Exception {
@@ -69,12 +88,20 @@ public class SecureCredentialsPlugin extends Plugin {
 
     @PluginMethod
     public void write(PluginCall call) {
+        String slot = call.getString("slot", "deepseek");
         String value = call.getString("value");
         try {
-            SharedPreferences.Editor editor = preferences(call).edit();
+            SharedPreferences.Editor editor = preferences(getContext(), slot).edit();
             if (value == null) {
                 editor.remove("iv").remove("ciphertext");
+                if ("webdav".equals(slot)) {
+                    editor.remove("configuredUrlHash");
+                }
             } else {
+                if ("webdav".equals(slot)) {
+                    String url = new JSONObject(value).getString("url");
+                    editor.putString("configuredUrlHash", webDavUrlHash(url));
+                }
                 Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
                 cipher.init(Cipher.ENCRYPT_MODE, key());
                 editor.putString("iv", Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP));

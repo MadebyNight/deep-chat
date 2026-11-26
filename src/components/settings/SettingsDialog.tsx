@@ -15,6 +15,7 @@ import { canDownloadHistoryExport, downloadHistoryExport } from '../../services/
 import { useChatStore } from '../../services/chat/store.js'
 import { useUpdates } from '../../services/updates.js'
 import { isNative, saveArchive } from '../../services/native.js'
+import { useSyncStatus } from '../../services/sync/state.js'
 import { triggerHaptic } from '../../services/haptics.js'
 import {
   setAutoCollapseThinking,
@@ -39,6 +40,7 @@ import { MemoryManagerModal } from './MemoryManager.js'
 import { GenerationSettingsItem } from './GenerationSettings.js'
 import { UsageChart } from './UsageChart.js'
 import { VersionSetting } from './UpdateDialog.js'
+import { WebDavSyncSection } from './WebDavSyncSection.js'
 import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import styles from './Settings.module.css'
 
@@ -77,7 +79,8 @@ const SettingsContent = () => {
   const historyImport = useHistoryImport()
   const historyDelete = useHistoryDelete()
   const replacingHistory = useChatStore((state) => state.importingHistory)
-  const historyBusy = historyImport.busy || historyDelete.busy || replacingHistory
+  const syncRunning = useSyncStatus((state) => state.phase !== 'idle')
+  const historyBusy = historyImport.busy || historyDelete.busy || replacingHistory || syncRunning
   const isMobile = useIsMobile()
   const [page, setPage] = useState<keyof typeof mobilePageTitles>(() =>
     section === 'general' ? 'home' : section
@@ -86,6 +89,11 @@ const SettingsContent = () => {
   const chooseImportFile = () => importFileRef.current?.click()
   const dataActions = (
     <div className={styles.dataActions}>
+      {isNative ? (
+        <div className={styles.settingsGroup}>
+          <WebDavSyncSection />
+        </div>
+      ) : null}
       <div className={styles.settingsGroup}>
         <ImportHistory historyImport={historyImport} disabled={historyBusy} fileRef={importFileRef} />
         <ExportHistory disabled={historyBusy} />

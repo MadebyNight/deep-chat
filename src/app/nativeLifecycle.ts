@@ -12,11 +12,13 @@ import { closeSearchPanel, useSearchPanel } from '../components/search/searchPan
 import { clearTurnSelection, useTurnSelection } from '../components/messages/turnSelectionState.js'
 import { flushDrafts } from '../services/chat/drafts.js'
 import { initializeSystemIntake, pullPendingIntake } from '../services/systemIntake.js'
+import { requestAutoSync, scheduleInitialAutoSync } from '../services/sync/engine.js'
 
 export const initializeNative = () => {
   const onReturn = () => {
     if (document.visibilityState === 'visible') {
       resumeConnection()
+      requestAutoSync('foreground')
     }
   }
   onReturn()
@@ -36,8 +38,12 @@ export const initializeNative = () => {
   run(() => NativeApp.addListener('resume', () => {
     resumeConnection()
     run(pullPendingIntake)
+    requestAutoSync('foreground')
   }))
-  run(() => NativeApp.addListener('pause', () => run(flushDrafts)))
+  run(() => NativeApp.addListener('pause', () => {
+    run(flushDrafts)
+    requestAutoSync('background')
+  }))
   run(() => NativeApp.addListener('backButton', () => {
     if (document.body.classList.contains('keyboard-open')) {
       void Keyboard.hide().catch(() => {})
@@ -86,4 +92,5 @@ export const initializeNative = () => {
     attributes: true,
     attributeFilter: ['data-ds-dark-theme'],
   })
+  scheduleInitialAutoSync()
 }
