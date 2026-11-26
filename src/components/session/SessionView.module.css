@@ -251,6 +251,10 @@
   }
 }
 
+.selectionExport {
+  color: var(--dsw-alias-brand-text);
+}
+
 .selectionCount {
   flex: 1;
   min-width: 0;

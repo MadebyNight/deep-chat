@@ -13,10 +13,20 @@ import { buildReplyView } from '../../services/chat/view.js'
 import { triggerHaptic } from '../../services/haptics.js'
 import { useSettings } from '../../services/settings.js'
 import { describeReadAloudError, stopReadAloud, toggleReadAloud } from '../../services/speech/readAloud.js'
-import { ActionButton, Button, IconEllipsisOutline16, IconTrashOutline16, IconButton, Menu, Modal } from '../base/index.js'
+import {
+  ActionButton,
+  Button,
+  IconEllipsisOutline16,
+  IconShareOutline16,
+  IconTrashOutline16,
+  IconButton,
+  Menu,
+  Modal,
+} from '../base/index.js'
 import { showToast } from '../base/toastState.js'
 import { ChatInput } from '../chatInput/ChatInput.js'
 import { MessageList } from '../messages/MessageList.js'
+import { openExportDialog } from '../messages/exportDialogState.js'
 import {
   clearTurnSelection,
   selectAllTurns,
@@ -239,6 +249,22 @@ export const SessionView = ({
                   >
                     {t(allSelected ? 'deselectAll' : 'selectAll')}
                   </ActionButton>
+                  <IconButton
+                    size="m"
+                    className={styles.selectionExport}
+                    icon={<IconShareOutline16 />}
+                    aria-label={t('export')}
+                    disabled={activeSelectedIds.length === 0}
+                    onClick={() => {
+                      const userIds = [...activeSelectedIds]
+                      triggerHaptic('light')
+                      clearTurnSelection()
+                      openExportDialog(
+                        { kind: 'turns', sessionId: session.id, userIds },
+                        'markdown'
+                      )
+                    }}
+                  />
                   <ActionButton
                     type="button"
                     className={styles.selectionDelete}

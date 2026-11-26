@@ -18,6 +18,7 @@ import { Welcome } from '../components/session/Welcome.js'
 import { ConnectionDialog } from '../components/settings/ConnectionDialog.js'
 import { SettingsDialog } from '../components/settings/SettingsDialog.js'
 import { UpdateDialog } from '../components/settings/UpdateDialog.js'
+import { ExportDialog } from '../components/messages/ExportDialog.js'
 import { initializeUpdates } from '../services/updates.js'
 import { Toast, Button } from "../components/base/index.js"
 import { showToast } from '../components/base/toastState.js'
@@ -299,6 +300,7 @@ export const App = () => {
       </div>
       <SettingsDialog />
       <ConnectionDialog />
+      <ExportDialog />
       <UpdateDialog allowAutomatic={ready && !streaming && !importingHistory && !mobileSiderOpen} />
       <Toast />
     </>

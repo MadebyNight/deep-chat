@@ -270,6 +270,14 @@
     ]
   },
   {
+    "file": "src/components/messages/ExportDialog.tsx",
+    "group": "messages",
+    "components": [
+      "ExportDialog",
+      "ShareCard"
+    ]
+  },
+  {
     "file": "src/components/messages/MessageFile.tsx",
     "group": "messages",
     "components": [
