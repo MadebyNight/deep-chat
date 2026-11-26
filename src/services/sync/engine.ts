@@ -711,7 +711,7 @@ const syncAttempt = async ({
   const downloadedFiles = await downloadAttachments({
     provider,
     passphrase: config.passphrase,
-    sessions: sessionMerge.imports,
+    sessions: sessionMerge.localSessions.values(),
     policy: preferences.attachmentPolicy,
     signal,
   })
