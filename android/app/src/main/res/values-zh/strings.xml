@@ -3,4 +3,10 @@
     <string name="startup_recovery_title">Deep Chat 无法打开</string>
     <string name="startup_recovery_message">请尝试重新打开 Deep Chat。如果问题持续，请更新系统 WebView 后再试。</string>
     <string name="startup_recovery_retry">重试</string>
+    <string name="shortcut_new_chat_short">新对话</string>
+    <string name="shortcut_new_chat_long">开启新对话</string>
+    <string name="shortcut_voice_short">语音提问</string>
+    <string name="shortcut_voice_long">语音提问</string>
+    <string name="shortcut_camera_short">拍照提问</string>
+    <string name="shortcut_camera_long">拍照提问</string>
 </resources>

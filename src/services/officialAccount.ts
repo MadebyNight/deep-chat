@@ -131,21 +131,26 @@ export function applyAccountState(state: AccountState) {
   return signedIn
 }
 
-export async function initializeOfficialAccount() {
-  if (Capacitor.getPlatform() !== 'android') {return}
-  try {
-    const { supported } = await account.availability()
-    useOfficialAccount.setState({ available: supported })
-    if (supported && useOfficialAccount.getState().active) {
-      if (applyAccountState(await officialAccountRequest<AccountState>('state'))) {
-        void refreshOfficialProfile()
+let accountInitialization: Promise<void> | undefined
+
+export function initializeOfficialAccount() {
+  accountInitialization ??= (async () => {
+    if (Capacitor.getPlatform() !== 'android') {return}
+    try {
+      const { supported } = await account.availability()
+      useOfficialAccount.setState({ available: supported })
+      if (supported && useOfficialAccount.getState().active) {
+        if (applyAccountState(await officialAccountRequest<AccountState>('state'))) {
+          void refreshOfficialProfile()
+        }
+      } else if (!supported) {
+        selectOfficialAccount(false)
       }
-    } else if (!supported) {
-      selectOfficialAccount(false)
+    } catch {
+      // The user can retry through the connection dialog.
     }
-  } catch {
-    // The user can retry through the connection dialog.
-  }
+  })()
+  return accountInitialization
 }
 
 let pendingSignIn: AbortController | undefined

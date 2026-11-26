@@ -34,6 +34,12 @@ import { useVoiceInput } from './useVoiceInput.js'
 import { VoiceButton } from './VoiceButton.js'
 import { Spectrum } from './Spectrum.js'
 import { useTranslate } from '../../i18n/index.js'
+import {
+  captureSharedPhoto,
+  hasNativeCamera,
+  subscribeComposeAction,
+} from '../../services/systemIntake.js'
+import { initializeOfficialAccount, useOfficialAccount } from '../../services/officialAccount.js'
 import styles from './ChatInput.module.css'
 import promptStyles from '../session/Welcome.module.css'
 
@@ -187,6 +193,43 @@ const Composer = ({ sessionId, showPrompt }: { sessionId: string | null; showPro
       textarea?.setSelectionRange(start + transcript.length, start + transcript.length)
     })
   })
+  const voiceAvailable = voice.available
+  const voiceStatus = voice.status
+  const toggleVoice = voice.toggle
+
+  useEffect(
+    () =>
+      subscribeComposeAction((action) => {
+        if (action === 'camera') {
+          if (!isMobile && !hasNativeCamera) {
+            textareaRef.current?.focus({ preventScroll: true })
+            return
+          }
+          if (useCustomProvider.getState().enabled) {
+            showToast({ key: 'customProviderTextOnly' })
+            return
+          }
+          void (async () => {
+            if (useOfficialAccount.getState().active) {
+              await initializeOfficialAccount()
+            }
+            if (!ensureChatConnection()) {
+              return
+            }
+            if (!captureSharedPhoto() && isMobile) {
+              cameraInputRef.current?.click()
+            }
+          })()
+          return
+        }
+        if (action === 'voice' && voiceAvailable && voiceStatus === 'idle' && !importingHistory) {
+          void toggleVoice()
+          return
+        }
+        textareaRef.current?.focus({ preventScroll: true })
+      }),
+    [importingHistory, isMobile, toggleVoice, voiceAvailable, voiceStatus]
+  )
 
   // 欢迎页导入后会话 ID 不变，不能依赖卸载取消语音；订阅开始事件也覆盖快速完成的导入。
   const cancelVoice = voice.cancel

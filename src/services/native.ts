@@ -1,7 +1,8 @@
-import { Capacitor, registerPlugin } from '@capacitor/core'
+import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 import { Browser } from '@capacitor/browser'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
+import type { NativeIntake } from './intakeProtocol.js'
 
 export const isNative = Capacitor.isNativePlatform()
 export const isAndroid = Capacitor.getPlatform() === 'android'
@@ -59,6 +60,25 @@ const nativeExport = registerPlugin<NativeExportPlugin>('NativeExport')
 const officialBrowser = registerPlugin<{ open(options: { url: string }): Promise<void> }>(
   'OfficialBrowser'
 )
+
+const shareIntake = registerPlugin<{
+  consumePendingIntake(): Promise<{ intake?: NativeIntake | null }>
+  releaseIntake(options: { id: string }): Promise<void>
+  openCamera(): Promise<void>
+  addListener(
+    eventName: 'intake',
+    listener: (intake: NativeIntake) => void
+  ): Promise<PluginListenerHandle>
+}>('ShareIntake')
+
+export const consumePendingIntake = async () => (await shareIntake.consumePendingIntake()).intake
+
+export const subscribeShareIntake = (listener: (intake: NativeIntake) => void) =>
+  shareIntake.addListener('intake', listener)
+
+export const releaseShareIntake = (id: string) => shareIntake.releaseIntake({ id })
+
+export const openCameraIntake = () => shareIntake.openCamera()
 
 export const openOfficialPage = async (url: string) => {
   if (Capacitor.getPlatform() === 'android') {

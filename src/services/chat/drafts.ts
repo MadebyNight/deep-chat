@@ -52,7 +52,10 @@ const updateDraft = (sessionId: string | null, update: (draft: Draft) => Draft) 
 export const setDraftText = (sessionId: string | null, text: string) =>
   updateDraft(sessionId, (draft) => ({ ...draft, text }))
 
-const upload = (attachment: DraftAttachment, connection: AttachmentConnection) => {
+const upload = (attachment: DraftAttachment, connection: AttachmentConnection | undefined) => {
+  if (!connection) {
+    return
+  }
   // 上传任务负责记录错误，输入框的附件卡片展示失败及重试入口。
   void uploadAttachment(
     connection,
@@ -67,7 +70,7 @@ const upload = (attachment: DraftAttachment, connection: AttachmentConnection) =
 export const addDraftFiles = (
   sessionId: string | null,
   files: File[],
-  connection: AttachmentConnection
+  connection?: AttachmentConnection
 ): TranslationMessage | null => {
   if (files.length === 0) {
     return null

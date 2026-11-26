@@ -7,4 +7,10 @@
     <string name="startup_recovery_title">Deep Chat could not open</string>
     <string name="startup_recovery_message">Try reopening Deep Chat. If the problem persists, update the system WebView and try again.</string>
     <string name="startup_recovery_retry">Try again</string>
+    <string name="shortcut_new_chat_short">New chat</string>
+    <string name="shortcut_new_chat_long">Start a new chat</string>
+    <string name="shortcut_voice_short">Voice</string>
+    <string name="shortcut_voice_long">Ask by voice</string>
+    <string name="shortcut_camera_short">Camera</string>
+    <string name="shortcut_camera_long">Ask with a photo</string>
 </resources>
