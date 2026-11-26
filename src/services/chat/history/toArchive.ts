@@ -266,6 +266,7 @@ export const toSessionFile = (original: Session, exportImage: ExportImage): Sess
     ...(session.pinnedProviderId
       ? { deepchat_pinned_provider_id: session.pinnedProviderId }
       : {}),
+    ...(session.generation ? { deepchat_generation: session.generation } : {}),
     inserted_at: iso(session.createdAt),
     updated_at: iso(session.updatedAt),
     messages,

@@ -398,6 +398,19 @@ export const IconThinkOutline16 = () => (
   </svg>
 )
 
+export const IconSlidersOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M2 4.25h3.25M8.75 4.25H14M2 11.75h6.25M11.75 11.75H14"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+    />
+    <circle cx="6.5" cy="4.25" r="1.75" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="9.5" cy="11.75" r="1.75" stroke="currentColor" strokeWidth="1.4" />
+  </svg>
+)
+
 export const IconTrashOutline16 = () => (
   <svg width={16} height={16} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path

@@ -3,6 +3,12 @@ declare const styles: {
   readonly "mobilePageMain": string;
   readonly "settingsGroup": string;
   readonly "settingsLink": string;
+  readonly "generationEntryLabel": string;
+  readonly "generationForm": string;
+  readonly "generationField": string;
+  readonly "generationSelect": string;
+  readonly "generationRangeRow": string;
+  readonly "generationStatus": string;
   readonly "connectionTitleActions": string;
   readonly "connectionMore": string;
   readonly "topupIcon": string;

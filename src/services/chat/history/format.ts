@@ -1,3 +1,5 @@
+import type { GenerationParams } from '../../generation.js'
+
 /**
  * 历史会话导出产物（deepseek_data-*.zip）的类型定义。
  *
@@ -29,6 +31,7 @@ export type SessionFile = {
   id: string
   deepchat_custom_provider_id?: string
   deepchat_pinned_provider_id?: string
+  deepchat_generation?: GenerationParams
   title: string | null
   pinned: boolean
   /** 用户当前停留的消息，线性化消息树的唯一依据 */

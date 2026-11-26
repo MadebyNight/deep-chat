@@ -96,7 +96,9 @@ export const PromptPicker = ({
           >
             <span className={styles.promptTitle}>{title}</span>
             {categoryLabel ? <span className={styles.categoryChip}>{categoryLabel}</span> : null}
-            <IconChevronDownOutline14 />
+            <span className={styles.promptChevron}>
+              <IconChevronDownOutline14 />
+            </span>
           </ActionButton>
         </section>
       )}

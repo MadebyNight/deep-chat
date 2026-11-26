@@ -1,4 +1,5 @@
 import { BackupError, fail } from './errors.js'
+import { parseGenerationParams } from '../../generation.js'
 import {
   EXPORT_FORMAT_VERSION,
   type ChatMessage,
@@ -261,6 +262,9 @@ export const readSessionFile: Read<SessionFile> = (value) => {
     ...(typeof item.deepchat_pinned_provider_id === 'string' && item.deepchat_pinned_provider_id
       ? { deepchat_pinned_provider_id: item.deepchat_pinned_provider_id }
       : {}),
+    ...(item.deepchat_generation === undefined
+      ? {}
+      : { deepchat_generation: parseGenerationParams(item.deepchat_generation) ?? invalid() }),
     current_message_id: count(item.current_message_id),
     inserted_at: time(item.inserted_at),
     updated_at: time(item.updated_at),

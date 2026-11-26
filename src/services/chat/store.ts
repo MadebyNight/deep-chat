@@ -42,6 +42,12 @@ import {
 } from '../attachments.js'
 import { getSelectedPrompt, useSettings, type PromptPreset } from '../settings.js'
 import {
+  createAnthropicRequest,
+  isChatModel,
+  normalizeGenerationParams,
+  type GenerationParams,
+} from '../generation.js'
+import {
   appendBranch,
   forkVisibleBranch,
   getVisibleMessages,
@@ -318,13 +324,14 @@ export const bindChatPersistence = () => {
 }
 
 /** 按当前开关创建回复：深度思考对应 thinking，智能搜索控制 deepseek_web_search。 */
-const createReply = (connection: ChatConnection): AssistantMessage => {
+const createReply = (connection: ChatConnection, generation: GenerationParams): AssistantMessage => {
   const { thinking, search } = useSettings.getState()
   return {
     id: createId(),
     role: 'assistant',
     createdAt: Date.now(),
-    model: connection.kind === 'deepseek' ? MODEL : null,
+    model: connection.kind === 'deepseek' ? generation.model : connection.provider.model,
+    generation,
     thinking,
     search: connection.kind === 'deepseek' && search,
     prefix: connection.kind === 'deepseek',
@@ -844,6 +851,9 @@ const chatConnectionFor = (session?: Session): ChatConnection | undefined => {
 const providerLabel = (provider: CustomProvider) =>
   `${new URL(provider.baseUrl).host} · ${provider.model}`
 
+const generationFor = (session?: Session) =>
+  normalizeGenerationParams(session?.generation ?? useSettings.getState().generationParams)
+
 const routeInfo = (
   provider: CustomProvider,
   fallback: boolean,
@@ -955,6 +965,7 @@ export const sendMessage = (targetSessionId: string | null) => {
   if (!current) {
     return false
   }
+  const generation = generationFor(current)
   const history = getVisibleMessages(current)
   const question: UserMessage = {
     id: createId(),
@@ -973,7 +984,7 @@ export const sendMessage = (targetSessionId: string | null) => {
     })) : [],
     createdAt: now,
   }
-  const reply = createReply(chatConnection)
+  const reply = createReply(chatConnection, generation)
   updateSession(sessionId, (session) => ({
     ...appendBranch(session, history.at(-1)?.id ?? null, [question, reply]),
     updatedAt: now,
@@ -999,6 +1010,7 @@ export const regenerateReply = (sessionId: string, messageId?: string) => {
   if (!session || getStreamController(sessionId)) {
     return
   }
+  const generation = generationFor(session)
   const chatConnection = chatConnectionFor(session)
   if (!chatConnection) {return}
   const path = getVisibleMessages(session)
@@ -1009,7 +1021,7 @@ export const regenerateReply = (sessionId: string, messageId?: string) => {
     return
   }
   const history = path.slice(0, index - 1)
-  const reply = createReply(chatConnection)
+  const reply = createReply(chatConnection, generation)
   updateSession(sessionId, (s) => ({
     ...appendBranch(s, question.id, [reply]),
     updatedAt: Date.now(),
@@ -1027,6 +1039,7 @@ export const editMessage = (sessionId: string, messageId: string, content: strin
   if (!session || getStreamController(sessionId)) {
     return false
   }
+  const generation = generationFor(session)
   const chatConnection = chatConnectionFor(session)
   if (!chatConnection) {return false}
   const path = getVisibleMessages(session)
@@ -1043,7 +1056,7 @@ export const editMessage = (sessionId: string, messageId: string, content: strin
     files: previous.files,
     createdAt: Date.now(),
   }
-  const reply = createReply(chatConnection)
+  const reply = createReply(chatConnection, generation)
   updateSession(sessionId, (s) => ({
     ...appendBranch(s, path[index - 1]?.id ?? null, [question, reply]),
     updatedAt: Date.now(),
@@ -1218,7 +1231,7 @@ export const createSummaryHandoff = async (sessionId: string): Promise<SummaryHa
     const summary = await summarizeContext(
       { ...context, summary: prior || undefined },
       {
-        model: lastReply?.model ?? MODEL,
+        model: isChatModel(lastReply?.model) ? lastReply.model : MODEL,
         safety_check: SAFETY_CHECK,
       },
       connection.kind === 'custom'
@@ -1289,11 +1302,13 @@ export const continueReply = (sessionId: string, messageId: string) => {
   ) {
     return
   }
+  const generation = normalizeGenerationParams(previous.generation, generationFor(session))
   const { thinking, search } = useSettings.getState()
   const reply: AssistantMessage = {
     ...previous,
     // 未记录请求配置的回复，续写时使用默认模型和当前开关。
-    model: previous.model ?? MODEL,
+    model: previous.model ?? generation.model,
+    generation,
     thinking: previous.thinking ?? thinking,
     search: previous.search ?? search,
     status: 'pending',
@@ -1333,6 +1348,25 @@ export const retryUpload = (sessionId: string, messageId: string) => {
   updateReply(sessionId, reply)
   persist(sessionId)
   void streamReply(sessionId, reply, { history: path.slice(0, index - 1), question }, chatConnection)
+}
+
+/** 更新会话级生成参数；null 表示恢复跟随全局默认。 */
+export const setSessionGeneration = (
+  sessionId: string,
+  generation: GenerationParams | null
+): boolean => {
+  if (get().importingHistory || deletingSessions.has(sessionId)) {
+    return false
+  }
+  if (!getSession(sessionId)) {
+    return false
+  }
+  updateSession(sessionId, (session) => ({
+    ...session,
+    generation: generation === null ? undefined : normalizeGenerationParams(generation),
+  }))
+  persist(sessionId)
+  return true
 }
 
 type Request = { history: Message[]; question: UserMessage; prefix?: AssistantMessage }
@@ -1600,13 +1634,22 @@ const streamReply = async (
   const latestReminder = request.prefix
     ? request.prefix.latestReminder
     : createLatestReminder(settings)
-  const options = {
-    model: initial.model ?? MODEL,
-    system,
-    thinking: { type: initial.thinking ? ('enabled' as const) : ('disabled' as const) },
-    safety_check: SAFETY_CHECK,
-    tools: serverTools(initial.search ?? false),
-  }
+  const fallbackGeneration = generationFor(getSession(sessionId))
+  const generation = normalizeGenerationParams(initial.generation, {
+    ...fallbackGeneration,
+    model: isChatModel(initial.model) ? initial.model : fallbackGeneration.model,
+  })
+  const options = createAnthropicRequest(
+    {
+      system,
+      messages: [],
+      thinking: { type: initial.thinking ? ('enabled' as const) : ('disabled' as const) },
+      safety_check: SAFETY_CHECK,
+      tools: serverTools(initial.search ?? false),
+    },
+    generation,
+    { officialAccount: official, thinking: !!initial.thinking }
+  )
   const withHandoffSummary = (summary?: string) =>
     [getSession(sessionId)?.handoff?.summary, summary]
       .map((item) => item?.trim())
@@ -1667,6 +1710,7 @@ const streamReply = async (
             usedRates = route.rates
             reply = {
               ...reply,
+              model: route.provider.model,
               route: routeInfo(route.provider, fallback, chatConnection.provider),
               retry: undefined,
             }
@@ -1682,7 +1726,7 @@ const streamReply = async (
                     messages,
                     signal,
                     route.rates,
-                      { thinking: !!initial.thinking, system }
+                    { thinking: !!initial.thinking, system, generation }
                   )
                 },
                 isContentEvent: (event) => event.type === 'content_block_start',

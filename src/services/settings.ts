@@ -2,6 +2,11 @@ import { create } from 'zustand'
 import { credentials, isNative } from './native.js'
 import type { TtsVoice } from './api/speech.js'
 import { readPromptPreferences } from './promptLibrary.js'
+import {
+  DEFAULT_GENERATION_PARAMS,
+  normalizeGenerationParams,
+  type GenerationParams,
+} from './generation.js'
 
 export type Locale = 'zh-CN' | 'en-US'
 
@@ -39,6 +44,7 @@ type Settings = {
   hapticsEnabled: boolean
   thinking: boolean
   search: boolean
+  generationParams: GenerationParams
   prompts: PromptPreferences
   siderCollapsed: boolean
 }
@@ -57,6 +63,7 @@ const KEYS = {
   hapticsEnabled: 'deepchat:haptics-enabled',
   thinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
+  generationParams: 'deepchat:generation-params-v1',
   systemPrompt: 'deepchat:system-prompt',
   prompts: 'deepchat:prompt-presets-v1',
   siderCollapsed: 'chat-demo:sider-collapsed',
@@ -109,6 +116,18 @@ const initialChatFontSize = () => {
 /** 未保存过时使用服务端默认音色 stella（海星） */
 const initialTtsVoice = (): TtsVoice => (readPreference(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
 
+const initialGenerationParams = (): GenerationParams => {
+  const raw = readPreference(KEYS.generationParams)
+  if (!raw) {
+    return { ...DEFAULT_GENERATION_PARAMS }
+  }
+  try {
+    return normalizeGenerationParams(JSON.parse(raw))
+  } catch {
+    return { ...DEFAULT_GENERATION_PARAMS }
+  }
+}
+
 const initialPrompts = (): PromptPreferences => {
   const raw = readPreference(KEYS.prompts)
   if (raw !== null) {
@@ -155,6 +174,7 @@ export const useSettings = create<Settings>(() => ({
   hapticsEnabled: readPreference(KEYS.hapticsEnabled) !== 'false',
   thinking: readPreference(KEYS.thinking) === 'true',
   search: readPreference(KEYS.search) === 'true',
+  generationParams: initialGenerationParams(),
   prompts: initialPrompts(),
   siderCollapsed: readPreference(KEYS.siderCollapsed) === 'true',
 }))
@@ -239,6 +259,11 @@ export const setThinking = (thinking: boolean) => {
 export const setSearch = (search: boolean) => {
   writePreference(KEYS.search, String(search))
   useSettings.setState({ search })
+}
+
+export const setGenerationParams = (generationParams: GenerationParams) => {
+  writePreference(KEYS.generationParams, JSON.stringify(generationParams))
+  useSettings.setState({ generationParams })
 }
 
 export const setPrompts = (prompts: PromptPreferences) => {

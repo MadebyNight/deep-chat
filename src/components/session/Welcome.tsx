@@ -3,7 +3,6 @@ import { useTranslate, type TranslationKey } from '../../i18n/index.js'
 import whaleLogo from '../../assets/whale.png'
 import { ChatInput } from '../chatInput/ChatInput.js'
 import { MobileHeader } from './MobileHeader.js'
-import { PromptPicker } from './PromptPicker.js'
 import styles from './Welcome.module.css'
 
 /** 官方欢迎语随时段变化；无法归类的时段用中性问候 */
@@ -33,8 +32,7 @@ export const Welcome = () => {
           <img className={styles.brandMark} src={whaleLogo} width={44} height={34} alt="" />
           <span>{t(greetingKey())}</span>
         </div>
-        <PromptPicker />
-        <ChatInput sessionId={null} />
+        <ChatInput sessionId={null} showPrompt />
         {isMobile ? <div className={styles.caveat}>Deep Chat · DeepSeek 第三方客户端</div> : null}
       </div>
     </div>

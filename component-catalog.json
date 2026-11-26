@@ -115,6 +115,7 @@
       "IconSendOutline16",
       "IconSettingsOutline16",
       "IconShareOutline16",
+      "IconSlidersOutline16",
       "IconStopFill16",
       "IconThinkOutline14",
       "IconThinkOutline16",
@@ -416,6 +417,15 @@
     "group": "settings",
     "components": [
       "MemoryManagerModal"
+    ]
+  },
+  {
+    "file": "src/components/settings/GenerationSettings.tsx",
+    "group": "settings",
+    "components": [
+      "GenerationDialog",
+      "GenerationEntryButton",
+      "GenerationSettingsItem"
     ]
   },
   {

@@ -503,6 +503,42 @@ test('streams custom provider reasoning blocks and falls back when reasoning_eff
   assert.equal(fallbackEvents.at(-1)?.type, 'message_stop')
 })
 
+test('passes complete generation parameters to custom providers in thinking mode', async (t) => {
+  Object.assign(globalThis, { __API_ORIGIN__: 'https://api.deepseek.com' })
+  const { streamCustomMessage } = await import('./client.js')
+  const { useChatUsage } = await import('../chat/usage.js')
+  useChatUsage.setState({ days: {} })
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: { setItem: () => undefined },
+  })
+  t.after(() => {
+    Reflect.deleteProperty(globalThis, 'localStorage')
+  })
+  let body: Record<string, unknown> | undefined
+  t.mock.method(globalThis, 'fetch', async (_url: RequestInfo | URL, init?: RequestInit) => {
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return sse({ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }, '[DONE]')
+  })
+  await Array.fromAsync(
+    streamCustomMessage(provider, messages, new AbortController().signal, undefined, {
+      thinking: true,
+      generation: {
+        model: 'deepseek-flash',
+        maxTokens: 12_345,
+        temperature: 0.25,
+        topP: 0.65,
+        preset: null,
+      },
+    })
+  )
+  assert.equal(body?.model, provider.model)
+  assert.equal(body?.max_tokens, 12_345)
+  assert.equal(body?.temperature, 0.25)
+  assert.equal(body?.top_p, 0.65)
+  assert.equal(body?.reasoning_effort, 'high')
+})
+
 test('loads legacy usage with a zero cost and retains known amounts when requests go unpriced', async (t) => {
   let stored = JSON.stringify({ '2026-11-01': { calls: 1, reported: 1, tokens: 7 } })
   Object.defineProperty(globalThis, 'localStorage', {

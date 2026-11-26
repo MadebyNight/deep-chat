@@ -1,13 +1,13 @@
 import type { TranslationMessage } from '../../i18n/index.js'
 import type { ApiErrorKind } from '../api/client.js'
 import type {
-  ChatModel,
   MessageUsage,
   ServerToolBlock,
   StopDetails,
   StopReason,
   TextCitation,
 } from '../api/types.js'
+import type { GenerationParams } from '../generation.js'
 
 /**
  * 消息附件。id 是本地标识（IndexedDB files 表的主键，原件按它存储，所有引用同一 id 的消息共用一份），
@@ -97,7 +97,9 @@ export type AssistantMessage = MessageBranch & {
   role: 'assistant'
   createdAt: number
   /** 未记录模型时为 null，续写使用当前默认模型。 */
-  model: ChatModel | null
+  model: string | null
+  /** 本轮请求的生成参数快照；旧消息缺省时使用会话当前参数。 */
+  generation?: GenerationParams
   /** 请求时是否开启深度思考 */
   thinking?: boolean
   /** 请求时是否声明 deepseek_web_search；关闭时仍声明 deepseek_read_url */
@@ -181,6 +183,8 @@ export type Session = {
   customProviderId?: string
   /** 粘性会话当前优先使用自定义供应商线路；缺省表示使用主线路 */
   pinnedProviderId?: string
+  /** 会话级生成参数覆盖；缺省时使用全局默认。 */
+  generation?: GenerationParams
   /** undefined 表示线性消息列表；null 表示空会话。 */
   rootMessageId?: string | null
 }

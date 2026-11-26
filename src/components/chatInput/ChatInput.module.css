@@ -344,6 +344,29 @@
   min-width: 0;
 }
 
+.composerTools {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 6px;
+}
+
+.composerTools > button {
+  flex-shrink: 0;
+}
+
+.promptSlot {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.promptSlot > section {
+  margin-bottom: 0;
+}
+
 .composer:has(.attachmentChoices) :is(.textarea, .mirror) {
   min-height: calc(var(--line-height) * 2 + var(--input-padding-top) + 8px);
 }
