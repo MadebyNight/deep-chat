@@ -1,5 +1,15 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslate } from '../../i18n/index.js'
+import {
+  Button,
+  IconExpandOutline16,
+} from '../base/index.js'
 import { ensureKatex, type Katex } from '../../services/markdown/katex.js'
+import {
+  MarkdownBlockActions,
+  MarkdownBlockCopyButton,
+  MarkdownBlockPreview,
+} from './BlockPreview.js'
 
 /** renderToString 外层包裹的标签，组件自己渲染外层，这里切掉 */
 const KATEX_WRAPPER = {
@@ -47,14 +57,46 @@ const useMathHtml = (input: string, isInline: boolean): MathHtmlResult => {
 }
 
 export const MathBlock = memo(function MathBlock({ value }: { value: string }) {
+  const t = useTranslate()
   const { html, renderMode } = useMathHtml(value, false)
-  if (renderMode === 'fallback') {
-    return <p className="ds-markdown-paragraph">{html}</p>
-  }
+  const [previewOpen, setPreviewOpen] = useState(false)
   return (
-    <span className="katex-display ds-markdown-math">
-      <span className="katex" dangerouslySetInnerHTML={{ __html: html }}></span>
-    </span>
+    <div className="markdown-math-block">
+      <MarkdownBlockActions>
+        <MarkdownBlockCopyButton text={value} label="copyLatex" />
+        <Button
+          size="s"
+          variant="outlined"
+          className="markdown-block-button"
+          onClick={() => setPreviewOpen(true)}
+        >
+          <IconExpandOutline16 />
+          <span>{t('fullscreen')}</span>
+        </Button>
+      </MarkdownBlockActions>
+      {renderMode === 'fallback' ? (
+        <p className="ds-markdown-paragraph markdown-math-fallback">{html}</p>
+      ) : (
+        <span className="katex-display ds-markdown-math">
+          <span className="katex" dangerouslySetInnerHTML={{ __html: html }}></span>
+        </span>
+      )}
+      <MarkdownBlockPreview
+        open={previewOpen}
+        title={t('mathFullscreen')}
+        onClose={() => setPreviewOpen(false)}
+      >
+        <div className="markdown-math-preview">
+          {renderMode === 'fallback' ? (
+            <pre className="markdown-math-source">{value}</pre>
+          ) : (
+            <span className="katex-display markdown-math-preview-formula">
+              <span className="katex" dangerouslySetInnerHTML={{ __html: html }}></span>
+            </span>
+          )}
+        </div>
+      </MarkdownBlockPreview>
+    </div>
   )
 })
 

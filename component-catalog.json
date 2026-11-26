@@ -92,6 +92,7 @@
       "IconDownloadOutline16",
       "IconEditOutline16",
       "IconEllipsisOutline16",
+      "IconExpandOutline16",
       "IconFolderOutline16",
       "IconFolderPlusOutline16",
       "IconFollowsystemOutline16",
@@ -186,6 +187,15 @@
     ]
   },
   {
+    "file": "src/components/markdown/BlockPreview.tsx",
+    "group": "messages",
+    "components": [
+      "MarkdownBlockActions",
+      "MarkdownBlockCopyButton",
+      "MarkdownBlockPreview"
+    ]
+  },
+  {
     "file": "src/components/markdown/CodeBlock.tsx",
     "group": "messages",
     "components": [
@@ -219,6 +229,7 @@
       "MarkdownPhrasingContent",
       "MarkdownPhrasingContentItem",
       "Table",
+      "TableElement",
       "TextContent"
     ]
   },
@@ -435,6 +446,7 @@
       "AboutSettings",
       "AutoReadSetting",
       "ContextCompactionSetting",
+      "CopyFormatSetting",
       "DataAction",
       "DeleteAllConfirm",
       "ExportHistory",

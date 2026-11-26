@@ -1,4 +1,12 @@
-import { createElement, memo, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'
+import {
+  createElement,
+  memo,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import clsx from 'clsx'
 import type {
   BlockContent,
@@ -8,7 +16,22 @@ import type {
   Root,
   Table as TableNode,
 } from 'mdast'
+import { useTranslate } from '../../i18n/index.js'
+import {
+  Button,
+  IconCopyOutline16,
+  IconExpandOutline16,
+  Menu,
+} from '../base/index.js'
+import { showToast } from '../base/toastState.js'
+import { triggerHaptic } from '../../services/haptics.js'
+import { copyText } from '../../utils/clipboard.js'
+import {
+  tableNodeToCsv,
+  tableNodeToTsv,
+} from '../../utils/markdownAstText.js'
 import { CitationLink } from '../search/CitationLink.js'
+import { MarkdownBlockActions, MarkdownBlockPreview } from './BlockPreview.js'
 import { CodeBlock } from './CodeBlock.js'
 import { ImageAsLink, Link } from './Link.js'
 import { InlineMath, MathBlock } from './MathFormula.js'
@@ -42,47 +65,113 @@ const List = memo(function List({ node, loading }: { node: ListNode; loading: bo
   )
 })
 
-const Table = memo(function Table({ node }: { node: TableNode }) {
+const TableElement = memo(function TableElement({ node }: { node: TableNode }) {
   const columnCount = node.children[0]?.children.length
   return (
-    <div className="markdown-table-wrapper">
-      <table>
-        {node.children[0] ? (
-          <thead>
-            <tr>
-              {node.children[0].children.map((cell, cellIndex) => {
-                return (
-                  <th key={cellIndex}>
-                    <MarkdownPhrasingContent nodes={cell.children} />
-                  </th>
-                )
-              })}
-            </tr>
-          </thead>
-        ) : null}
-        {node.children[1] ? (
-          <tbody>
-            {node.children.slice(1).map((row, rowIndex) => {
-              const curColumnCount = row.children.length || 0
+    <table>
+      {node.children[0] ? (
+        <thead>
+          <tr>
+            {node.children[0].children.map((cell, cellIndex) => {
               return (
-                <tr key={rowIndex}>
-                  {row.children.map((cell, cellIndex) => {
-                    return (
-                      <td key={cellIndex}>
-                        <MarkdownPhrasingContent nodes={cell.children} />
-                      </td>
-                    )
-                  })}
-                  {/* 补齐到列数 */}
-                  {Array.from({ length: columnCount - curColumnCount }).map((_, idx) => (
-                    <td key={`ptd_${idx}`} />
-                  ))}
-                </tr>
+                <th key={cellIndex}>
+                  <MarkdownPhrasingContent nodes={cell.children} />
+                </th>
               )
             })}
-          </tbody>
-        ) : null}
-      </table>
+          </tr>
+        </thead>
+      ) : null}
+      {node.children[1] ? (
+        <tbody>
+          {node.children.slice(1).map((row, rowIndex) => {
+            const curColumnCount = row.children.length || 0
+            return (
+              <tr key={rowIndex}>
+                {row.children.map((cell, cellIndex) => {
+                  return (
+                    <td key={cellIndex}>
+                      <MarkdownPhrasingContent nodes={cell.children} />
+                    </td>
+                  )
+                })}
+                {/* 补齐到列数 */}
+                {Array.from({ length: columnCount - curColumnCount }).map((_, idx) => (
+                  <td key={`ptd_${idx}`} />
+                ))}
+              </tr>
+            )
+          })}
+        </tbody>
+      ) : null}
+    </table>
+  )
+})
+
+const Table = memo(function Table({ node }: { node: TableNode }) {
+  const t = useTranslate()
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const copyTable = async (format: 'tsv' | 'csv') => {
+    if (!(await copyText(format === 'tsv' ? tableNodeToTsv(node) : tableNodeToCsv(node)))) {
+      showToast({ key: 'copyFailed' })
+      return
+    }
+    triggerHaptic('light')
+    showToast({ key: format === 'tsv' ? 'tableCopiedTsv' : 'tableCopiedCsv' })
+  }
+  return (
+    <div className="markdown-table-block">
+      <MarkdownBlockActions>
+        <Menu
+          options={[
+            {
+              key: 'tsv',
+              label: t('copyTableTsv'),
+              onSelect: () => void copyTable('tsv'),
+            },
+            {
+              key: 'csv',
+              label: t('copyTableCsv'),
+              onSelect: () => void copyTable('csv'),
+            },
+          ]}
+        >
+          {({ open, toggle }) => (
+            <Button
+              size="s"
+              variant="outlined"
+              className="markdown-block-button"
+              aria-haspopup="menu"
+              aria-expanded={open}
+              onClick={toggle}
+            >
+              <IconCopyOutline16 />
+              <span>{t('copy')}</span>
+            </Button>
+          )}
+        </Menu>
+        <Button
+          size="s"
+          variant="outlined"
+          className="markdown-block-button"
+          onClick={() => setPreviewOpen(true)}
+        >
+          <IconExpandOutline16 />
+          <span>{t('fullscreen')}</span>
+        </Button>
+      </MarkdownBlockActions>
+      <div className="markdown-table-wrapper">
+        <TableElement node={node} />
+      </div>
+      <MarkdownBlockPreview
+        open={previewOpen}
+        title={t('tableFullscreen')}
+        onClose={() => setPreviewOpen(false)}
+      >
+        <div className="markdown-table-preview">
+          <TableElement node={node} />
+        </div>
+      </MarkdownBlockPreview>
     </div>
   )
 })
