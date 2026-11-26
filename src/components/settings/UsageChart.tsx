@@ -25,6 +25,10 @@ export const UsageChart = ({ onDetails }: { onDetails?: () => void }) => {
   const totalCalls = elapsed.reduce((sum, day) => sum + day.calls, 0)
   const totalReported = elapsed.reduce((sum, day) => sum + day.reported, 0)
   const totalTokens = elapsed.reduce((sum, day) => sum + day.tokens, 0)
+  const totalInputTokens = elapsed.reduce((sum, day) => sum + day.inputTokens, 0)
+  const totalCacheReadTokens = elapsed.reduce((sum, day) => sum + day.cacheReadTokens, 0)
+  const totalCacheSavedNanos = elapsed.reduce((sum, day) => sum + day.cacheSavedNanos, 0)
+  const totalPriced = elapsed.reduce((sum, day) => sum + day.priced, 0)
   const totalCostNanos = elapsed.reduce((sum, day) => sum + day.costNanos, 0)
   const cost = totalCostNanos / NANOS_PER_YUAN
   const costLabel = formatCostLabel(totalCostNanos, locale)
@@ -47,6 +51,15 @@ export const UsageChart = ({ onDetails }: { onDetails?: () => void }) => {
   })
   const tokenLabel = totalReported ? number.format(totalTokens) : '—'
   const callsLabel = number.format(totalCalls)
+  const cachedLabel = totalReported ? number.format(totalCacheReadTokens) : '—'
+  const cacheRateLabel =
+    totalInputTokens > 0
+      ? new Intl.NumberFormat(locale, {
+          style: 'percent',
+          maximumFractionDigits: 1,
+        }).format(totalCacheReadTokens / totalInputTokens)
+      : '—'
+  const cacheSavedLabel = totalPriced ? formatCostLabel(totalCacheSavedNanos, locale) : '—'
 
   if (onDetails) {
     return (
@@ -93,6 +106,20 @@ export const UsageChart = ({ onDetails }: { onDetails?: () => void }) => {
           <span>{t('connectionUsageCalls')}</span>
           <strong title={callsLabel} aria-label={callsLabel}>{callsLabel.length > 7 ? compactNumber.format(totalCalls) : callsLabel}</strong>
         </ActionButton>
+      </div>
+      <div className="connection-usage-cache">
+        <div>
+          <span>{t('connectionUsageCacheTokens')}</span>
+          <strong>{cachedLabel}</strong>
+        </div>
+        <div>
+          <span>{t('connectionUsageCacheRate')}</span>
+          <strong>{cacheRateLabel}</strong>
+        </div>
+        <div>
+          <span>{t('connectionUsageCacheSaved')}</span>
+          <strong>{cacheSavedLabel}</strong>
+        </div>
       </div>
       <div className="connection-usage-weekdays" aria-hidden>
         {Array.from({ length: 7 }, (_, index) => (

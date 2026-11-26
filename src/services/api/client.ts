@@ -146,6 +146,9 @@ export const accountRequestError = (error: unknown) => {
     void officialAccountRequest<AccountState>('state').then(applyAccountState).catch(() => undefined)
     return new ApiError('http', { key: 'connectionAccountSignInAgain' }, status, failure?.code)
   }
+  if (failure?.code === 'ACCOUNT_NETWORK') {
+    return new ApiError('network', { key: 'connectionAccountError' }, undefined, failure.code)
+  }
   return new ApiError('http', failure?.data?.detail || { key: 'connectionAccountError' }, status, failure?.code)
 }
 
@@ -296,11 +299,15 @@ export async function* streamCustomMessage(
       signal.throwIfAborted()
       response = await send()
     }
-  } catch {
+  } catch (error) {
     signal.throwIfAborted()
-    throw new ApiError('protocol', failure)
+    throw error instanceof ApiError ? error : new ApiError('network', failure)
   }
-  if (!response.ok || !response.body || !response.headers.get('content-type')?.includes('text/event-stream')) {
+  if (!response.ok) {
+    const error = await readErrorResponse(response)
+    throw new ApiError('http', failure, error.status, error.code)
+  }
+  if (!response.body || !response.headers.get('content-type')?.includes('text/event-stream')) {
     void response.body?.cancel().catch(() => undefined)
     throw new ApiError('protocol', failure)
   }
@@ -319,7 +326,12 @@ export async function* streamCustomMessage(
         break
       }
       if (event === 'error') {throw new ApiError('stream', failure)}
-      const chunk = JSON.parse(data) as CustomChunk | null
+      let chunk: CustomChunk | null
+      try {
+        chunk = JSON.parse(data) as CustomChunk | null
+      } catch {
+        throw new ApiError('protocol', failure)
+      }
       if (chunk?.error) {throw new ApiError('stream', failure)}
       if (chunk?.model && chunk.model !== provider.model) {matchingModel = false}
       usage = customUsage(chunk?.usage) ?? usage
@@ -389,7 +401,7 @@ export async function* streamCustomMessage(
     yield { type: 'message_stop' }
   } catch (error) {
     signal.throwIfAborted()
-    throw error instanceof ApiError ? error : new ApiError('protocol', failure)
+    throw error instanceof ApiError ? error : new ApiError('network', failure)
   } finally {
     if (usage) {report?.(usage, matchingModel)}
   }
@@ -442,6 +454,11 @@ async function* readMessageStream(
     }
     // 服务端没有提供错误内容时保持为空，不推测断流原因。
     throw new ApiError('interrupted', '')
+  } catch (error) {
+    if (signal.aborted || error instanceof ApiError) {
+      throw error
+    }
+    throw new ApiError('network', error instanceof Error ? error.message : String(error))
   } finally {
     if (latestUsage) {
       reportUsage?.(latestUsage)

@@ -8,10 +8,18 @@ import {
   saveCustomProvider,
   selectCustomProvider,
   normalizeProviderUrl,
+  providerRoute,
   refreshProviderPricing,
   useCustomProvider,
 } from '../customProvider.js'
-import { deepSeekRates, formatCostLabel, OFFICIAL_API_ORIGIN, readModelRates, tokenCost } from './tokenPricing.js'
+import {
+  deepSeekRates,
+  formatCostLabel,
+  OFFICIAL_API_ORIGIN,
+  readModelRates,
+  tokenCost,
+  tokenUsageCost,
+} from './tokenPricing.js'
 
 const provider = {
   id: 'provider-v1',
@@ -63,9 +71,25 @@ test('validates endpoint and keeps a chat associated with its configuration', ()
 
 test('migrates the saved provider and preserves selection across list changes', async (t) => {
   const migrated = readProviderSettings({ provider, enabled: true })
-  assert.deepEqual(migrated, { version: 2, providers: [provider], activeId: provider.id })
+  assert.deepEqual(migrated, {
+    version: 3,
+    providers: [provider],
+    activeId: provider.id,
+    fallbackProviderIds: [],
+    stickyProvider: true,
+  })
   assert.equal(readProviderSettings({ provider, enabled: false }).activeId, null)
   assert.throws(() => readProviderSettings({ ...migrated, activeId: 'missing' }))
+  assert.deepEqual(
+    readProviderSettings({
+      version: 3,
+      providers: [provider, { ...provider, id: 'backup' }],
+      activeId: provider.id,
+      fallbackProviderIds: ['backup', 'backup', provider.id, 'missing'],
+      stickyProvider: false,
+    }).fallbackProviderIds,
+    ['backup']
+  )
   useCustomProvider.setState({ ...migrated, provider, enabled: true })
   t.after(() => useCustomProvider.setState({ providers: [], activeId: null, provider: null, enabled: false, rates: undefined }))
   const other = { ...provider, id: 'second', apiKey: 'second-key', baseUrl: 'https://other.test/v1' }
@@ -112,6 +136,15 @@ test('interprets only model-specific prices with a known CNY unit', () => {
   assert.equal(tokenCost(usage, rates), 31_000_000)
   assert.equal(tokenCost(usage, { input: 0, output: 0, cacheRead: 0 }), 0)
   assert.equal(tokenCost(usage, { input: 0, output: 0 }), undefined)
+  assert.deepEqual(tokenUsageCost(usage, rates), {
+    costNanos: 31_000_000,
+    cacheSavedNanos: 4_000_000,
+  })
+  assert.deepEqual(tokenUsageCost(usage, { input: 0, output: 0, cacheRead: 0 }), {
+    costNanos: 0,
+    cacheSavedNanos: 0,
+  })
+  assert.equal(tokenUsageCost(usage, { input: 0, output: 0 }), undefined)
   const offPeak = new Date('2026-11-22T12:00:00.000Z')
   assert.deepEqual(deepSeekRates(OFFICIAL_API_ORIGIN, 'deepseek-flash', offPeak), {
     input: 1e-6,
@@ -150,6 +183,70 @@ test('interprets only model-specific prices with a known CNY unit', () => {
   assert.equal(formatCostLabel(1_234_560_000_000, 'en-US'), '¥1,234.56')
 })
 
+test('keeps a sticky session on its successful route before ordered fallbacks', () => {
+  const primary = provider
+  const backup1 = {
+    ...provider,
+    id: 'backup-1',
+    baseUrl: 'https://backup-1.test/v1',
+  }
+  const backup2 = {
+    ...provider,
+    id: 'backup-2',
+    baseUrl: 'https://backup-2.test/v1',
+  }
+  const settings = {
+    version: 3 as const,
+    providers: [primary, backup1, backup2],
+    activeId: primary.id,
+    fallbackProviderIds: [backup1.id, backup2.id],
+    stickyProvider: true,
+  }
+  const ids = (pinned?: string) =>
+    providerRoute(settings, pinned).map((item) => item.id)
+
+  assert.deepEqual(ids(), [primary.id, backup1.id, backup2.id])
+  assert.deepEqual(ids(backup2.id), [backup2.id, primary.id, backup1.id])
+  assert.deepEqual(ids('missing'), [primary.id, backup1.id, backup2.id])
+  assert.deepEqual(
+    providerRoute({ ...settings, stickyProvider: false }, backup2.id).map((item) => item.id),
+    [primary.id, backup1.id, backup2.id]
+  )
+  assert.deepEqual(
+    providerRoute({ ...settings, fallbackProviderIds: [] }, backup1.id).map((item) => item.id),
+    [backup1.id, primary.id]
+  )
+})
+
+test('keeps account authorization distinct from retryable account network failures', async () => {
+  Object.assign(globalThis, { __API_ORIGIN__: OFFICIAL_API_ORIGIN })
+  const { accountRequestError } = await import('./client.js')
+  assert.equal(
+    accountRequestError({ code: 'ACCOUNT_NETWORK' }).kind,
+    'network'
+  )
+  assert.equal(
+    accountRequestError({
+      code: 'ACCOUNT_HTTP',
+      data: { status: 429, detail: 'busy' },
+    }).status,
+    429
+  )
+  assert.equal(
+    accountRequestError({
+      code: 'ACCOUNT_HTTP',
+      data: { status: 503, detail: 'unavailable' },
+    }).status,
+    503
+  )
+  const unauthorized = accountRequestError({
+    code: 'ACCOUNT_SIGN_IN_REQUIRED',
+    data: { status: 401 },
+  })
+  assert.equal(unauthorized.status, 401)
+  assert.equal(unauthorized.localMessage?.key, 'connectionAccountSignInAgain')
+})
+
 test('loads prices from the configured endpoint, clearing unavailable metadata', async (t) => {
   useCustomProvider.setState({ provider, enabled: true })
   t.after(() => useCustomProvider.setState({ provider: null, enabled: false, rates: undefined }))
@@ -167,6 +264,46 @@ test('loads prices from the configured endpoint, clearing unavailable metadata',
   await refreshProviderPricing()
   assert.equal(useCustomProvider.getState().rates, undefined)
   assert.equal(useCustomProvider.getState().enabled, true)
+})
+
+test('caches fallback provider prices without replacing the active route rate', async (t) => {
+  const backup = {
+    ...provider,
+    id: 'backup-priced',
+    baseUrl: 'https://backup-priced.test/v1',
+  }
+  useCustomProvider.setState({
+    version: 3,
+    providers: [provider, backup],
+    activeId: provider.id,
+    fallbackProviderIds: [backup.id],
+    stickyProvider: true,
+    provider,
+    enabled: true,
+    rates: undefined,
+    ratesById: {},
+  })
+  t.after(() =>
+    useCustomProvider.setState({
+      version: 3,
+      providers: [],
+      activeId: null,
+      fallbackProviderIds: [],
+      stickyProvider: true,
+      provider: null,
+      enabled: false,
+      rates: undefined,
+      ratesById: {},
+    })
+  )
+  const fetchMock = t.mock.method(globalThis, 'fetch', async (url: RequestInfo | URL) => {
+    assert.equal(url, `${backup.baseUrl}/models`)
+    return Response.json(modelList('CNY', 'per_million_tokens'))
+  })
+  await refreshProviderPricing(backup.id)
+  assert.equal(useCustomProvider.getState().rates, undefined)
+  assert.equal(useCustomProvider.getState().ratesById[backup.id]?.output, rates.output)
+  assert.equal(fetchMock.mock.callCount(), 1)
 })
 
 test('handles late usage frames, missing usage, and interrupted or aborted streams', async (t) => {
@@ -227,6 +364,9 @@ test('handles late usage frames, missing usage, and interrupted or aborted strea
     tokens: 15,
     priced: 1,
     costNanos: 31_000_000,
+    inputTokens: 10,
+    cacheReadTokens: 4,
+    cacheSavedNanos: 4_000_000,
   })
 
   fetchMock.mock.mockImplementation(async (_url: RequestInfo | URL, init?: RequestInit) => {
@@ -248,6 +388,9 @@ test('handles late usage frames, missing usage, and interrupted or aborted strea
     tokens: 15,
     priced: 1,
     costNanos: 31_000_000,
+    inputTokens: 10,
+    cacheReadTokens: 4,
+    cacheSavedNanos: 4_000_000,
   })
   fetchMock.mock.mockImplementation(async () =>
     sse({ choices: [{ delta: { content: 'partial' } }] })
@@ -257,6 +400,27 @@ test('handles late usage frames, missing usage, and interrupted or aborted strea
   aborted.abort()
   await assert.rejects(collect(aborted.signal), { name: 'AbortError' })
   assert.equal(fetchMock.mock.callCount(), 4)
+})
+
+test('preserves upstream HTTP status so only transient custom-provider failures can fall back', async (t) => {
+  Object.assign(globalThis, { __API_ORIGIN__: 'https://api.deepseek.com' })
+  const { streamCustomMessage } = await import('./client.js')
+  let status = 503
+  t.mock.method(globalThis, 'fetch', async () =>
+    Response.json(
+      { error: { message: 'upstream failed', code: 'UPSTREAM' } },
+      { status }
+    )
+  )
+  for (const code of [401, 402, 429, 503]) {
+    status = code
+    await assert.rejects(
+      Array.fromAsync(
+        streamCustomMessage(provider, messages, new AbortController().signal, rates)
+      ),
+      { kind: 'http', status: code }
+    )
+  }
 })
 
 test('streams custom provider reasoning blocks and falls back when reasoning_effort is rejected', async (t) => {
@@ -356,7 +520,16 @@ test('loads legacy usage with a zero cost and retains known amounts when request
   const { useChatUsage, refreshChatUsage, recordChatRequest } = await import('../chat/usage.js')
   refreshChatUsage()
   const totals = () => useChatUsage.getState().days['2026-11-01']
-  assert.deepEqual(totals(), { calls: 1, reported: 1, tokens: 7, priced: 0, costNanos: 0 })
+  assert.deepEqual(totals(), {
+    calls: 1,
+    reported: 1,
+    tokens: 7,
+    priced: 0,
+    costNanos: 0,
+    inputTokens: 0,
+    cacheReadTokens: 0,
+    cacheSavedNanos: 0,
+  })
   const time = new Date(2026, 10, 1, 12)
   recordChatRequest(time, rates)?.(usage)
   recordChatRequest(time)?.(usage)
@@ -367,6 +540,9 @@ test('loads legacy usage with a zero cost and retains known amounts when request
     tokens: 37,
     priced: 1,
     costNanos: 31_000_000,
+    inputTokens: 20,
+    cacheReadTokens: 8,
+    cacheSavedNanos: 4_000_000,
   })
 })
 
@@ -424,5 +600,8 @@ test('records official DeepSeek API costs during both peak and off-peak windows'
     tokens: 5000,
     priced: 2,
     costNanos: 6_040_000 + 3_020_000,
+    inputTokens: 4000,
+    cacheReadTokens: 2000,
+    cacheSavedNanos: 2_940_000,
   })
 })

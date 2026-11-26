@@ -34,6 +34,8 @@ type Settings = {
   autoCompactContext: boolean
   /** 跨会话记忆总开关；默认关闭，不读取历史消息 */
   memoryEnabled: boolean
+  /** 在助手消息下方展示本轮 Token、缓存命中与费用快照 */
+  showMessageUsage: boolean
   hapticsEnabled: boolean
   thinking: boolean
   search: boolean
@@ -51,6 +53,7 @@ const KEYS = {
   autoCollapseThinking: 'chat-demo:auto-collapse-thinking',
   autoCompactContext: 'deepchat:auto-compact-context',
   memoryEnabled: 'deepchat:memory-enabled',
+  showMessageUsage: 'deepchat:show-message-usage',
   hapticsEnabled: 'deepchat:haptics-enabled',
   thinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
@@ -148,6 +151,7 @@ export const useSettings = create<Settings>(() => ({
   autoCollapseThinking: readPreference(KEYS.autoCollapseThinking) !== 'false',
   autoCompactContext: readPreference(KEYS.autoCompactContext) !== 'false',
   memoryEnabled: readPreference(KEYS.memoryEnabled) === 'true',
+  showMessageUsage: readPreference(KEYS.showMessageUsage) === 'true',
   hapticsEnabled: readPreference(KEYS.hapticsEnabled) !== 'false',
   thinking: readPreference(KEYS.thinking) === 'true',
   search: readPreference(KEYS.search) === 'true',
@@ -193,6 +197,11 @@ export const setAutoCompactContext = (autoCompactContext: boolean) => {
 export const setMemoryEnabled = (memoryEnabled: boolean) => {
   writePreference(KEYS.memoryEnabled, String(memoryEnabled))
   useSettings.setState({ memoryEnabled })
+}
+
+export const setShowMessageUsage = (showMessageUsage: boolean) => {
+  writePreference(KEYS.showMessageUsage, String(showMessageUsage))
+  useSettings.setState({ showMessageUsage })
 }
 
 export const setHapticsEnabled = (hapticsEnabled: boolean) => {

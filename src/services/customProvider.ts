@@ -4,16 +4,32 @@ import { readModelRates, type TokenRates } from './api/tokenPricing.js'
 
 export type CustomProvider = { id: string; baseUrl: string; apiKey: string; model: string }
 type ProviderConfig = Pick<CustomProvider, 'baseUrl' | 'apiKey'>
-type ProviderSettings = { version: 2; providers: CustomProvider[]; activeId: string | null }
-const emptySettings: ProviderSettings = { version: 2, providers: [], activeId: null }
+export type ProviderSettings = {
+  version: 3
+  providers: CustomProvider[]
+  activeId: string | null
+  /** 按尝试顺序排列的备用线路；不含当前主线路 */
+  fallbackProviderIds: string[]
+  /** 是否让同一会话继续优先使用上次成功的线路 */
+  stickyProvider: boolean
+}
+const emptySettings: ProviderSettings = {
+  version: 3,
+  providers: [],
+  activeId: null,
+  fallbackProviderIds: [],
+  stickyProvider: true,
+}
 const slot = 'customProvider' as const
 export const useCustomProvider = create<
   ProviderSettings & {
     provider: CustomProvider | null
     enabled: boolean
     rates?: TokenRates
+    /** 每个已配置供应商的费率缓存；备用线路也使用自己的费率。 */
+    ratesById: Partial<Record<string, TokenRates>>
   }
->(() => ({ ...emptySettings, provider: null, enabled: false }))
+>(() => ({ ...emptySettings, provider: null, enabled: false, ratesById: {} }))
 
 export const normalizeProviderUrl = (value: string): string | undefined => {
   try {
@@ -71,13 +87,18 @@ export const fetchProviderModels = async (provider: ProviderConfig, signal: Abor
   ].sort((a, b) => a.localeCompare(b))
 }
 
-let priceRequest = 0
-export const refreshProviderPricing = async () => {
-  const { provider } = useCustomProvider.getState()
+const pricingRequests = new Map<string, number>()
+export const refreshProviderPricing = async (providerId?: string) => {
+  const state = useCustomProvider.getState()
+  const provider = providerId
+    ? (state.providers.find((item) => item.id === providerId) ??
+      (state.provider?.id === providerId ? state.provider : undefined))
+    : state.provider
   if (!provider) {
     return
   }
-  const request = ++priceRequest
+  const request = (pricingRequests.get(provider.id) ?? 0) + 1
+  pricingRequests.set(provider.id, request)
   let rates: TokenRates | undefined
   try {
     rates = readModelRates(
@@ -87,9 +108,27 @@ export const refreshProviderPricing = async () => {
   } catch {
     // A price lookup is optional; no reliable price is represented by undefined.
   }
-  if (request === priceRequest && provider === useCustomProvider.getState().provider) {
-    useCustomProvider.setState({ rates })
+  const current = useCustomProvider.getState()
+  const currentProvider =
+    current.providers.find((item) => item.id === provider.id) ??
+    (current.provider?.id === provider.id ? current.provider : undefined)
+  if (
+    pricingRequests.get(provider.id) !== request ||
+    !currentProvider ||
+    currentProvider.baseUrl !== provider.baseUrl ||
+    currentProvider.model !== provider.model
+  ) {
+    return
   }
+  const ratesById = rates
+    ? { ...current.ratesById, [provider.id]: rates }
+    : Object.fromEntries(
+        Object.entries(current.ratesById).filter(([id]) => id !== provider.id)
+      )
+  useCustomProvider.setState({
+    ratesById,
+    ...(current.provider?.id === provider.id ? { rates } : {}),
+  })
 }
 
 const isProvider = (value: unknown): value is CustomProvider => {
@@ -112,11 +151,26 @@ export const readProviderSettings = (value: unknown): ProviderSettings => {
     version?: unknown
     providers?: unknown
     activeId?: unknown
+    fallbackProviderIds?: unknown
+    stickyProvider?: unknown
     provider?: unknown
     enabled?: unknown
   } | null
+  const fallbackIds = (providers: CustomProvider[], activeId: string | null) => {
+    if (!Array.isArray(stored?.fallbackProviderIds)) {
+      return []
+    }
+    const ids = new Set(providers.map(({ id }) => id))
+    return [
+      ...new Set(
+        stored.fallbackProviderIds.filter(
+          (id): id is string => typeof id === 'string' && id !== activeId && ids.has(id)
+        )
+      ),
+    ]
+  }
   if (
-    stored?.version === 2 &&
+    (stored?.version === 2 || stored?.version === 3) &&
     Array.isArray(stored.providers) &&
     stored.providers.every(isProvider)
   ) {
@@ -126,7 +180,16 @@ export const readProviderSettings = (value: unknown): ProviderSettings => {
       ids.size === stored.providers.length &&
       (activeId === null || (typeof activeId === 'string' && ids.has(activeId)))
     ) {
-      return { version: 2, providers: stored.providers, activeId }
+      return {
+        version: 3,
+        providers: stored.providers,
+        activeId,
+        fallbackProviderIds: fallbackIds(stored.providers, activeId),
+        stickyProvider:
+          stored.version === 3 && typeof stored.stickyProvider === 'boolean'
+            ? stored.stickyProvider
+            : true,
+      }
     }
   }
   if (
@@ -135,9 +198,11 @@ export const readProviderSettings = (value: unknown): ProviderSettings => {
     typeof stored.enabled === 'boolean'
   ) {
     return {
-      version: 2,
+      version: 3,
       providers: [stored.provider],
       activeId: stored.enabled ? stored.provider.id : null,
+      fallbackProviderIds: [],
+      stickyProvider: true,
     }
   }
   throw new Error('Invalid custom provider settings')
@@ -146,14 +211,41 @@ export const readProviderSettings = (value: unknown): ProviderSettings => {
 const applyProviderSettings = (settings: ProviderSettings) => {
   const previous = useCustomProvider.getState()
   const provider = settings.providers.find((item) => item.id === settings.activeId) ?? null
+  const ratesById: Partial<Record<string, TokenRates>> = {}
+  for (const item of settings.providers) {
+    const previousProvider = previous.providers.find(({ id }) => id === item.id)
+    const rates = previous.ratesById[item.id]
+    if (
+      rates &&
+      previousProvider?.baseUrl === item.baseUrl &&
+      previousProvider.model === item.model
+    ) {
+      ratesById[item.id] = rates
+    }
+  }
   useCustomProvider.setState({
     ...settings,
     provider,
     enabled: provider !== null,
-    rates: previous.provider === provider ? previous.rates : undefined,
+    rates: provider ? ratesById[provider.id] : undefined,
+    ratesById,
   })
   if (previous.provider !== provider) {
     void refreshProviderPricing()
+  }
+  const previousFallbacks = new Set(previous.fallbackProviderIds)
+  for (const id of settings.fallbackProviderIds) {
+    const item = settings.providers.find((candidate) => candidate.id === id)
+    const previousProvider = previous.providers.find(({ id: previousId }) => previousId === id)
+    if (
+      item &&
+      (!previousFallbacks.has(id) ||
+        !previousProvider ||
+        previousProvider.baseUrl !== item.baseUrl ||
+        previousProvider.model !== item.model)
+    ) {
+      void refreshProviderPricing(id)
+    }
   }
   return previous.enabled !== (provider !== null) || previous.provider?.id !== provider?.id
 }
@@ -192,27 +284,92 @@ const persistProviderSettings = async (settings: ProviderSettings) => {
 }
 
 export const saveCustomProvider = (provider: CustomProvider, previousId?: string) => {
-  const { providers, activeId } = useCustomProvider.getState()
+  const { providers, activeId, fallbackProviderIds, stickyProvider } = useCustomProvider.getState()
   return persistProviderSettings({
-    version: 2,
+    version: 3,
     providers: previousId
       ? providers.map((item) => (item.id === previousId ? provider : item))
       : [...providers, provider],
     activeId: previousId && activeId === previousId ? provider.id : activeId,
+    fallbackProviderIds: fallbackProviderIds.map((id) =>
+      previousId && id === previousId ? provider.id : id
+    ),
+    stickyProvider,
   })
 }
 
 export const selectCustomProvider = (id: string | null) => {
-  const { providers } = useCustomProvider.getState()
-  return persistProviderSettings({ version: 2, providers, activeId: id })
+  const { providers, fallbackProviderIds, stickyProvider } = useCustomProvider.getState()
+  return persistProviderSettings({
+    version: 3,
+    providers,
+    activeId: id,
+    fallbackProviderIds: fallbackProviderIds.filter((providerId) => providerId !== id),
+    stickyProvider,
+  })
 }
 
 export const removeCustomProvider = (id: string) => {
-  const { providers, activeId } = useCustomProvider.getState()
+  const { providers, activeId, fallbackProviderIds, stickyProvider } = useCustomProvider.getState()
   return persistProviderSettings({
-    version: 2,
+    version: 3,
     providers: providers.filter((item) => item.id !== id),
     activeId: activeId === id ? null : activeId,
+    fallbackProviderIds: fallbackProviderIds.filter((providerId) => providerId !== id),
+    stickyProvider,
+  })
+}
+
+export const setFallbackProviders = (fallbackProviderIds: string[]) => {
+  const { providers, activeId, stickyProvider } = useCustomProvider.getState()
+  const ids = new Set(providers.map(({ id }) => id))
+  return persistProviderSettings({
+    version: 3,
+    providers,
+    activeId,
+    fallbackProviderIds: [
+      ...new Set(fallbackProviderIds.filter((id) => id !== activeId && ids.has(id))),
+    ],
+    stickyProvider,
+  })
+}
+
+export const setStickyProvider = (stickyProvider: boolean) => {
+  const { providers, activeId, fallbackProviderIds } = useCustomProvider.getState()
+  return persistProviderSettings({
+    version: 3,
+    providers,
+    activeId,
+    fallbackProviderIds,
+    stickyProvider,
+  })
+}
+
+/**
+ * 稳定的通道路由顺序：粘性会话优先上次成功线路，否则主线路优先；
+ * 之后严格按用户配置的备用顺序尝试。主线路始终作为备用线路失败后的恢复项。
+ */
+export const providerRoute = (
+  settings: Pick<ProviderSettings, 'providers' | 'activeId' | 'fallbackProviderIds' | 'stickyProvider'>,
+  pinnedProviderId?: string | null
+) => {
+  const byId = new Map(settings.providers.map((provider) => [provider.id, provider]))
+  const orderedIds: string[] = []
+  const add = (id: string | null | undefined) => {
+    if (id && !orderedIds.includes(id) && byId.has(id)) {
+      orderedIds.push(id)
+    }
+  }
+  if (settings.stickyProvider) {
+    add(pinnedProviderId)
+  }
+  add(settings.activeId)
+  for (const id of settings.fallbackProviderIds) {
+    add(id)
+  }
+  return orderedIds.flatMap((id) => {
+    const provider = byId.get(id)
+    return provider ? [provider] : []
   })
 }
 

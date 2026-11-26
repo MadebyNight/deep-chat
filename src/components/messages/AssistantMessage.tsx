@@ -11,6 +11,8 @@ import { shareText } from '../../services/native.js'
 import type { AssistantMessage as AssistantMessageType } from '../../services/chat/types.js'
 import { openConnection, visitOfficial } from '../../services/connection.js'
 import { openSettings } from '../settings/settingsDialogState.js'
+import { formatCostLabel } from '../../services/api/tokenPricing.js'
+import { useSettings } from '../../services/settings.js'
 
 
 import { Markdown } from '../markdown/Markdown.js'
@@ -47,6 +49,8 @@ export const AssistantMessage = memo(function AssistantMessage({
 }) {
   const t = useTranslate()
   const view = useReplyView(message, streaming)
+  const locale = useSettings((state) => state.locale)
+  const showUsage = useSettings((state) => state.showMessageUsage)
   const panelEntry = useSearchPanel((state) => state.entry)
   const notice = streaming ? null : describeReply(message)
   // 安全拒绝：已下发的思考与正文按协议丢弃，只显示模板答复。
@@ -57,6 +61,9 @@ export const AssistantMessage = memo(function AssistantMessage({
     .join('\n\n')
   const copyText = responseText || notice?.text
   const waiting = streaming && view.steps.length === 0 && !view.answer && !message.thinking
+  const usage = message.usage
+  const inputTokens = usage ? usage.input_tokens + usage.cache_creation_input_tokens : 0
+  const number = new Intl.NumberFormat(locale)
   const summaryEntry = `${message.id}-summary`
   return (
     <div className={styles.message}>
@@ -78,7 +85,21 @@ export const AssistantMessage = memo(function AssistantMessage({
           sources={view.sources}
         />
       ) : null}
-      {waiting ? (
+      {streaming && message.retry ? (
+        <div className={styles.retryStatus} role="status">
+          <IconRefreshOutline16 aria-hidden="true" />
+          <span>
+            {message.retry.phase === 'fallback'
+              ? t('messageFallbackSwitching', {
+                  provider: message.retry.target ?? '',
+                })
+              : t('messageRetrying', {
+                  attempt: message.retry.attempt,
+                  max: message.retry.maxAttempts,
+                })}
+          </span>
+        </div>
+      ) : waiting ? (
         <div className={styles.waiting}>
           {[0, 1, 2].map((index) => (
             <span key={index} className={styles.waitingDot} />
@@ -140,6 +161,46 @@ export const AssistantMessage = memo(function AssistantMessage({
               view.searchResults.length === 1 ? 'messageSearchSummary' : 'messageSearchSummaries',
               { count: view.searchResults.length }
             )}
+          </span>
+        </div>
+      ) : null}
+      {!streaming && message.route && (showUsage || message.route.fallback) ? (
+        <div className={styles.route} data-fallback={message.route.fallback}>
+          {message.route.fallback
+            ? t('messageFallbackRoute', {
+                provider: `${message.route.providerName} · ${message.route.model}`,
+              })
+            : t('messagePrimaryRoute', {
+                provider: `${message.route.providerName} · ${message.route.model}`,
+              })}
+        </div>
+      ) : null}
+      {!streaming && showUsage && usage ? (
+        <div className={styles.usage} aria-label={t('messageUsageDetails')}>
+          <span>
+            {t('messageUsageInput')} <b>{number.format(inputTokens)}</b>
+          </span>
+          <span>
+            {t('messageUsageCached')} <b>{number.format(usage.cache_read_input_tokens)}</b>
+          </span>
+          <span>
+            {t('messageUsageOutput')} <b>{number.format(usage.output_tokens)}</b>
+          </span>
+          <span>
+            {t('messageUsageCost')}{' '}
+            <b>
+              {message.costNanos === undefined
+                ? '—'
+                : formatCostLabel(message.costNanos, locale)}
+            </b>
+          </span>
+          <span>
+            {t('messageUsageCacheSaved')}{' '}
+            <b>
+              {message.cacheSavedNanos === undefined
+                ? '—'
+                : formatCostLabel(message.cacheSavedNanos, locale)}
+            </b>
           </span>
         </div>
       ) : null}
