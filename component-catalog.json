@@ -187,21 +187,21 @@
     ]
   },
   {
-    "file": "src/components/markdown/BlockPreview.tsx",
-    "group": "messages",
-    "components": [
-      "MarkdownBlockActions",
-      "MarkdownBlockCopyButton",
-      "MarkdownBlockPreview"
-    ]
-  },
-  {
     "file": "src/components/markdown/ArtifactPreview.tsx",
     "group": "messages",
     "components": [
       "ArtifactPreview",
       "HtmlArtifactFrame",
       "SvgArtifactImage"
+    ]
+  },
+  {
+    "file": "src/components/markdown/BlockPreview.tsx",
+    "group": "messages",
+    "components": [
+      "MarkdownBlockActions",
+      "MarkdownBlockCopyButton",
+      "MarkdownBlockPreview"
     ]
   },
   {
@@ -459,19 +459,19 @@
     ]
   },
   {
-    "file": "src/components/settings/MemoryManager.tsx",
-    "group": "settings",
-    "components": [
-      "MemoryManagerModal"
-    ]
-  },
-  {
     "file": "src/components/settings/GenerationSettings.tsx",
     "group": "settings",
     "components": [
       "GenerationDialog",
       "GenerationEntryButton",
       "GenerationSettingsItem"
+    ]
+  },
+  {
+    "file": "src/components/settings/MemoryManager.tsx",
+    "group": "settings",
+    "components": [
+      "MemoryManagerModal"
     ]
   },
   {
