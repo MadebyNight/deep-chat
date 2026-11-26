@@ -35,6 +35,7 @@ const modelList = (currency: string, unit: string) => ({
   ],
 })
 const messages = [{ role: 'user' as const, content: 'test prompt' }]
+const sessionSystemPrompt = 'Session persona instructions'
 const sse = (...events: (object | string)[]) =>
   new Response(
     events
@@ -189,7 +190,7 @@ test('handles late usage frames, missing usage, and interrupted or aborted strea
     assert.equal(headers.get('x-api-key'), null)
     assert.deepEqual(JSON.parse(String(init?.body)), {
       model: provider.model,
-      messages,
+      messages: [{ role: 'system', content: sessionSystemPrompt }, ...messages],
       stream: true,
       stream_options: { include_usage: true },
     })
@@ -209,7 +210,9 @@ test('handles late usage frames, missing usage, and interrupted or aborted strea
     )
   })
   const collect = (signal = new AbortController().signal) =>
-    Array.fromAsync(streamCustomMessage(provider, messages, signal, rates))
+    Array.fromAsync(
+      streamCustomMessage(provider, messages, signal, rates, { system: sessionSystemPrompt })
+    )
   const totals = () => Object.values(useChatUsage.getState().days)[0]
   const events = await collect()
   assert.equal(events[1].type, 'content_block_delta')

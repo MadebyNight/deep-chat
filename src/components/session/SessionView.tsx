@@ -23,6 +23,7 @@ import {
   useTurnSelection,
 } from '../messages/turnSelectionState.js'
 import { MobileHeader } from './MobileHeader.js'
+import { PromptPicker } from './PromptPicker.js'
 import styles from './SessionView.module.css'
 
 /** 会话页：标题栏（移动端为顶栏）+ 消息列表，输入框吸底 */
@@ -205,6 +206,7 @@ export const SessionView = ({
           </Button>
         </section>
       ) : null}
+      <PromptPicker sessionId={session.id} variant="bar" />
       <MessageList
         session={session}
         streaming={streaming}

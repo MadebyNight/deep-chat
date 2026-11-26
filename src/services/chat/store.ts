@@ -17,7 +17,7 @@ import {
   attachmentTaskKey, cancelUpload, describeUploadError, getAttachmentConnection, LEGACY_KEY_FILE_SCOPE,
   uploadAttachment, useUploads, type AttachmentConnection,
 } from '../attachments.js'
-import { getSelectedPrompt, useSettings } from '../settings.js'
+import { getSelectedPrompt, useSettings, type PromptPreset } from '../settings.js'
 import {
   appendBranch,
   forkVisibleBranch,
@@ -44,6 +44,7 @@ import {
 } from './drafts.js'
 import { createLatestReminder } from './latestReminder.js'
 import { createHandoffSession, customSummaryMessages } from './handoff.js'
+import { buildSessionSystemPrompt } from './systemPrompt.js'
 import {
   applyEvent,
   canContinueReply,
@@ -65,8 +66,6 @@ import {
 
 /** deepseek-flash 同时支持深度思考与图片输入 */
 const MODEL: ChatModel = 'deepseek-flash'
-/** 所有生成请求统一携带的助手身份说明 */
-const SYSTEM_PROMPT = '该助手为DeepSeek，由深度求索公司创造。'
 /** 保留最近打开的详情；当前会话、生成中及尚未成功保存的会话不淘汰。 */
 const SESSION_CACHE_LIMIT = 5
 /** 安全审核固定开启，所有请求都走扩展模式 */
@@ -753,6 +752,25 @@ const removeSessionData = async (id: string): Promise<boolean> => {
 
 export const stopReply = (sessionId: string) => getStreamController(sessionId)?.abort()
 
+/**
+ * 改变会话绑定的人设，只影响后续轮次；不重写任何历史回答。
+ * preset 为 null 时显式使用默认助手。
+ */
+export const setSessionPrompt = (sessionId: string, preset: PromptPreset | null): boolean => {
+  if (get().importingHistory || deletingSessions.has(sessionId) || !getSession(sessionId)) {
+    return false
+  }
+  updateSession(sessionId, (session) => ({
+    ...session,
+    systemPromptId: preset?.id ?? null,
+    ...(preset
+      ? { systemPromptSnapshot: preset.body }
+      : { systemPromptSnapshot: undefined }),
+  }))
+  persist(sessionId)
+  return true
+}
+
 type ChatConnection =
   | { kind: 'deepseek'; attachment: AttachmentConnection | undefined }
   | { kind: 'custom'; provider: CustomProvider; rates?: TokenRates }
@@ -803,6 +821,7 @@ export const sendMessage = (targetSessionId: string | null) => {
     return false
   }
   if (sessionId === null) {
+    const selectedPrompt = getSelectedPrompt(useSettings.getState().prompts)
     const session: Session = {
       id: createId(),
       title: '',
@@ -810,6 +829,8 @@ export const sendMessage = (targetSessionId: string | null) => {
       updatedAt: now,
       messages: [],
       rootMessageId: null,
+      systemPromptId: selectedPrompt?.id ?? null,
+      ...(selectedPrompt ? { systemPromptSnapshot: selectedPrompt.body } : {}),
       ...(chatConnection.kind === 'custom' ? { customProviderId: chatConnection.provider.id } : {}),
     }
     sessionId = session.id
@@ -1454,6 +1475,9 @@ const streamReply = async (
   }
 
   const settings = useSettings.getState()
+  const session = getSession(sessionId)
+  // #17 取得长期记忆后从第三个参数的 memory 传入；固定为「会话人设」→「长期记忆」。
+  const system = buildSessionSystemPrompt(session, settings.prompts)
   const official = connection?.apiKey === null
   const stream = official
     ? streamOfficialMessage
@@ -1464,7 +1488,7 @@ const streamReply = async (
     : createLatestReminder(settings)
   const options = {
     model: initial.model ?? MODEL,
-    system: getSelectedPrompt(settings.prompts)?.body ?? SYSTEM_PROMPT,
+    system,
     thinking: { type: initial.thinking ? ('enabled' as const) : ('disabled' as const) },
     safety_check: SAFETY_CHECK,
     tools: serverTools(initial.search ?? false),
@@ -1516,7 +1540,7 @@ const streamReply = async (
             messages,
             controller.signal,
             chatConnection.rates,
-            { thinking: !!initial.thinking }
+            { thinking: !!initial.thinking, system }
           )) {
             apply(event)
           }

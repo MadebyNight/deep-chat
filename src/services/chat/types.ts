@@ -139,6 +139,13 @@ export type Session = {
   pinned?: boolean
   /** 缺省或 null 表示未分组；旧会话无需迁移即可继续展示。 */
   folderId?: string | null
+  /**
+   * 会话绑定的人设预设。undefined 为旧会话（沿用全局选择），
+   * null 表示显式使用默认助手，字符串表示绑定预设 ID。
+   */
+  systemPromptId?: string | null
+  /** 绑定时保存的人设正文；预设被删除后仍可继续追溯与发送。 */
+  systemPromptSnapshot?: string
   /** 包含所有分支的消息，按创建顺序存储。 */
   messages: Message[]
   contextCheckpoint?: ContextCheckpoint

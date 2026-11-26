@@ -252,7 +252,7 @@ export async function* streamCustomMessage(
   messages: CustomMessage[],
   signal: AbortSignal,
   rates?: TokenRates,
-  options?: { thinking?: boolean }
+  options?: { thinking?: boolean; system?: string }
 ): AsyncGenerator<MessageStreamEvent> {
   signal.throwIfAborted()
   const failure = { key: 'customProviderRequestFailed' } as const
@@ -260,6 +260,10 @@ export async function* streamCustomMessage(
   let includeUsage = true
   let includeReasoning = options?.thinking !== undefined
   const reasoningEffort = options?.thinking ? 'high' : 'none'
+  const system = options?.system?.trim()
+  const requestMessages: CustomMessage[] = system
+    ? [{ role: 'system', content: system }, ...messages]
+    : messages
   const send = () => {
     report = recordChatRequest(new Date(), rates)
     return providerRequest(provider, 'chat/completions', {
@@ -267,7 +271,7 @@ export async function* streamCustomMessage(
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
       body: JSON.stringify({
         model: provider.model,
-        messages,
+        messages: requestMessages,
         stream: true,
         ...(includeUsage ? { stream_options: { include_usage: true } } : {}),
         ...(includeReasoning ? { reasoning_effort: reasoningEffort } : {}),

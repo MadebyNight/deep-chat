@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { credentials, isNative } from './native.js'
 import type { TtsVoice } from './api/speech.js'
+import { readPromptPreferences } from './promptLibrary.js'
 
 export type Locale = 'zh-CN' | 'en-US'
 
@@ -8,8 +9,18 @@ export type Locale = 'zh-CN' | 'en-US'
 export type ThemePreference = 'light' | 'dark' | 'system'
 
 /** 非敏感设置保存在本机；连接密钥仅在内存及 Android Keystore 加密存储中。 */
-export type PromptPreset = { id: string; title: string; body: string }
-type PromptPreferences = { presets: PromptPreset[]; selectedId: string | null }
+export type PromptPreset = {
+  id: string
+  title: string
+  body: string
+  /** 自由分类；内置模板使用 writing/coding/learning/creative/roleplay，自定义可填任意短文本。 */
+  category?: string
+  /** “试用”时填入输入框的开场消息，不作为 System Prompt 发送。 */
+  starterPrompt?: string
+  /** Unix 毫秒时间戳；旧数据可缺省。 */
+  createdAt?: number
+}
+export type PromptPreferences = { presets: PromptPreset[]; selectedId: string | null }
 
 type Settings = {
   apiKey: string | null
@@ -96,15 +107,9 @@ const initialPrompts = (): PromptPreferences => {
   const raw = readPreference(KEYS.prompts)
   if (raw !== null) {
     try {
-      const stored = JSON.parse(raw) as Partial<PromptPreferences> | null
-      if (Array.isArray(stored?.presets)) {
-        const presets = stored.presets.filter((item) =>
-          typeof item?.id === 'string' && typeof item.title === 'string' &&
-          typeof item.body === 'string' && item.title.trim() && item.body.trim()
-        )
-        const selectedId = presets.some((item) => item.id === stored.selectedId)
-          ? stored.selectedId ?? null : null
-        return { presets, selectedId }
+      const stored = readPromptPreferences(JSON.parse(raw) as unknown)
+      if (stored) {
+        return stored
       }
     } catch {
       // Use the legacy value if the saved list cannot be read.
@@ -115,7 +120,12 @@ const initialPrompts = (): PromptPreferences => {
     return { presets: [], selectedId: null }
   }
   const migrated = {
-    presets: [{ id: 'legacy', title: initialLocale() === 'zh-CN' ? '自定义提示词' : 'Custom prompt', body }],
+    presets: [{
+      id: 'legacy',
+      title: initialLocale() === 'zh-CN' ? '自定义提示词' : 'Custom prompt',
+      body,
+      createdAt: Date.now(),
+    }],
     selectedId: 'legacy',
   }
   if (writePreference(KEYS.prompts, JSON.stringify(migrated))) {
