@@ -15,6 +15,7 @@ export const Modal = ({
   title,
   children,
   footer,
+  footerAlert,
   closable = false,
   backLabel,
   className,
@@ -26,6 +27,8 @@ export const Modal = ({
   title: ReactNode
   children?: ReactNode
   footer?: ReactNode
+  /** 固定底栏上方的运行时错误；移动端占满整行 */
+  footerAlert?: ReactNode
   /** 标题栏右侧显示关闭按钮 */
   closable?: boolean
   backLabel?: string
@@ -94,7 +97,12 @@ export const Modal = ({
           ) : null}
         </div>
         {children ? <div className={clsx(styles.main, mainClassName)}>{children}</div> : null}
-        {footer ? <div className={styles.footer}>{footer}</div> : null}
+        {footer ? (
+          <div className={styles.footer}>
+            {footerAlert ? <div className={styles.footerAlert}>{footerAlert}</div> : null}
+            {footer}
+          </div>
+        ) : null}
       </div>
     </div>,
     document.body

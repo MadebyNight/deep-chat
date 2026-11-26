@@ -1,5 +1,6 @@
 import { useIsMobile } from '../../app/viewport.js'
 import { useTranslate, type TranslationKey } from '../../i18n/index.js'
+import { useSettings } from '../../services/settings.js'
 import whaleLogo from '../../assets/whale.png'
 import { ChatInput } from '../chatInput/ChatInput.js'
 import { MobileHeader } from './MobileHeader.js'
@@ -24,16 +25,32 @@ const greetingKey = (): TranslationKey => {
 export const Welcome = () => {
   const t = useTranslate()
   const isMobile = useIsMobile()
+  const themePackage = useSettings((state) => state.themePackage)
+  const identity = themePackage?.identity
+  const appName = identity?.appName ?? t('appName')
   return (
     <div className={styles.container}>
       {isMobile ? <MobileHeader /> : null}
       <div className={styles.welcome}>
         <div className={styles.greeting}>
           <img className={styles.brandMark} src={whaleLogo} width={44} height={34} alt="" />
-          <span>{t(greetingKey())}</span>
+          <span>{identity?.welcomeTitle ?? t(greetingKey())}</span>
         </div>
-        <ChatInput sessionId={null} showPrompt />
-        {isMobile ? <div className={styles.caveat}>Deep Chat · DeepSeek 第三方客户端</div> : null}
+        {identity?.welcomeSubtitle ? (
+          <p className={styles.subtitle}>{identity.welcomeSubtitle}</p>
+        ) : null}
+        {themePackage?.welcomeCard ? (
+          <div className={styles.templateCard}>
+            {themePackage.welcomeCard.title ? (
+              <strong>{themePackage.welcomeCard.title}</strong>
+            ) : null}
+            {themePackage.welcomeCard.body ? (
+              <p>{themePackage.welcomeCard.body}</p>
+            ) : null}
+          </div>
+        ) : null}
+        <ChatInput sessionId={null} showPrompt placeholder={identity?.promptHint} />
+        {isMobile ? <div className={styles.caveat}>{appName} · DeepSeek 第三方客户端</div> : null}
       </div>
     </div>
   )

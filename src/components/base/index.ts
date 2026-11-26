@@ -1,5 +1,7 @@
 export { Button } from './Button.js'
-export { ActionButton, Input, Textarea } from './Control.js'
+export { ActionButton, Input, Slider, Textarea } from './Control.js'
+export { ColorField, type ColorFieldProps } from './ColorField.js'
+export { ColorPicker, type ColorPickerProps } from './ColorPicker.js'
 export { IconButton } from './IconButton.js'
 export { Menu } from './Menu.js'
 export { Modal } from './Modal.js'

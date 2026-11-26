@@ -26,6 +26,10 @@ body {
   font-size: var(--ds-font-size-m);
   color: var(--dsw-alias-label-primary);
   background-color: var(--dsw-alias-bg-base);
+  background-image: var(--deepchat-theme-background-image, none);
+  background-position: center;
+  background-size: cover;
+  background-attachment: fixed;
   -webkit-text-size-adjust: none;
   -webkit-tap-highlight-color: transparent;
   font-feature-settings: 'kern';

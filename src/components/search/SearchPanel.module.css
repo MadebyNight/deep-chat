@@ -8,7 +8,10 @@
   height: 100%;
   border-left: 1px solid var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-bg-base);
+  background-color: var(--dsw-alias-bg-base);
+  background-image: var(--deepchat-theme-background-image, none);
+  background-position: center;
+  background-size: cover;
 }
 
 .header {
@@ -92,7 +95,10 @@
     border-left: none;
     padding: 0 var(--app-safe-right) var(--app-safe-bottom) var(--app-safe-left);
     border-radius: 16px 16px 0 0;
-    background: var(--dsw-alias-bg-layer-2);
+    background-color: var(--dsw-alias-bg-layer-2);
+    background-image: var(--deepchat-theme-background-image, none);
+    background-position: center;
+    background-size: cover;
     transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
     animation: sheet-in 0.22s ease-out;
   }

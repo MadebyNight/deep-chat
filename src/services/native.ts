@@ -9,6 +9,9 @@ export const isAndroid = Capacitor.getPlatform() === 'android'
 
 export type CredentialSlot = 'customProvider' | 'webdav' | 'mcp' | 'externalSearch'
 
+export type LauncherIconId = 'default' | 'ocean' | 'forest' | 'sunset'
+export type AppShortcutAction = 'new' | 'voice' | 'camera'
+export const hasNativeAppIdentity = Capacitor.getPlatform() === 'android'
 export const credentials = registerPlugin<{
   read(options?: { slot?: CredentialSlot }): Promise<{ value: string | null }>
   write(options: { value: string | null; slot?: CredentialSlot }): Promise<void>
@@ -109,6 +112,20 @@ const shareIntake = registerPlugin<{
   ): Promise<PluginListenerHandle>
 }>('ShareIntake')
 
+const appIdentity = registerPlugin<{
+  getCapabilities(): Promise<{ currentIcon: LauncherIconId; requestPinShortcut: boolean }>
+  setLauncherIcon(options: { icon: LauncherIconId }): Promise<{ icon: LauncherIconId }>
+  createShortcut(options: {
+    type: AppShortcutAction
+    label: string
+    icon: LauncherIconId
+  }): Promise<{ requested: boolean; id: string }>
+  addListener(
+    eventName: 'shortcutPinned',
+    listener: (event: { id: string; type: AppShortcutAction; icon: LauncherIconId }) => void
+  ): Promise<PluginListenerHandle>
+}>('AppIdentity')
+
 export const consumePendingIntake = async () => (await shareIntake.consumePendingIntake()).intake
 
 export const subscribeShareIntake = (listener: (intake: NativeIntake) => void) =>
@@ -117,6 +134,20 @@ export const subscribeShareIntake = (listener: (intake: NativeIntake) => void) =
 export const releaseShareIntake = (id: string) => shareIntake.releaseIntake({ id })
 
 export const openCameraIntake = () => shareIntake.openCamera()
+
+export const getAppIdentityCapabilities = () => appIdentity.getCapabilities()
+
+export const applyLauncherIcon = (icon: LauncherIconId) => appIdentity.setLauncherIcon({ icon })
+
+export const requestAppShortcut = (options: {
+  type: AppShortcutAction
+  label: string
+  icon: LauncherIconId
+}) => appIdentity.createShortcut(options)
+
+export const subscribeShortcutPinned = (
+  listener: (event: { id: string; type: AppShortcutAction; icon: LauncherIconId }) => void
+) => appIdentity.addListener('shortcutPinned', listener)
 
 export const openOfficialPage = async (url: string) => {
   if (Capacitor.getPlatform() === 'android') {

@@ -36,6 +36,9 @@
   line-height: 1.5;
   color: var(--dsw-alias-label-primary);
   background-color: var(--dsw-specific-bubble);
+  background-image: var(--deepchat-theme-bubble-image, none);
+  background-position: center;
+  background-size: cover;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -85,6 +88,9 @@
   border: 1px solid var(--dsw-alias-brand-primary);
   border-radius: 22px;
   background-color: var(--dsw-alias-bg-base);
+  background-image: var(--deepchat-theme-background-image, none);
+  background-position: center;
+  background-size: cover;
   overflow: hidden;
 }
 

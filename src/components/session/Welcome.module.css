@@ -35,6 +35,187 @@
   height: auto;
 }
 
+.subtitle {
+  max-width: min(30rem, 100%);
+  margin: -9px 0 18px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.templateCard {
+  box-sizing: border-box;
+  width: min(100%, 27rem);
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.templateCard strong {
+  display: block;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+.templateCard p {
+  margin: 4px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.prompt {
+  align-self: stretch;
+  flex-shrink: 0;
+  min-width: 0;
+  margin-bottom: 6px;
+}
+
+.promptToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  max-width: 100%;
+  padding: 0 9px;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.promptToggle svg { flex-shrink: 0; }
+.promptToggle[aria-expanded='true'] svg { transform: rotate(180deg); }
+.promptTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.promptList {
+  box-sizing: border-box;
+  width: min(100%, 27rem);
+  max-height: min(15rem, 35dvh);
+  margin-block: 7px 5px;
+  padding: 5px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 17px;
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: 0 5px 16px rgb(0 0 0 / 8%);
+}
+
+.promptRow {
+  display: flex;
+  align-items: center;
+  padding-inline: 8px 2px;
+  border-radius: 11px;
+}
+
+.promptRow:has(.promptChoice[aria-pressed='true']) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.promptRow + .promptRow { margin-top: 2px; }
+.promptRow > button:not(.promptChoice) { color: var(--dsw-alias-label-secondary); }
+
+.promptRow > button { flex-shrink: 0; }
+.promptRow .promptChoice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.promptChoice svg { flex-shrink: 0; }
+.promptChoice[aria-pressed='true'] { color: var(--dsw-alias-brand-primary); }
+.promptList .promptNew {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  margin: 6px auto 3px;
+}
+
+.promptEditor.promptEditor {
+  --modal-header-gap: 14px;
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(var(--app-viewport-height, 100dvh) - 32px);
+  background: var(--dsw-alias-bg-base);
+}
+
+.promptEditorMain {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px;
+}
+
+.promptForm { display: grid; gap: 16px; }
+.promptField {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.promptField :is(input, textarea) {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-specific-input-major);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 1rem;
+  line-height: 1.55;
+  font-weight: 400;
+  outline-offset: 2px;
+}
+
+.promptField :is(input, textarea):focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+}
+
+.promptField textarea { resize: vertical; min-height: 9rem; }
+
+.promptHelp {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 0.8125rem;
+}
+
+.promptActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+  padding-top: 12px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+}
+
 @media (max-width: 439px) {
   .greeting {
     font-size: 20px;

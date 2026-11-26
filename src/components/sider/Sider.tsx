@@ -2,7 +2,7 @@ import { ActionButton, Input, IconCloseOutline16, IconPanelLeftOutline16, IconSe
 import clsx from 'clsx'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { setSiderCollapsed } from '../../services/settings.js'
+import { setSiderCollapsed, useSettings } from '../../services/settings.js'
 import { useOfficialAccount } from '../../services/officialAccount.js'
 import {
   ALL_SESSIONS,
@@ -88,6 +88,7 @@ const SiderSettings = ({ mobile }: { mobile: boolean }) => {
 
 export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const t = useTranslate()
+  const appName = useSettings((state) => state.themePackage?.identity?.appName)
   const sessions = useChatStore((state) => state.sessions)
   const folders = useChatStore((state) => state.folders)
   const activeId = useChatStore((state) => state.activeId)
@@ -302,7 +303,7 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
       ) : (
         <>
           <div className={styles.top}>
-            <div className={styles.appName}>{t('appName')}</div>
+            <div className={styles.appName}>{appName ?? t('appName')}</div>
             <IconButton
               size="m"
               icon={<IconPanelLeftOutline16 />}

@@ -21,6 +21,7 @@ export const MobileHeader = ({
 }) => {
   const t = useTranslate()
   const autoReadAloud = useSettings((state) => state.autoReadAloud)
+  const appName = useSettings((state) => state.themePackage?.identity?.appName)
   return (
     <div className={styles.header}>
       <IconButton
@@ -36,7 +37,7 @@ export const MobileHeader = ({
       {title !== undefined ? (
         <div className={styles.title}>{title}</div>
       ) : (
-        <div className={styles.spacer} />
+        <div className={styles.title}>{appName ?? t('appName')}</div>
       )}
       <IconButton
         size="xl"

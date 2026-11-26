@@ -60,15 +60,20 @@
 .primary {
   color: var(--dsw-alias-label-primary-foreground);
   background-color: var(--dsw-alias-button-primary-fill);
+  background-image: var(--deepchat-theme-brand-image, none);
+  background-position: center;
+  background-size: cover;
 
   @media (hover: hover) and (pointer: fine) {
     &:hover:not(:disabled) {
       background-color: var(--dsw-alias-button-primary-hover);
+      filter: brightness(1.06);
     }
   }
 
   &[data-pressed]:not(:disabled) {
     background-color: var(--dsw-alias-button-primary-hover);
+    filter: brightness(0.96);
   }
 }
 

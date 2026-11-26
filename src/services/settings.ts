@@ -7,6 +7,7 @@ import {
   normalizeGenerationParams,
   type GenerationParams,
 } from './generation.js'
+import { parseThemePackage, type ThemePackageV2 } from './themePackages.js'
 
 export type Locale = 'zh-CN' | 'en-US'
 
@@ -35,6 +36,7 @@ type Settings = {
   locale: Locale
   themePreference: ThemePreference
   copyFormat: CopyFormat
+  themePackage: ThemePackageV2 | null
   chatFontSize: number | null
   ttsVoice: TtsVoice
   autoReadAloud: boolean
@@ -58,6 +60,7 @@ const KEYS = {
   locale: 'chat-demo:locale',
   themePreference: 'chat-demo:theme-preference',
   copyFormat: 'deepchat:copy-format',
+  themePackage: 'deepchat:theme-package-v2',
   chatFontSize: 'deepchat:chat-font-size',
   ttsVoice: 'chat-demo:tts-voice',
   autoReadAloud: 'chat-demo:auto-read-aloud',
@@ -116,13 +119,35 @@ const initialThemePreference = (): ThemePreference => {
 const initialCopyFormat = (): CopyFormat =>
   readPreference(KEYS.copyFormat) === 'plain' ? 'plain' : 'markdown'
 
+const initialThemePackage = (): ThemePackageV2 | null => {
+  const current = readPreference(KEYS.themePackage)
+  const legacy = current === null ? readPreference('deepchat:theme-package-v1') : null
+  const raw = current ?? legacy
+  if (raw === null) {
+    return null
+  }
+  try {
+    const parsed = parseThemePackage(JSON.parse(raw))
+    if (!parsed.ok) {
+      return null
+    }
+    if (legacy !== null) {
+      writePreference(KEYS.themePackage, JSON.stringify(parsed.value))
+    }
+    return parsed.value
+  } catch {
+    return null
+  }
+}
+
 const initialChatFontSize = () => {
   const value = Number(readPreference(KEYS.chatFontSize))
   return Number.isInteger(value) && value >= 14 && value <= 22 ? value : null
 }
 
 /** 未保存过时使用服务端默认音色 stella（海星） */
-const initialTtsVoice = (): TtsVoice => (readPreference(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
+const initialTtsVoice = (): TtsVoice =>
+  readPreference(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella'
 
 const initialGenerationParams = (): GenerationParams => {
   const raw = readPreference(KEYS.generationParams)
@@ -172,6 +197,7 @@ export const useSettings = create<Settings>(() => ({
   locale: initialLocale(),
   themePreference: initialThemePreference(),
   copyFormat: initialCopyFormat(),
+  themePackage: initialThemePackage(),
   chatFontSize: initialChatFontSize(),
   ttsVoice: initialTtsVoice(),
   autoReadAloud: readPreference(KEYS.autoReadAloud) === 'true',
@@ -201,6 +227,11 @@ export const setThemePreference = (themePreference: ThemePreference) => {
 export const setCopyFormat = (copyFormat: CopyFormat) => {
   writePreference(KEYS.copyFormat, copyFormat)
   useSettings.setState({ copyFormat })
+}
+
+export const setThemePackage = (themePackage: ThemePackageV2 | null) => {
+  writePreference(KEYS.themePackage, themePackage ? JSON.stringify(themePackage) : null)
+  useSettings.setState({ themePackage })
 }
 
 export const setChatFontSize = (chatFontSize: number | null) => {

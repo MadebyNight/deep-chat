@@ -51,9 +51,11 @@ import promptStyles from '../session/Welcome.module.css'
 export const ChatInput = memo(function ChatInput({
   sessionId,
   showPrompt = false,
+  placeholder,
 }: {
   sessionId: string | null
   showPrompt?: boolean
+  placeholder?: string
 }) {
   // 切换目标时释放录音、转写和 DOM 状态；文字与附件由草稿服务保留。
   return (
@@ -61,11 +63,20 @@ export const ChatInput = memo(function ChatInput({
       key={sessionId === null ? 'new' : `session:${sessionId}`}
       sessionId={sessionId}
       showPrompt={showPrompt}
+      placeholder={placeholder}
     />
   )
 })
 
-const Composer = ({ sessionId, showPrompt }: { sessionId: string | null; showPrompt: boolean }) => {
+const Composer = ({
+  sessionId,
+  showPrompt,
+  placeholder,
+}: {
+  sessionId: string | null
+  showPrompt: boolean
+  placeholder?: string
+}) => {
   const t = useTranslate()
   const attachmentScope = useAttachmentScope()
   const custom = useCustomProvider((state) => state.enabled)
@@ -306,7 +317,7 @@ const Composer = ({ sessionId, showPrompt }: { sessionId: string | null; showPro
           <Textarea
             ref={textareaRef}
             className={clsx(styles.textarea, recording && isMobile && styles.textareaHidden)}
-            placeholder={t('chatInputPlaceholderChat')}
+            placeholder={placeholder ?? t('chatInputPlaceholderChat')}
             rows={2}
             // 移动端不自动聚焦，避免一打开就弹出键盘
             autoFocus={!isMobile}
