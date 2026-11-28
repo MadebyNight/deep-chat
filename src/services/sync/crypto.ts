@@ -30,6 +30,10 @@ type PlainEnvelope = {
   data: unknown
 }
 
+type OpenOptions = {
+  requireEncrypted?: boolean
+}
+
 export const encodeBase64 = (bytes: Uint8Array): string => {
   let binary = ''
   const chunk = 0x8000
@@ -195,9 +199,11 @@ export class SyncCipher {
     )
   }
 
-  static async open<T>(
+  private static async openInternal<T>(
     text: string,
-    passphrase: string
+    passphrase: string,
+    allowPlaintextMigration: boolean,
+    requireEncrypted: boolean
   ): Promise<{ value: T; cipher: SyncCipher }> {
     let parsed: unknown
     try {
@@ -207,6 +213,9 @@ export class SyncCipher {
     }
     const envelope = readEnvelope(parsed)
     if (!envelope.encrypted) {
+      if (requireEncrypted || (!!passphrase && !allowPlaintextMigration)) {
+        throw new SyncError('decrypt')
+      }
       return { value: envelope.data as T, cipher: SyncCipher.plain() }
     }
     if (!passphrase) {
@@ -230,5 +239,29 @@ export class SyncCipher {
     } catch {
       throw new SyncError('corrupt')
     }
+  }
+
+  static async open<T>(
+    text: string,
+    passphrase: string,
+    options: OpenOptions = {}
+  ): Promise<{ value: T; cipher: SyncCipher }> {
+    return SyncCipher.openInternal<T>(
+      text,
+      passphrase,
+      false,
+      options.requireEncrypted === true
+    )
+  }
+
+  /**
+   * 仅供 engine 在本地状态从未启用过密文时调用一次；
+   * 成功同步后本地状态会锁定为密文，后续明文会被拒绝。
+   */
+  static async openForInitialMigration<T>(
+    text: string,
+    passphrase: string
+  ): Promise<{ value: T; cipher: SyncCipher }> {
+    return SyncCipher.openInternal<T>(text, passphrase, true, false)
   }
 }

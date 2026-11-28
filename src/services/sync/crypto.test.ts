@@ -41,6 +41,44 @@ test('wrong passphrase reports a decrypt error', async () => {
   await assert.rejects(SyncCipher.open(text, ''), isCode('decrypt'))
 })
 
+test('configured passphrase rejects a plaintext downgrade', async () => {
+  const text = await SyncCipher.plain().seal({ secret: true })
+  await assert.rejects(
+    SyncCipher.open(text, 'configured passphrase'),
+    isCode('decrypt')
+  )
+  await assert.rejects(
+    SyncCipher.open(text, '', { requireEncrypted: true }),
+    isCode('decrypt')
+  )
+})
+
+test('first plaintext migration requires the explicit path and produces ciphertext', async () => {
+  const text = await SyncCipher.plain().seal({ secret: 'legacy remote' })
+  await assert.rejects(
+    SyncCipher.open(text, 'configured passphrase'),
+    isCode('decrypt')
+  )
+
+  const migrated = await SyncCipher.openForInitialMigration<{ secret: string }>(
+    text,
+    'configured passphrase'
+  )
+  assert.equal(migrated.cipher.encrypted, false)
+  assert.deepEqual(migrated.value, { secret: 'legacy remote' })
+
+  const encrypted = await (
+    await SyncCipher.create('configured passphrase', { iterations: 10_000 })
+  ).seal(migrated.value)
+  const opened = await SyncCipher.open<{ secret: string }>(
+    encrypted,
+    'configured passphrase',
+    { requireEncrypted: true }
+  )
+  assert.equal(opened.cipher.encrypted, true)
+  assert.deepEqual(opened.value, { secret: 'legacy remote' })
+})
+
 test('tampered ciphertext fails authentication', async () => {
   const cipher = await SyncCipher.create('right', { iterations: 10_000 })
   const text = await cipher.seal({ secret: true })

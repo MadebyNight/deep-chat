@@ -664,7 +664,6 @@ const ThinkingCollapseSetting = () => {
   return (
     <SettingCell
       label={t('settingsAutoCollapseThinking')}
-      description={t('settingsAutoCollapseThinkingDescription')}
       status={null}
       action={
         <Switch
@@ -686,7 +685,6 @@ const ContextCompactionSetting = () => {
   return (
     <SettingCell
       label={t('settingsAutoCompactContext')}
-      description={t('settingsAutoCompactContextDescription')}
       status={null}
       action={
         <Switch
@@ -729,7 +727,6 @@ const HapticsSetting = () => {
   return (
     <SettingCell
       label={t('settingsHaptics')}
-      description={t('settingsHapticsDescription')}
       status={null}
       action={
         <Switch
@@ -932,13 +929,11 @@ const errorStatus = (key: TranslationKey, error: unknown): Status => ({
 
 const SettingCell = ({
   label,
-  description,
   status,
   action,
   className,
 }: {
   label: string
-  description?: string
   status: Status
   action: ReactNode
   className?: string
@@ -948,11 +943,9 @@ const SettingCell = ({
     <div className={clsx(styles.cell, styles.row, className)}>
       <div className={styles.text}>
         <div className={styles.label}>{label}</div>
-        {status || description ? (
+        {status ? (
           <div className={clsx(styles.description, status?.error && styles.error)}>
-            {status
-              ? t(status.key, status.reason ? { message: t(status.reason) } : status.params)
-              : description}
+            {t(status.key, status.reason ? { message: t(status.reason) } : status.params)}
           </div>
         ) : null}
       </div>

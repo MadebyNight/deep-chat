@@ -27,15 +27,15 @@ test('queues confirmations from concurrent replies and resumes after each answer
     ['tool-1', 'tool-2']
   )
 
-  answerToolConfirmation('reply-1', 'tool-1', false)
-  assert.equal(await firstAnswer, false)
+  answerToolConfirmation('reply-1', 'tool-1', 'deny')
+  assert.equal(await firstAnswer, 'deny')
   assert.deepEqual(
     useToolConfirmation.getState().requests.map((request) => request.toolUseId),
     ['tool-2']
   )
 
-  answerToolConfirmation('reply-2', 'tool-2', true)
-  assert.equal(await secondAnswer, true)
+  answerToolConfirmation('reply-2', 'tool-2', 'allow')
+  assert.equal(await secondAnswer, 'allow')
   assert.deepEqual(useToolConfirmation.getState().requests, [])
 })
 
@@ -86,6 +86,34 @@ test('keeps identical tool ids isolated by reply', async () => {
     useToolConfirmation.getState().requests.map((request) => request.replyId),
     ['reply-d']
   )
-  answerToolConfirmation('reply-d', 'shared-tool-id', true)
-  assert.equal(await secondAnswer, true)
+  answerToolConfirmation('reply-d', 'shared-tool-id', 'allow')
+  assert.equal(await secondAnswer, 'allow')
+})
+
+test('cancels only the selected confirmation and resumes the next queued item', async () => {
+  const first = new AbortController()
+  const second = new AbortController()
+  const firstAnswer = requestToolConfirmation(
+    'reply-e',
+    'tool-e',
+    { name: 'write', input: {} },
+    first.signal
+  )
+  const secondAnswer = requestToolConfirmation(
+    'reply-f',
+    'tool-f',
+    { name: 'delete', input: {} },
+    second.signal
+  )
+
+  answerToolConfirmation('reply-e', 'tool-e', 'cancel')
+  assert.equal(await firstAnswer, 'cancel')
+  assert.deepEqual(
+    useToolConfirmation.getState().requests.map((request) => request.toolUseId),
+    ['tool-f']
+  )
+
+  answerToolConfirmation('reply-f', 'tool-f', 'allow')
+  assert.equal(await secondAnswer, 'allow')
+  assert.deepEqual(useToolConfirmation.getState().requests, [])
 })

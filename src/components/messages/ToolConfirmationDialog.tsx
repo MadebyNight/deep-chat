@@ -1,6 +1,10 @@
 import { Button, Modal } from '../base/index.js'
 import { useTranslate } from '../../i18n/index.js'
-import { answerToolConfirmation, useToolConfirmation } from '../../services/tools/confirmation.js'
+import {
+  answerToolConfirmation,
+  useToolConfirmation,
+  type ToolConfirmationDecision,
+} from '../../services/tools/confirmation.js'
 import { formatToolInput } from '../../services/tools/runtime.js'
 import styles from './ToolConfirmation.module.css'
 
@@ -11,19 +15,19 @@ export const ToolConfirmationDialog = () => {
     return null
   }
   const label = request.serverName ? `${request.serverName} · ${request.name}` : request.name
-  const answer = (allow: boolean) =>
-    answerToolConfirmation(request.replyId, request.toolUseId, allow)
+  const answer = (decision: ToolConfirmationDecision) =>
+    answerToolConfirmation(request.replyId, request.toolUseId, decision)
   return (
     <Modal
       title={t('mcpToolConfirmTitle')}
       layout="confirm"
-      onClose={() => answer(false)}
+      onClose={() => answer('cancel')}
       footer={
         <>
-          <Button variant="outlined" onClick={() => answer(false)}>
+          <Button variant="outlined" onClick={() => answer('deny')}>
             {t('mcpToolDeny')}
           </Button>
-          <Button onClick={() => answer(true)}>{t('mcpToolAllow')}</Button>
+          <Button onClick={() => answer('allow')}>{t('mcpToolAllow')}</Button>
         </>
       }
     >

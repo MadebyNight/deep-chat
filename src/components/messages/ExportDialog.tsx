@@ -436,6 +436,7 @@ export const ExportDialog = () => {
       closable={!busy}
       onClose={close}
       className={styles.dialog}
+      mainClassName={styles.body}
       footer={
         format === 'print' ? (
           <Button variant="primary" disabled={!ready || !!busy} onClick={() => void print()}>

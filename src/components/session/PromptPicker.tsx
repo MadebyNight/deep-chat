@@ -48,16 +48,6 @@ export const PromptPicker = ({
     ? t('promptDefaultAssistant')
     : selectedPreset?.title ??
       (missingSnapshot ? t('promptDeletedPreset') : t('promptDefaultAssistant'))
-  const category = selectedPreset?.category
-  const categoryLabel = category
-    ? {
-        writing: t('promptCategoryWriting'),
-        coding: t('promptCategoryCoding'),
-        learning: t('promptCategoryLearning'),
-        creative: t('promptCategoryCreative'),
-        roleplay: t('promptCategoryRoleplay'),
-      }[category] ?? category
-    : undefined
 
   const close = () => {
     setOpen(false)
@@ -77,9 +67,7 @@ export const PromptPicker = ({
             aria-label={t('promptOpenLibrary', { name: title })}
             onClick={() => setOpen(true)}
           >
-            <span className={styles.barLabel}>{t('promptSessionPersona')}</span>
             <span className={styles.promptTitle}>{title}</span>
-            {categoryLabel ? <span className={styles.categoryChip}>{categoryLabel}</span> : null}
             <IconChevronRightOutline14 />
           </ActionButton>
         </div>
@@ -95,7 +83,6 @@ export const PromptPicker = ({
             onClick={() => setOpen(true)}
           >
             <span className={styles.promptTitle}>{title}</span>
-            {categoryLabel ? <span className={styles.categoryChip}>{categoryLabel}</span> : null}
             <span className={styles.promptChevron}>
               <IconChevronDownOutline14 />
             </span>

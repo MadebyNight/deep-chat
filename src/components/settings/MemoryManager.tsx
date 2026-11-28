@@ -78,7 +78,9 @@ export const MemoryManagerModal = ({ onClose }: { onClose: () => void }) => {
       )
       setDraft('')
       setEditingId(null)
-      showToast(result.duplicate ? 'settingsMemoryAlreadySaved' : 'settingsMemorySaved')
+      showToast({
+        key: result.duplicate ? 'settingsMemoryAlreadySaved' : 'settingsMemorySaved',
+      })
     } catch (failure) {
       showError(failure, 'settingsMemorySaveFailed')
     } finally {
@@ -99,7 +101,7 @@ export const MemoryManagerModal = ({ onClose }: { onClose: () => void }) => {
       )
       setEditingId(null)
       setEditingDraft('')
-      showToast('settingsMemorySaved')
+      showToast({ key: 'settingsMemorySaved' })
     } catch (failure) {
       showError(failure, 'settingsMemorySaveFailed')
     } finally {

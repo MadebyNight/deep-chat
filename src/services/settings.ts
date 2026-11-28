@@ -319,6 +319,15 @@ export const setPrompts = (prompts: PromptPreferences) => {
   return true
 }
 
+/** 基于 store 当前内容追加预设，避免调用方用旧快照覆盖刚写入的列表。 */
+export const addPromptPreset = (preset: PromptPreset, select: boolean) => {
+  const current = useSettings.getState().prompts
+  return setPrompts({
+    presets: [...current.presets, preset],
+    selectedId: select ? preset.id : current.selectedId,
+  })
+}
+
 export const getSelectedPrompt = ({ presets, selectedId }: PromptPreferences) =>
   presets.find((preset) => preset.id === selectedId)
 

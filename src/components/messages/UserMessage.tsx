@@ -83,7 +83,9 @@ export const UserMessage = memo(function UserMessage({
     setRemembering(true)
     try {
       const result = await rememberMemory(message.content, { sourceSessionId: sessionId })
-      showToast(result.duplicate ? 'settingsMemoryAlreadySaved' : 'settingsMemorySaved')
+      showToast({
+        key: result.duplicate ? 'settingsMemoryAlreadySaved' : 'settingsMemorySaved',
+      })
     } catch (failure) {
       showToast(memoryErrorMessage(failure, 'settingsMemorySaveFailed'))
     } finally {

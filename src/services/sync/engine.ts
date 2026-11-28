@@ -73,6 +73,15 @@ const SYNC_ATTEMPTS = 3
 
 type DocumentRead<T> = { value: T; etag?: string }
 
+const openRemoteDocument = <T>(
+  text: string,
+  passphrase: string,
+  allowPlaintextMigration: boolean
+) =>
+  allowPlaintextMigration
+    ? SyncCipher.openForInitialMigration<T>(text, passphrase)
+    : SyncCipher.open<T>(text, passphrase)
+
 const EMPTY_PROMPTS: SyncPromptsDocument = {
   version: 1,
   updatedAt: 0,
@@ -120,13 +129,18 @@ const readOptionalDocument = async <T>(
   path: string,
   passphrase: string,
   parse: (value: unknown) => T,
+  allowPlaintextMigration: boolean,
   signal: AbortSignal
 ): Promise<DocumentRead<T> | null> => {
   const raw = await provider.read(path, signal)
   if (!raw) {
     return null
   }
-  const opened = await SyncCipher.open<unknown>(raw.text, passphrase)
+  const opened = await openRemoteDocument<unknown>(
+    raw.text,
+    passphrase,
+    allowPlaintextMigration
+  )
   return {
     value: parse(opened.value),
     ...(raw.etag ? { etag: raw.etag } : {}),
@@ -342,7 +356,8 @@ const loadRemoteSessions = async (
   folderIds: ReadonlySet<string>,
   passphrase: string,
   signal: AbortSignal,
-  readAll: boolean
+  readAll: boolean,
+  allowPlaintextMigration: boolean
 ): Promise<{ sessions: Map<string, SyncedSession>; etags: Map<string, string> }> => {
   const remote = new Map<string, SyncedSession>()
   const etags = new Map<string, string>()
@@ -360,7 +375,11 @@ const loadRemoteSessions = async (
     if (!raw) {
       throw new SyncError('corrupt')
     }
-    const opened = await SyncCipher.open<unknown>(raw.text, passphrase)
+    const opened = await openRemoteDocument<unknown>(
+      raw.text,
+      passphrase,
+      allowPlaintextMigration
+    )
     if (raw.etag) {
       etags.set(id, raw.etag)
     }
@@ -401,12 +420,14 @@ const downloadAttachments = async ({
   passphrase,
   sessions,
   policy,
+  allowPlaintextMigration,
   signal,
 }: {
   provider: RemoteSyncProvider
   passphrase: string
   sessions: Iterable<SyncedSession>
   policy: AttachmentPolicy
+  allowPlaintextMigration: boolean
   signal: AbortSignal
 }): Promise<db.StoredFile[]> => {
   if (policy !== 'images') {
@@ -431,7 +452,11 @@ const downloadAttachments = async ({
       return
     }
     try {
-      const opened = await SyncCipher.open<unknown>(raw.text, passphrase)
+      const opened = await openRemoteDocument<unknown>(
+        raw.text,
+        passphrase,
+        allowPlaintextMigration
+      )
       if (
         !isRecord(opened.value) ||
         opened.value.version !== 1 ||
@@ -565,8 +590,16 @@ const syncAttempt = async ({
   let manifest: SyncManifest | null = null
   let cipher: SyncCipher
   let encryptAll = false
+  let allowPlaintextMigration = false
   if (manifestRaw) {
-    const opened = await SyncCipher.open<unknown>(manifestRaw.text, config.passphrase)
+    const opened = localState.everEncrypted
+      ? await SyncCipher.open<unknown>(manifestRaw.text, config.passphrase, {
+          requireEncrypted: true,
+        })
+      : await SyncCipher.openForInitialMigration<unknown>(
+          manifestRaw.text,
+          config.passphrase
+        )
     manifest = parseManifest(opened.value)
     if (opened.cipher.encrypted) {
       cipher = opened.cipher
@@ -576,11 +609,16 @@ const syncAttempt = async ({
         : SyncCipher.plain()
     }
     encryptAll = !!config.passphrase && !opened.cipher.encrypted
+    allowPlaintextMigration =
+      !!config.passphrase &&
+      !localState.everEncrypted &&
+      !opened.cipher.encrypted
   } else {
     cipher = config.passphrase
       ? await SyncCipher.create(config.passphrase)
       : SyncCipher.plain()
     encryptAll = !!config.passphrase
+    allowPlaintextMigration = !!config.passphrase && !localState.everEncrypted
   }
 
   const foldersRead = await readOptionalDocument(
@@ -588,6 +626,7 @@ const syncAttempt = async ({
     FOLDERS_PATH,
     config.passphrase,
     parseFoldersDocument,
+    allowPlaintextMigration,
     signal
   )
   const promptsRead = await readOptionalDocument(
@@ -595,6 +634,7 @@ const syncAttempt = async ({
     PROMPTS_PATH,
     config.passphrase,
     parsePromptsDocument,
+    allowPlaintextMigration,
     signal
   )
   const settingsRead = await readOptionalDocument(
@@ -602,6 +642,7 @@ const syncAttempt = async ({
     SETTINGS_PATH,
     config.passphrase,
     parseSettingsDocument,
+    allowPlaintextMigration,
     signal
   )
   if (manifest && (!foldersRead || !promptsRead || !settingsRead)) {
@@ -609,7 +650,7 @@ const syncAttempt = async ({
   }
 
   const localFolders = await db.loadFolders()
-  const folderMerge = mergeFolders({
+  const folderMerge = await mergeFolders({
     local: localFolders,
     remote: foldersRead?.value.folders ?? [],
     remoteManifest: manifest,
@@ -633,7 +674,8 @@ const syncAttempt = async ({
         folderIds,
         config.passphrase,
         signal,
-        encryptAll
+        encryptAll,
+        allowPlaintextMigration
       )
     : { sessions: new Map<string, SyncedSession>(), etags: new Map<string, string>() }
   const sessionMerge = await mergeSessions({
@@ -713,6 +755,7 @@ const syncAttempt = async ({
     passphrase: config.passphrase,
     sessions: sessionMerge.localSessions.values(),
     policy: preferences.attachmentPolicy,
+    allowPlaintextMigration,
     signal,
   })
 
@@ -839,6 +882,7 @@ const syncAttempt = async ({
     },
     lastSyncAt: now,
     deviceId: localState.deviceId,
+    everEncrypted: localState.everEncrypted || cipher.encrypted,
     uploadedFileIds: [...uploadedFiles].slice(-5000),
   }
   if (!writeSyncState(savedState)) {
@@ -850,7 +894,8 @@ const syncAttempt = async ({
     uploaded: uniqueUploads.length,
     downloaded: sessionMerge.imports.length,
     deleted: sessionMerge.deletes.length,
-    conflicts: sessionMerge.conflicts + promptMerge.conflicts,
+    conflicts:
+      sessionMerge.conflicts + promptMerge.conflicts + folderMerge.conflicts,
     lastSyncAt: now,
   }
 }

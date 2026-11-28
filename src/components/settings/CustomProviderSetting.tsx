@@ -434,7 +434,6 @@ const ProviderEditor = ({
         aria-busy={busy}
         autoComplete="off"
       >
-        <p className={styles.description}>{t('customProviderHelp')}</p>
         <label>
           {t('customProviderUrl')}
           <Input

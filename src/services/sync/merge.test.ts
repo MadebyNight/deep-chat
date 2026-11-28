@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Folder, Session } from '../chat/types.js'
-import { emptyManifest, hashSyncPayload } from './manifest.js'
+import { emptyManifest, hashSyncPayload, parseManifest } from './manifest.js'
 import {
   mergeFolders,
   mergePrompts,
@@ -66,6 +66,18 @@ const remoteManifestFor = async (sessions: Session[]) => {
   return base.manifest
 }
 
+const folderBaseline = (folders: Folder[]): SyncBaseline => ({
+  manifest: emptyManifest(1),
+  sessionHashes: {},
+  folders,
+  settings: {},
+  promptsHash: 'a'.repeat(64),
+  promptHashes: {},
+  promptSelectedId: null,
+})
+
+const conflictIdFor = (hash: string) => `conflict-${hash.slice(0, 32)}`
+
 test('local-only sessions upload; remote-only sessions import', async () => {
   const localPage = await synced(session('local', 10))
   const remotePage = await synced(session('remote', 10))
@@ -99,7 +111,7 @@ test('concurrent edits keep the newer original and a deterministic conflict copy
   const result = await mergeSessions(options)
   assert.equal(result.conflicts, 1)
   assert.ok(result.uploads.some((item) => item.session.id === 'shared'))
-  const conflictId = `shared~conflict-${remotePage.contentHash.slice(0, 12)}`
+  const conflictId = conflictIdFor(remotePage.contentHash)
   assert.ok(result.imports.some((item) => item.session.id === conflictId))
   assert.ok(result.uploads.some((item) => item.session.id === conflictId))
   assert.ok(result.localSessions.has(conflictId))
@@ -141,7 +153,7 @@ test('local deletion and remote edit preserve the edit as a conflict copy', asyn
   assert.deepEqual(result.deletes, [])
   assert.equal(result.tombstones.gone, 100)
   assert.equal(result.conflicts, 1)
-  const conflictId = `gone~conflict-${edited.contentHash.slice(0, 12)}`
+  const conflictId = conflictIdFor(edited.contentHash)
   assert.ok(result.imports.some((item) => item.session.id === conflictId))
   assert.ok(result.uploads.some((item) => item.session.id === conflictId))
   assert.equal(result.remoteSessions.gone, undefined)
@@ -285,7 +297,7 @@ test('local prompt deletion preserves a remote edit as a conflict copy', async (
   const itemHash = await hashSyncPayload(remote.presets[0])
   assert.equal(
     result.document.presets[0].id,
-    `p1~conflict-${itemHash.slice(0, 12)}`
+    conflictIdFor(itemHash)
   )
   assert.equal(result.document.presets[0].title, 'Remote edit（冲突）')
   assert.equal(result.document.selectedId, null)
@@ -330,19 +342,19 @@ test('remote prompt deletion preserves a local edit as a conflict copy', async (
   assert.equal(result.document.presets.length, 1)
   assert.equal(
     result.document.presets[0].id,
-    `p1~conflict-${itemHash.slice(0, 12)}`
+    conflictIdFor(itemHash)
   )
   assert.equal(result.document.presets[0].title, 'Local edit（冲突）')
   assert.equal(result.document.selectedId, null)
 })
 
-test('folder deletion uses a tombstone; settings merge keeps local changed fields', () => {
+test('folder deletion uses a tombstone; settings merge keeps local changed fields', async () => {
   const folder: Folder = { id: 'f1', name: 'Base', createdAt: 1, order: 1 }
   const baseline = {
     ...emptyManifest(1),
     folders: { version: 1, updatedAt: 1, contentHash: 'a'.repeat(64) },
   }
-  const folderResult = mergeFolders({
+  const folderResult = await mergeFolders({
     local: [],
     remote: [folder],
     remoteManifest: baseline,
@@ -380,4 +392,129 @@ test('folder deletion uses a tombstone; settings merge keeps local changed field
   })
   assert.equal(settings.document.values.thinking, true)
   assert.equal(settings.document.values.search, true)
+})
+
+test('concurrent folder renames keep both names with a deterministic copy', async () => {
+  const id = 'f'.repeat(256)
+  const baseFolder: Folder = { id, name: 'Base', createdAt: 1, order: 1 }
+  const localFolder: Folder = { ...baseFolder, name: 'Local rename' }
+  const remoteFolder: Folder = { ...baseFolder, name: 'Remote rename' }
+  const baseline = folderBaseline([baseFolder])
+  const localMerge = await mergeFolders({
+    local: [localFolder],
+    remote: [remoteFolder],
+    remoteManifest: baseline.manifest,
+    baseline,
+    now: 100,
+  })
+  const remoteMerge = await mergeFolders({
+    local: [remoteFolder],
+    remote: [localFolder],
+    remoteManifest: baseline.manifest,
+    baseline,
+    now: 100,
+  })
+
+  assert.deepEqual(localMerge.folders, remoteMerge.folders)
+  assert.equal(localMerge.conflicts, 1)
+  assert.equal(localMerge.folders.length, 2)
+  assert.deepEqual(
+    new Set(localMerge.folders.map((folder) => folder.name)),
+    new Set(['Local rename', 'Remote rename'])
+  )
+  const copy = localMerge.folders.find((folder) => folder.id !== id)
+  assert.ok(copy)
+  assert.match(copy.id, /^conflict-[0-9a-f]{32}$/)
+  assert.ok(copy.id.length <= 256)
+  assert.equal(localMerge.tombstones[id], undefined)
+  assert.deepEqual(localMerge.deletedFolderIds, [])
+})
+
+test('remote folder deletion preserves a concurrent local rename as a copy', async () => {
+  const id = 'renamed-folder'
+  const baseFolder: Folder = { id, name: 'Base', createdAt: 1, order: 1 }
+  const baseline = folderBaseline([baseFolder])
+  const renamed: Folder = { ...baseFolder, name: 'Local rename' }
+  const result = await mergeFolders({
+    local: [renamed],
+    remote: [],
+    remoteManifest: {
+      ...baseline.manifest,
+      deletedFolderIds: { [id]: 50 },
+    },
+    baseline,
+    now: 100,
+  })
+
+  assert.equal(result.conflicts, 1)
+  assert.ok(result.folders.some((folder) => folder.name === 'Local rename'))
+  assert.equal(result.folders.some((folder) => folder.id === id), false)
+  assert.ok(result.deletedFolderIds.includes(id))
+  assert.equal(result.tombstones[id], 50)
+})
+
+test('conflict ids for maximum-length session ids pass manifest validation', async () => {
+  const id = 's'.repeat(256)
+  const base = await baselineFor([session(id, 10, 'Base')])
+  const localPage = await synced(session(id, 30, 'Local'))
+  const remotePage = await synced(session(id, 20, 'Remote'))
+  const result = await mergeSessions({
+    local: new Map([[id, localPage]]),
+    remote: new Map([[id, remotePage]]),
+    remoteManifest: base.manifest,
+    baseline: base,
+    now: 100,
+    conflictSuffix: ' · 冲突',
+  })
+  const conflict = result.imports.find((item) => item.session.id.startsWith('conflict-'))
+
+  assert.ok(conflict)
+  assert.match(conflict.session.id, /^conflict-[0-9a-f]{32}$/)
+  assert.ok(conflict.session.id.length <= 256)
+  const manifest = {
+    ...base.manifest,
+    sessions: result.remoteSessions,
+    deletedIds: result.tombstones,
+  }
+  assert.doesNotThrow(() => parseManifest(JSON.parse(JSON.stringify(manifest))))
+})
+
+test('prompt conflict ids for maximum-length ids stay short', async () => {
+  const id = 'p'.repeat(256)
+  const original: SyncPromptsDocument = {
+    version: 1,
+    updatedAt: 1,
+    presets: [{ id, title: 'Base', body: 'base body' }],
+    selectedId: id,
+  }
+  const local: SyncPromptsDocument = {
+    ...original,
+    updatedAt: 20,
+    presets: [{ id, title: 'Local', body: 'local body' }],
+  }
+  const remote: SyncPromptsDocument = {
+    ...original,
+    updatedAt: 10,
+    presets: [{ id, title: 'Remote', body: 'remote body' }],
+  }
+  const result = await mergePrompts({
+    local,
+    remote,
+    baseline: await baselineFor([], original),
+    localHash: await hashSyncPayload({
+      presets: local.presets,
+      selectedId: local.selectedId,
+    }),
+    remoteHash: await hashSyncPayload({
+      presets: remote.presets,
+      selectedId: remote.selectedId,
+    }),
+    now: 100,
+    conflictSuffix: '（冲突）',
+  })
+  const copy = result.document.presets.find((item) => item.id !== id)
+
+  assert.ok(copy)
+  assert.match(String(copy.id), /^conflict-[0-9a-f]{32}$/)
+  assert.ok(String(copy.id).length <= 256)
 })

@@ -289,7 +289,9 @@ const Composer = ({
     <div className={styles.composer}>
       <div className={styles.composerTools}>
         <div className={styles.promptSlot}>
-          {showPrompt && !custom ? <PromptPicker /> : null}
+          {showPrompt ? (
+            <PromptPicker sessionId={sessionId ?? undefined} />
+          ) : null}
         </div>
         <GenerationEntryButton
           sessionId={sessionId}

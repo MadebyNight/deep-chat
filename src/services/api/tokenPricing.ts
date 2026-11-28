@@ -18,11 +18,11 @@ const DEEPSEEK_RATES: Record<ChatModel, { offPeak: TokenRates; peak: TokenRates 
 
 export const formatCostLabel = (costNanos: number, locale: string): string => {
   const cost = costNanos / NANOS_PER_YUAN
-  if (cost > 0 && cost < 0.0001) {
-    return '<¥0.0001'
-  }
-  const maximumFractionDigits = cost > 0 && cost < 0.01 ? 4 : 2
-  return `¥${new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits }).format(cost)}`
+  const displayedCost = costNanos > 0 && costNanos < NANOS_PER_YUAN / 100 ? 0 : cost
+  return `¥${new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(displayedCost)}`
 }
 
 export const tokenCost = (usage: MessageUsage, rates?: TokenRates) => {

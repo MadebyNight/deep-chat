@@ -2035,7 +2035,7 @@ const streamReply = async (
               updateReply(sessionId, reply)
               flush()
               if (confirm) {
-                const allowed = await requestToolConfirmation(
+                const decision = await requestToolConfirmation(
                   confirmationOwner,
                   call.id,
                   {
@@ -2046,7 +2046,17 @@ const streamReply = async (
                   controller.signal
                 )
                 controller.signal.throwIfAborted()
-                if (!allowed) {
+                if (decision === 'cancel') {
+                  reply = updateClientTool(reply, call.id, (block) => ({
+                    ...block,
+                    status: 'complete',
+                  }))
+                  updateReply(sessionId, reply)
+                  flush()
+                  controller.abort()
+                  throw new DOMException('Cancelled', 'AbortError')
+                }
+                if (decision === 'deny') {
                   reply = updateClientTool(reply, call.id, (block) => ({
                     ...block,
                     status: 'complete',

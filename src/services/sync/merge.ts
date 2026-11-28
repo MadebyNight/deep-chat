@@ -1,5 +1,5 @@
 import type { Folder, Session } from '../chat/types.js'
-import { hashSyncPayload } from './manifest.js'
+import { canonicalJson, hashSyncPayload } from './manifest.js'
 import type {
   SyncBaseline,
   SyncFoldersDocument,
@@ -12,6 +12,7 @@ import type {
 } from './types.js'
 
 const TOMBSTONE_RETENTION_MS = 180 * 24 * 60 * 60 * 1000
+const CONFLICT_ID_HASH_LENGTH = 32
 
 type SessionMergeOptions = {
   local: Map<string, SyncedSession>
@@ -45,8 +46,8 @@ const entryOf = (value: SyncedSession): SyncSessionEntry => ({
   contentHash: value.contentHash,
 })
 
-const conflictId = (source: SyncedSession) =>
-  `${source.session.id}~conflict-${source.contentHash.slice(0, 12)}`
+const conflictCopyId = (contentHash: string) =>
+  `conflict-${contentHash.slice(0, CONFLICT_ID_HASH_LENGTH)}`
 
 const makeConflictSession = async (
   source: SyncedSession,
@@ -54,7 +55,7 @@ const makeConflictSession = async (
   now: number,
   known: Map<string, SyncedSession>
 ): Promise<SyncedSession> => {
-  const id = conflictId(source)
+  const id = conflictCopyId(source.contentHash)
   const existing = known.get(id)
   if (existing) {
     return existing
@@ -263,10 +264,27 @@ export type FolderMergeResult = {
   deletedFolderIds: string[]
   tombstones: Record<string, number>
   write: boolean
+  conflicts: number
 }
 
-/** 分组是轻量元数据：按 id 合并，同 id 冲突保留本机名称；删除用墓碑传播。 */
-export const mergeFolders = ({
+const sameFolder = (left: Folder, right: Folder) =>
+  left.name === right.name &&
+  left.createdAt === right.createdAt &&
+  left.order === right.order
+
+const compareText = (left: string, right: string) =>
+  left < right ? -1 : left > right ? 1 : 0
+
+const compareFolders = (left: Folder, right: Folder) =>
+  left.order - right.order ||
+  compareText(left.name, right.name) ||
+  compareText(left.id, right.id)
+
+/**
+ * 分组是轻量元数据：同 id 的双边修改用确定性赢家保留原名，
+ * 另一方生成稳定副本；删除与修改冲突时删除原 id，但保留修改副本。
+ */
+export const mergeFolders = async ({
   local,
   remote,
   remoteManifest,
@@ -278,7 +296,7 @@ export const mergeFolders = ({
   remoteManifest: SyncManifest | null
   baseline: SyncBaseline | null
   now: number
-}): FolderMergeResult => {
+}): Promise<FolderMergeResult> => {
   const localMap = new Map(local.map((folder) => [folder.id, folder]))
   const remoteMap = new Map(remote.map((folder) => [folder.id, folder]))
   const baseMap = new Map((baseline?.folders ?? []).map((folder) => [folder.id, folder]))
@@ -292,39 +310,91 @@ export const mergeFolders = ({
     }
   }
   const result = new Map<string, Folder>()
-  for (const [id, folder] of remoteMap) {
-    if (tombstones[id] === undefined) {
-      result.set(id, folder)
+  let conflicts = 0
+
+  const rememberConflict = async (source: Folder) => {
+    const id = conflictCopyId(await hashSyncPayload(source))
+    if (tombstones[id] !== undefined || result.has(id)) {
+      return
     }
+    result.set(id, { ...source, id })
+    conflicts += 1
   }
-  for (const [id, folder] of localMap) {
+
+  const ids = new Set([
+    ...localMap.keys(),
+    ...remoteMap.keys(),
+    ...baseMap.keys(),
+    ...Object.keys(tombstones),
+  ])
+  for (const id of ids) {
+    const localFolder = localMap.get(id)
     const remoteFolder = remoteMap.get(id)
     const baseFolder = baseMap.get(id)
-    const localChanged = !baseFolder || JSON.stringify(folder) !== JSON.stringify(baseFolder)
+    const localChanged =
+      !!localFolder && (!baseFolder || !sameFolder(localFolder, baseFolder))
     const remoteChanged =
-      !!baseFolder && !!remoteFolder && JSON.stringify(remoteFolder) !== JSON.stringify(baseFolder)
-    const remoteTombstone = tombstones[id] !== undefined
-    if (remoteTombstone) {
-      if (localChanged) {
-        result.set(id, folder)
-      } else {
-        result.delete(id)
+      !!remoteFolder && (!baseFolder || !sameFolder(remoteFolder, baseFolder))
+
+    if (tombstones[id] !== undefined) {
+      if (localFolder && localChanged) {
+        await rememberConflict(localFolder)
+      }
+      if (remoteFolder && remoteChanged) {
+        await rememberConflict(remoteFolder)
       }
       continue
     }
-    if (!remoteFolder) {
-      result.set(id, folder)
-    } else if (localChanged && !remoteChanged) {
-      result.set(id, folder)
-    } else if (!localChanged && remoteChanged) {
-      result.set(id, remoteFolder)
-    } else {
-      result.set(id, localChanged ? folder : remoteFolder)
+
+    if (localFolder && remoteFolder) {
+      if (sameFolder(localFolder, remoteFolder)) {
+        result.set(id, localFolder)
+      } else if (localChanged && !remoteChanged) {
+        result.set(id, localFolder)
+      } else if (!localChanged && remoteChanged) {
+        result.set(id, remoteFolder)
+      } else {
+        const localKey = canonicalJson(localFolder)
+        const remoteKey = canonicalJson(remoteFolder)
+        const [winner, loser] =
+          localKey <= remoteKey
+            ? [localFolder, remoteFolder]
+            : [remoteFolder, localFolder]
+        result.set(id, winner)
+        await rememberConflict(loser)
+      }
+      continue
+    }
+
+    if (localFolder) {
+      if (baseFolder) {
+        tombstones[id] = maxTombstone(tombstones[id], now)
+        if (localChanged) {
+          await rememberConflict(localFolder)
+        }
+      } else {
+        result.set(id, localFolder)
+      }
+      continue
+    }
+
+    if (remoteFolder) {
+      if (baseFolder) {
+        tombstones[id] = maxTombstone(tombstones[id], now)
+        if (remoteChanged) {
+          await rememberConflict(remoteFolder)
+        }
+      } else {
+        result.set(id, remoteFolder)
+      }
+      continue
+    }
+
+    if (baseFolder) {
+      tombstones[id] = maxTombstone(tombstones[id], now)
     }
   }
-  const folders = [...result.values()].sort(
-    (a, b) => a.order - b.order || a.name.localeCompare(b.name)
-  )
+  const folders = [...result.values()].sort(compareFolders)
   const deletedFolderIds = Object.keys(tombstones).filter((id) => !result.has(id))
   return {
     folders,
@@ -334,6 +404,7 @@ export const mergeFolders = ({
       now
     ),
     write: JSON.stringify(folders) !== JSON.stringify(remote),
+    conflicts,
   }
 }
 
@@ -420,11 +491,10 @@ export const mergePrompts = async ({
   let conflicts = 0
 
   const addConflict = (
-    id: string,
     remoteItem: Record<string, unknown>,
     hash: string
   ) => {
-    const copyId = `${id}~conflict-${hash.slice(0, 12)}`
+    const copyId = conflictCopyId(hash)
     if (localMap.has(copyId) || remoteMap.has(copyId)) {
       return
     }
@@ -461,7 +531,7 @@ export const mergePrompts = async ({
       }
       if (!baseHash) {
         result.set(id, localEntry.item)
-        addConflict(id, remoteEntry.item, remoteEntry.hash)
+        addConflict(remoteEntry.item, remoteEntry.hash)
         continue
       }
       if (localChanged && !remoteChanged) {
@@ -473,7 +543,7 @@ export const mergePrompts = async ({
         continue
       }
       result.set(id, localEntry.item)
-      addConflict(id, remoteEntry.item, remoteEntry.hash)
+      addConflict(remoteEntry.item, remoteEntry.hash)
       continue
     }
 
@@ -481,7 +551,7 @@ export const mergePrompts = async ({
       if (!baseHash) {
         result.set(id, localEntry.item)
       } else if (localChanged) {
-        addConflict(id, localEntry.item, localEntry.hash)
+        addConflict(localEntry.item, localEntry.hash)
       }
       continue
     }
@@ -490,7 +560,7 @@ export const mergePrompts = async ({
       if (!baseHash) {
         result.set(id, remoteEntry.item)
       } else if (remoteChanged) {
-        addConflict(id, remoteEntry.item, remoteEntry.hash)
+        addConflict(remoteEntry.item, remoteEntry.hash)
       }
     }
   }

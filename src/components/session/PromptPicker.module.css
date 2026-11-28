@@ -71,11 +71,6 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-.barLabel {
-  flex-shrink: 0;
-  color: var(--dsw-alias-label-secondary);
-}
-
 .modal.modal {
   --modal-header-gap: 14px;
   width: min(720px, calc(100vw - 40px));

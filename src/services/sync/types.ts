@@ -77,6 +77,8 @@ export type SyncLocalState = {
   baseline: SyncBaseline | null
   lastSyncAt: number | null
   deviceId: string
+  /** 本机曾成功同步过密文；用于阻止远端被静默降级为明文。 */
+  everEncrypted: boolean
   /** 已成功上传的附件 id；仅本地元数据，不含文件内容或凭据。 */
   uploadedFileIds: string[]
 }

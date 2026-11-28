@@ -222,34 +222,36 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   }
 
   const folderBar = !selecting ? (
-    <div className={styles.folderBar} role="group" aria-label={t('manageFolders')}>
-      <ActionButton
-        type="button"
-        className={styles.folderChip}
-        aria-pressed={folderFilter.type === 'all'}
-        onClick={() => setFolderFilter(ALL_SESSIONS)}
-      >
-        {t('allChats')}
-      </ActionButton>
-      <ActionButton
-        type="button"
-        className={styles.folderChip}
-        aria-pressed={folderFilter.type === 'pinned'}
-        onClick={() => setFolderFilter({ type: 'pinned' })}
-      >
-        {t('pinnedChats')}
-      </ActionButton>
-      {folders.map((folder) => (
+    <div className={styles.folderControls}>
+      <div className={styles.folderBar} role="group" aria-label={t('manageFolders')}>
         <ActionButton
-          key={folder.id}
           type="button"
           className={styles.folderChip}
-          aria-pressed={folderFilter.type === 'folder' && folderFilter.folderId === folder.id}
-          onClick={() => setFolderFilter({ type: 'folder', folderId: folder.id })}
+          aria-pressed={folderFilter.type === 'all'}
+          onClick={() => setFolderFilter(ALL_SESSIONS)}
         >
-          {folder.name}
+          {t('allChats')}
         </ActionButton>
-      ))}
+        <ActionButton
+          type="button"
+          className={styles.folderChip}
+          aria-pressed={folderFilter.type === 'pinned'}
+          onClick={() => setFolderFilter({ type: 'pinned' })}
+        >
+          {t('pinnedChats')}
+        </ActionButton>
+        {folders.map((folder) => (
+          <ActionButton
+            key={folder.id}
+            type="button"
+            className={styles.folderChip}
+            aria-pressed={folderFilter.type === 'folder' && folderFilter.folderId === folder.id}
+            onClick={() => setFolderFilter({ type: 'folder', folderId: folder.id })}
+          >
+            {folder.name}
+          </ActionButton>
+        ))}
+      </div>
       <IconButton
         size="xs"
         className={styles.manageFolders}

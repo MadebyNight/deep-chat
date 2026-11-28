@@ -4,7 +4,7 @@
 
 .menu {
   position: fixed;
-  z-index: 900;
+  z-index: 1050;
   box-sizing: border-box;
   min-width: 124px;
   max-width: calc(100vw - 16px);

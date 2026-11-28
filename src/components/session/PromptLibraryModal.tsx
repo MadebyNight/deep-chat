@@ -34,6 +34,7 @@ import {
   type PromptImportErrorCode,
 } from '../../services/promptLibrary.js'
 import {
+  addPromptPreset,
   getSelectedPrompt,
   setPrompts,
   useSettings,
@@ -149,7 +150,10 @@ export const PromptLibraryModal = ({
       }
       return true
     }
-    return persist({ ...prompts, selectedId: preset?.id ?? null })
+    return persist({
+      ...useSettings.getState().prompts,
+      selectedId: preset?.id ?? null,
+    })
   }
 
   const choose = (preset: PromptPreset | null) => {
@@ -217,24 +221,24 @@ export const PromptLibraryModal = ({
     let preset = prompts.presets.find(
       (item) => item.title === draft.title && item.body === draft.body
     )
+    let added = false
     if (!preset) {
       if (prompts.presets.length >= MAX_PROMPT_PRESETS) {
         showToast({ key: 'promptImportTooMany', type: 'error' })
         return
       }
       preset = draft
-      if (
-        !persist({
-          presets: [...prompts.presets, preset],
-          selectedId: sessionId === undefined ? preset.id : prompts.selectedId,
-        })
-      ) {
+      if (!addPromptPreset(preset, sessionId === undefined)) {
+        showToast({ key: 'promptSaveFailed', type: 'error' })
         return
       }
-      showToast({ key: 'promptTemplateAdded' })
+      added = true
     }
-    if (!bind(preset)) {
+    if ((!added || sessionId !== undefined) && !bind(preset)) {
       return
+    }
+    if (added) {
+      showToast({ key: 'promptTemplateAdded' })
     }
     if (useStarter && preset.starterPrompt) {
       const current = getDraft(sessionId ?? null).text.trimEnd()

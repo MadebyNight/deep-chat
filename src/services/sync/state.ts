@@ -22,6 +22,7 @@ const emptyState = (): SyncLocalState => ({
   baseline: null,
   lastSyncAt: null,
   deviceId: crypto.randomUUID(),
+  everEncrypted: false,
   uploadedFileIds: [],
 })
 
@@ -156,6 +157,7 @@ export const readSyncState = (): SyncLocalState => {
       deviceId: text(stored.deviceId) && stored.deviceId
         ? stored.deviceId
         : crypto.randomUUID(),
+      everEncrypted: stored.everEncrypted === true,
       uploadedFileIds: Array.isArray(stored.uploadedFileIds)
         ? [...new Set(stored.uploadedFileIds.filter(
             (id): id is string => typeof id === 'string' && !!id && id.length <= 256

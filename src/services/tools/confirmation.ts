@@ -8,8 +8,10 @@ export type ToolConfirmationRequest = {
   input: Record<string, unknown>
 }
 
+export type ToolConfirmationDecision = 'allow' | 'deny' | 'cancel'
+
 type PendingConfirmation = {
-  resolve: (allow: boolean) => void
+  resolve: (decision: ToolConfirmationDecision) => void
   reject: (error: unknown) => void
   cleanup: () => void
 }
@@ -35,11 +37,11 @@ export const requestToolConfirmation = (
   toolUseId: string,
   details: Omit<ToolConfirmationRequest, 'replyId' | 'toolUseId'>,
   signal: AbortSignal
-): Promise<boolean> => {
+): Promise<ToolConfirmationDecision> => {
   signal.throwIfAborted()
   const key = keyFor(replyId, toolUseId)
   pending.get(key)?.reject(new DOMException('Superseded', 'AbortError'))
-  return new Promise<boolean>((resolve, reject) => {
+  return new Promise<ToolConfirmationDecision>((resolve, reject) => {
     const abort = () => {
       pending.delete(key)
       clearRequest(replyId, toolUseId)
@@ -48,11 +50,11 @@ export const requestToolConfirmation = (
     const cleanup = () => signal.removeEventListener('abort', abort)
     signal.addEventListener('abort', abort, { once: true })
     pending.set(key, {
-      resolve: (allow) => {
+      resolve: (decision) => {
         cleanup()
         pending.delete(key)
         clearRequest(replyId, toolUseId)
-        resolve(allow)
+        resolve(decision)
       },
       reject: (error) => {
         cleanup()
@@ -68,8 +70,12 @@ export const requestToolConfirmation = (
   })
 }
 
-export const answerToolConfirmation = (replyId: string, toolUseId: string, allow: boolean) => {
-  pending.get(keyFor(replyId, toolUseId))?.resolve(allow)
+export const answerToolConfirmation = (
+  replyId: string,
+  toolUseId: string,
+  decision: ToolConfirmationDecision
+) => {
+  pending.get(keyFor(replyId, toolUseId))?.resolve(decision)
 }
 
 export const clearToolConfirmations = (replyId: string) => {
