@@ -14,6 +14,7 @@ import {
   type CustomProvider,
 } from '../../services/customProvider.js'
 import { createId } from '../../utils/id.js'
+import { selectOfficialAccount, useOfficialAccount } from '../../services/officialAccount.js'
 import {
   Button,
   IconButton,
@@ -140,7 +141,14 @@ export const CustomProviderSetting = () => {
                     variant="outlined"
                     size="s"
                     disabled={busy}
-                    onClick={() => void apply(() => selectCustomProvider(provider.id))}
+                    onClick={() =>
+                      void apply(() => {
+                        if (useOfficialAccount.getState().active) {
+                          selectOfficialAccount(false)
+                        }
+                        return selectCustomProvider(provider.id)
+                      })
+                    }
                   >
                     {t('customProviderUse')}
                   </Button>

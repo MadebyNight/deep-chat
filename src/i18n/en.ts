@@ -457,6 +457,7 @@ export const en = {
     'Could not fetch models. Check the URL and API key or enter a model manually.',
   customProviderUseDeepSeek: 'Switch to DeepSeek',
   customProviderActive: 'Using the custom provider',
+  officialAccountSwitched: 'Switched to the DeepSeek account. The custom provider was disabled.',
   customProviderInactive: 'Using DeepSeek',
   customProviderInvalidUrl: 'Enter a valid HTTPS Base URL.',
   customProviderInvalidKey: 'Enter a valid API key for this address.',
@@ -465,7 +466,7 @@ export const en = {
   customProviderSaved: 'Provider configuration saved',
   customProviderRequestFailed: 'The custom provider request failed. Check the URL, API key, and model name.',
   customProviderSessionMismatch: 'This chat belongs to a different provider configuration. Switch back or start a new chat.',
-  customProviderTextOnly: 'Custom providers support text only. Remove attachments from the draft before sending.',
+  customProviderTextOnly: 'Custom providers support text only. Switch to DeepSeek in settings before sending attachments.',
   customProviderSearchUnavailable:
     'Web search is not supported with custom providers. Switch back to DeepSeek to use it.',
   save: 'Save',

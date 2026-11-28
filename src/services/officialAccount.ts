@@ -3,6 +3,8 @@ import { create } from 'zustand'
 import { Directory, Filesystem } from '@capacitor/filesystem'
 import { openOfficialPage } from './native.js'
 import { readPreference, writePreference } from './settings.js'
+import { selectCustomProvider, useCustomProvider } from './customProvider.js'
+import { showToast } from '../components/base/toastState.js'
 
 const preference = 'deepchat:official-account'
 
@@ -185,6 +187,15 @@ export async function signInOfficialAccount() {
     signal.throwIfAborted()
     applyAccountState(state)
     selectOfficialAccount(true)
+    if (useCustomProvider.getState().enabled) {
+      try {
+        if (await selectCustomProvider(null)) {
+          showToast({ key: 'officialAccountSwitched' })
+        }
+      } catch {
+        // 自定义供应商停用失败不应阻断官方账号登录。
+      }
+    }
     void refreshOfficialProfile()
   } catch (error) {
     await officialAccountRequest('cancelSignIn').catch(() => undefined)
