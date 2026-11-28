@@ -282,7 +282,6 @@ export const SessionView = ({
                 <div className={styles.inputContainer}>
                   <ChatInput sessionId={session.id} showPrompt />
                 </div>
-                <div className={styles.caveat}>{t('contentCaveat')}</div>
               </>
             )}
           </div>

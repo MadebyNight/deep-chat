@@ -49,9 +49,21 @@ export const GenerationSettingsItem = () => {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <ActionButton type="button" className={styles.settingsLink} onClick={() => setOpen(true)}>
-        {t('generationDefaults')}
-        <span className={styles.generationEntryLabel}>{generationSummary(t, params)}</span>
+      <ActionButton
+        type="button"
+        className={clsx(styles.settingsLink, styles.generationEntry)}
+        onClick={() => setOpen(true)}
+      >
+        <span className={styles.generationEntryText}>
+          <span className={styles.generationEntryTitle}>{t('generationDefaults')}</span>
+          <span className={styles.generationEntrySummary}>
+            <span className={styles.generationEntryModel}>{params.model}</span>
+            <span className={styles.generationEntryPreset}>
+              {' · '}
+              {presetLabel(t, params.preset)}
+            </span>
+          </span>
+        </span>
         <IconChevronRightOutline14 />
       </ActionButton>
       {open ? (

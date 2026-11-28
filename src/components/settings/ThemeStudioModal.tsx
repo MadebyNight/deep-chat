@@ -394,6 +394,7 @@ export const ThemeStudioModal = ({ onClose }: { onClose: () => void }) => {
     <Modal
       title={t('themeStudio')}
       closable
+      fitViewport
       className={styles.themeStudioDialog}
       mainClassName={styles.themeStudioMain}
       onClose={onClose}

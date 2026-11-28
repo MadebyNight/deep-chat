@@ -37,8 +37,8 @@
 .attachments {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
-  padding: 12px 12px 0;
+  gap: 8px;
+  padding: 10px 10px 0;
   overflow-x: auto;
   cursor: default;
 }
@@ -47,9 +47,9 @@
   position: relative;
   flex-shrink: 0;
   box-sizing: border-box;
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
   border: 1px solid var(--dsw-alias-border-l2);
   overflow: hidden;
   background-color: var(--dsw-alias-bg-skeleton);
@@ -142,30 +142,52 @@
 
 .remove {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 0;
+  right: 0;
   z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: none;
-  border-radius: 50%;
+  border-radius: 14px;
   color: var(--dsw-alias-label-primary-inverted);
-  background-color: var(--dsw-alias-button-contrast-fill);
+  background-color: transparent;
   filter: drop-shadow(0 0 0.5px rgba(0, 0, 0, 0.2));
   cursor: pointer;
   opacity: 0;
   transition: opacity var(--ds-transition-duration) var(--ds-ease-in-out);
+
+  &::before {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background-color: var(--dsw-alias-button-contrast-fill);
+  }
+
+  svg {
+    position: relative;
+    width: 12px;
+    height: 12px;
+  }
+
+  &[data-pressed]::before {
+    transform: scale(0.94);
+  }
 }
 
 /* 不可重试时删除按钮常显，提示需要先删除 */
 .invalidRemove {
   opacity: 1;
   color: var(--dsw-alias-label-primary-foreground);
-  background-color: var(--dsw-alias-state-error-primary);
+
+  &::before {
+    background-color: var(--dsw-alias-state-error-primary);
+  }
 }
 
 .textareaWrapper {

@@ -88,6 +88,7 @@ export const Modal = ({
           </div>
           {closable && !backLabel ? (
             <IconButton
+              size="xl"
               className={styles.close}
               tone="primary"
               icon={<IconCloseOutline16 />}

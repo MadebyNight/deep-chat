@@ -27,7 +27,6 @@ export const Welcome = () => {
   const isMobile = useIsMobile()
   const themePackage = useSettings((state) => state.themePackage)
   const identity = themePackage?.identity
-  const appName = identity?.appName ?? t('appName')
   return (
     <div className={styles.container}>
       {isMobile ? <MobileHeader /> : null}
@@ -50,7 +49,6 @@ export const Welcome = () => {
           </div>
         ) : null}
         <ChatInput sessionId={null} showPrompt placeholder={identity?.promptHint} />
-        {isMobile ? <div className={styles.caveat}>{appName} · DeepSeek 第三方客户端</div> : null}
       </div>
     </div>
   )

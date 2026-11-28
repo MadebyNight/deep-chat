@@ -178,38 +178,44 @@
 
 .themeStudioDialog {
   width: min(720px, calc(100vw - 24px));
-  max-height: calc(100dvh - 24px);
+  max-height: calc(100dvh - 24px - var(--app-safe-top) - var(--app-safe-bottom));
+  overflow: hidden;
 }
 
 .themeStudioMain {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
 .themeStudioForm {
   display: grid;
-  gap: 18px;
+  gap: 16px;
 }
 
 .themePreview {
   display: grid;
-  gap: 6px;
-  min-height: 196px;
-  padding: 16px;
+  gap: 4px;
+  min-height: 168px;
+  padding: 14px;
   overflow: hidden;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 16px;
   background-position: center;
   background-size: cover;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
 }
 
 .themePreviewHeader {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 
 .themePreviewTitle {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
   line-height: 1.35;
   font-weight: 600;
 }
@@ -225,7 +231,7 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-top: auto;
-  padding-top: 18px;
+  padding-top: 8px;
 }
 
 .themePreviewBubble {
@@ -235,6 +241,7 @@
   background-position: center;
   background-size: cover;
   font-size: 0.8125rem;
+  overflow-wrap: anywhere;
 }
 
 .themePreviewButton {
@@ -259,7 +266,7 @@
 }
 
 .themeStudioTab {
-  height: 38px;
+  min-height: 44px;
   border: 0;
   border-radius: 9px;
   color: var(--dsw-alias-label-secondary);
@@ -1141,6 +1148,12 @@
   font: inherit;
   text-align: start;
   cursor: pointer;
+  transition: background-color 120ms ease;
+
+  &:not(:disabled)[data-pressed] {
+    border-radius: 10px;
+    background-color: var(--dsw-alias-interactive-bg-hover);
+  }
 
   > span,
   > svg:last-child {
@@ -1177,6 +1190,52 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.generationEntry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14px;
+  gap: 10px;
+}
+
+.generationEntry > .generationEntryText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  margin-inline-start: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: inherit;
+  text-align: start;
+}
+
+.generationEntryTitle {
+  min-width: 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.generationEntrySummary {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.generationEntryModel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.generationEntryPreset {
+  flex-shrink: 0;
+}
+
+.generationEntry > svg:last-child {
+  margin-inline-start: 0;
 }
 
 .generationForm {
@@ -1233,8 +1292,16 @@
   font: inherit;
 }
 
+.mobilePageMain .settingsGroup > .cell:has(> [role='switch']) {
+  padding-block: 2px;
+}
+
 .mobilePageMain .settingsGroup > .cell:not(:first-child) {
   box-shadow: inset 0 1px 0 var(--dsw-alias-border-l2-darkmode-thin);
+}
+
+.mobilePageMain .settingsGroup > .settingsLink + .cell {
+  border-top: 0;
 }
 
 .mobilePageMain .settingsGroup .text {
@@ -1648,9 +1715,14 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .themePreview {
+    min-height: 152px;
+    padding: 12px 14px;
+  }
+
   .themeStudioDialog {
     width: 100%;
-    max-height: 100dvh;
+    max-height: calc(100dvh - 16px - var(--app-safe-top) - var(--app-safe-bottom));
   }
 
   .deleteActions > button {

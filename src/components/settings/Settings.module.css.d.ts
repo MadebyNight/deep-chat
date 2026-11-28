@@ -4,6 +4,12 @@ declare const styles: {
   readonly "settingsGroup": string;
   readonly "settingsLink": string;
   readonly "generationEntryLabel": string;
+  readonly "generationEntry": string;
+  readonly "generationEntryText": string;
+  readonly "generationEntryTitle": string;
+  readonly "generationEntrySummary": string;
+  readonly "generationEntryModel": string;
+  readonly "generationEntryPreset": string;
   readonly "generationForm": string;
   readonly "generationField": string;
   readonly "generationSelect": string;
